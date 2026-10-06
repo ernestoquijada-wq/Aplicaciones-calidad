@@ -1,0 +1,180 @@
+<script>
+/**
+ * 🟢 COMPOSABLE: LÓGICA DEL DASHBOARD
+ * Maneja filtros, paginación, métricas y formato de tarjetas.
+ */
+function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP) {
+    const { ref, computed, watch } = Vue;
+
+    // 1. ESTADO LOCAL DEL DASHBOARD
+    const currentFilter = ref('all');
+    const filters = ref({ type:'', quadrant:'', status:'', factory:'', project:'', responsible:'', month:'' });
+    const searchQuery = ref('');
+    const itemsPerPage = ref(10);
+    const page = ref(1);
+    const showList = ref(false);
+
+    // 2. COMPUTADOS
+    const dynamicCards = computed(() => statusDB.value.filter(s => s.showCard));
+
+    const isExpired = (d) => { 
+        if(!d || d === 'PENDIENTE') return false; 
+        return new Date(d) < new Date(); 
+    };
+
+    const filteredAssets = computed(() => {
+        let list = assets.value.filter(a => a.estadoRegistro !== 'INACTIVO'); 
+        const now = new Date(); 
+        const warn = new Date(); warn.setDate(now.getDate() + 30);
+        
+        const dynamicNames = dynamicCards.value.map(dc => dc.name.toUpperCase());
+
+        if (dynamicNames.includes(currentFilter.value.toUpperCase())) {
+            list = list.filter(x => (x.status || '').toUpperCase() === currentFilter.value.toUpperCase());
+        } else if (currentFilter.value !== 'all') {
+            list = list.filter(x => !dynamicNames.includes((x.status || '').toUpperCase()));
+            
+            if(currentFilter.value === 'expired') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && isExpired(x.nextDate));
+            else if(currentFilter.value === 'warning') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && !isExpired(x.nextDate) && new Date(x.nextDate) < warn);
+            else if(currentFilter.value === 'compliant') list = list.filter(x => ['CUMPLE','PASS','OK'].includes((x.lastResult||'').toUpperCase()) && !isExpired(x.nextDate));
+            else if(currentFilter.value === 'noncompliant') list = list.filter(x => { const r = (x.lastResult || '').toUpperCase(); return !['CUMPLE','PASS','OK'].includes(r); });
+        }
+        
+        if(filters.value.type) list = list.filter(a => (a.description||'').trim().toUpperCase() === filters.value.type);
+        if(filters.value.quadrant) list = list.filter(a => (a.quadrant||'').trim().toUpperCase() === filters.value.quadrant);
+        if(filters.value.status) list = list.filter(a => (a.status||'').trim().toUpperCase() === filters.value.status);
+        if(filters.value.responsible) list = list.filter(a => (a.responsible||'').trim().toUpperCase() === filters.value.responsible);
+        if(filters.value.factory) list = list.filter(a => (a.factory||'').trim().toUpperCase() === filters.value.factory);
+        if(filters.value.project) list = list.filter(a => (a.project||'').trim().toUpperCase() === filters.value.project);
+        
+        if(filters.value.month) {
+            const [y, m] = filters.value.month.split('-');
+            list = list.filter(a => {
+                if(!a.nextDate || a.nextDate === 'PENDIENTE') return false;
+                const d = new Date(a.nextDate);
+                return d.getFullYear() == y && (d.getMonth() + 1) == m;
+            });
+        }
+
+        if(searchQuery.value) { 
+            const q = searchQuery.value.toLowerCase();
+            list = list.filter(a => String(a.controlNo).toLowerCase().includes(q) || String(a.description).toLowerCase().includes(q)); 
+        }
+        return list;
+    });
+
+    const paginatedAssets = computed(() => { 
+        const start = (page.value - 1) * itemsPerPage.value; 
+        return filteredAssets.value.slice(start, start + itemsPerPage.value); 
+    });
+    
+    const totalPages = computed(() => Math.ceil(filteredAssets.value.length / itemsPerPage.value));
+    
+    const metrics = computed(() => {
+        let m = {total:0, compliance:0, expired:0, warning:0, noncompliant:0, dynamic: {}};
+        dynamicCards.value.forEach(dc => m.dynamic[dc.name] = 0); 
+        
+        const warn = new Date(); warn.setDate(new Date().getDate() + 30);
+        const activos = assets.value.filter(a => a.estadoRegistro !== 'INACTIVO'); 
+
+        activos.forEach(a => {
+            m.total++; 
+            const status = (a.status || '').toUpperCase();
+            const dynamicMatch = dynamicCards.value.find(dc => dc.name.toUpperCase() === status);
+            
+            if(dynamicMatch) {
+                m.dynamic[dynamicMatch.name]++;
+                return; 
+            }
+
+            const ie = isExpired(a.nextDate); 
+            const r = (a.lastResult || '').toUpperCase(); 
+            const isOk = ['CUMPLE','PASS','OK'].includes(r); 
+            
+            if(ie) m.expired++;
+            else if(a.nextDate && !a.nextDate.includes('PEND') && new Date(a.nextDate) < warn) m.warning++; 
+            
+            if(isOk && !ie) m.compliance++; 
+            if(!isOk) m.noncompliant++; 
+        }); 
+        return m;
+    });
+
+    const uniqueTypes = computed(() => [...new Set(assets.value.map(a => (a.description||'').trim().toUpperCase()))].filter(Boolean).sort());
+    
+    const availableTemplates = computed(() => {
+        if (!catalogs.value.templates) return [];
+        return catalogs.value.templates.filter(t => (t.hex || t.color) === currentFilter.value);
+    });
+
+    // 3. MÉTODOS Y HELPERS
+    const nextPage = () => { if(page.value < totalPages.value) page.value++; };
+    const prevPage = () => { if(page.value > 1) page.value--; };
+    
+    const activateFilter = (f) => { 
+        if(currentFilter.value === f && showList.value) { showList.value = false; } 
+        else { currentFilter.value = f; showList.value = true; page.value = 1; }
+    };
+    
+    const clearFilters = (fullReset = true) => { 
+        filters.value = { type: '', quadrant: '', status: '', factory:'', project:'', responsible:'', month:'' };
+        searchQuery.value = ''; 
+        if(fullReset) currentFilter.value = 'all'; 
+        page.value = 1; 
+    };
+
+    const formatDate = (d) => { 
+        if(!d || d === 'PENDIENTE') return 'PENDIENTE';
+        if(typeof d === 'string' && d.includes('-') && d.length < 15) return d.toUpperCase().replace('.',''); 
+        const date = new Date(d); if(isNaN(date)) return d;
+        const userDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000); 
+        return userDate.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'}).toUpperCase().replace('.',''); 
+    };
+
+    const getQuadrantColor = (n) => { const q=quadrantDB.value.find(x=>x.id===n); return q?q.hex:'#cbd5e1'; };
+    const getStatusColor = (s) => '#cbd5e1';
+    const getIcon = (t) => dbRules.value[t]?.defaultIcon || 'fa-box';
+    const highlightMatch = (t) => searchQuery.value ? String(t).replace(new RegExp(`(${searchQuery.value})`,'gi'), '<span class="bg-yellow-200 text-yellow-900">$1</span>') : t;
+
+    const getAssetFailures = (asset) => {
+        if (!asset || !asset.measurements || !asset.description) return [];
+        const rule = dbRules.value[String(asset.description).trim().toUpperCase()];
+        if (!rule) return [];
+        const failures = [];
+        for (const k in FIELD_MAP) {
+            if (!rule[k]) continue;
+            const m = asset.measurements[k];
+            if (!m || m === 'N/A' || m.mantissa === 'N/A') continue;
+            let num = 0, limit = 0;
+            if (FIELD_MAP[k].type === 'scientific') {
+                if (m.mantissa == null || m.exponent == null || m.mantissa === "" || m.exponent === "") continue;
+                num = Number(m.mantissa) * Math.pow(10, Number(m.exponent));
+                try { 
+                    const parts = String(rule[k]).toUpperCase().replace('<','').trim().split('E');
+                    limit = parseFloat(parts[0]) * Math.pow(10, parseFloat(parts[1].replace('+',''))); 
+                } catch(e){}
+            } else {
+                if (m === "" || m === null) continue;
+                num = Number(m);
+                limit = parseFloat(String(rule[k]).replace(/[<a-zA-Z]/g, ''));
+            }
+            if (limit > 0 && num > limit) failures.push(FIELD_MAP[k].label);
+        }
+        return failures;
+    };
+
+    // 4. WATCHERS
+    watch(searchQuery, (v) => { if(v) showList.value = true; });
+    watch(filters, (v) => { 
+        if(v.type || v.quadrant || v.status || v.factory || v.project || v.responsible || v.month) showList.value = true; 
+    }, {deep:true});
+
+    // 5. EXPORTAR TODO LO NECESARIO
+    return {
+        currentFilter, filters, searchQuery, itemsPerPage, page, showList,
+        dynamicCards, filteredAssets, paginatedAssets, totalPages, metrics, uniqueTypes, availableTemplates,
+        nextPage, prevPage, activateFilter, clearFilters,
+        isExpired, formatDate, getQuadrantColor, getStatusColor, getIcon, highlightMatch, getAssetFailures
+    };
+}
+</script>

@@ -1,0 +1,109 @@
+<script>
+  const { createApp, ref, computed, onMounted, watch, onBeforeUnmount, nextTick } = Vue;
+
+  // CONSTANTES MAESTRAS
+  const FIELD_MAP = { surfaceRes: { label: 'Surface Resistance', type: 'scientific' }, floorMat: { label: 'Floor Mat Resistance', type: 'scientific' }, elecRes: { label: 'Electrical Resistance', type: 'numeric' }, impedance: { label: 'Impedance', type: 'numeric' }, voltage: { label: 'Voltage', type: 'numeric' }, jack: { label: 'Jack', type: 'numeric' } };
+  const ICONS = ['fa-microscope','fa-tools','fa-robot','fa-bolt','fa-plug','fa-server','fa-desktop','fa-print','fa-box','fa-pallet','fa-industry','fa-hard-hat','fa-wrench','fa-hammer','fa-broadcast-tower','fa-wifi','fa-car-battery','fa-charging-station', 'fa-chair', 'fa-dolly', 'fa-network-wired'];
+  
+  const runGAS = (func, ...args) => new Promise((resolve, reject) => { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[func](...args); });
+
+  const Toast = Swal.mixin({
+    toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true,
+    didOpen: (toast) => { toast.addEventListener('mouseenter', Swal.stopTimer); toast.addEventListener('mouseleave', Swal.resumeTimer); }
+  });
+
+  const i18n = VueI18n.createI18n({ legacy: false, locale: 'ES', fallbackLocale: 'EN', messages });
+
+  const app = createApp({
+    setup() {
+      // 1. ESTADO GLOBAL DE LA APLICACIÓN
+      const loading = ref(true);
+      const submitting = ref(false);
+      const view = ref('dashboard');
+      
+      const assets = ref([]);
+      const dbRules = ref({});
+      const catalogs = ref({ sectors:[], factories:[], projects:[], auditors:[], templates:[], ticketFields:[], emailGroups: [], aiPrompts: [] });
+      const quadrantDB = ref([]);
+      const matrixDB = ref({ validationReasons: [] });
+      const emailConfig = ref({});
+      const aiSettings = ref({ enabled: false, apiKeys: [''], activePromptId: '' });
+      const generalSettings = ref({ showPreviousEvidence: false });
+      
+      const userRoleName = ref('INVITADO');
+      const userPermissions = ref({ canView: true, canAudit: false, canConfig: false, canUsers: false, canUseCopilot: false });
+      const rolesDB = ref({});
+      const usersDB = ref({});
+
+      const currentThemeColor = ref('#005565');
+      const lastSyncTime = ref(null);
+      let pollingInterval = null;
+
+      const statusDB = computed(() => {
+          if (!matrixDB.value || !matrixDB.value.validationReasons) return [];
+          return matrixDB.value.validationReasons.map(item => typeof item === 'string' ? { name: item, showCard: false, color: '#64748b', isAdmin: false } : item);
+      });
+
+      // 2. CONFIGURACIÓN COMPARTIDA PARA LOS COMPOSABLES
+      const globalConfig = {
+          view, submitting, assets, dbRules, catalogs, quadrantDB, statusDB,
+          rolesDB, usersDB, aiSettings, emailConfig, generalSettings, userRoleName, userPermissions,
+          currentThemeColor, FIELD_MAP, ICONS,
+          runGAS, Swal, Toast, 
+          loadData: () => loadData(), 
+          openTicketModal: (mode) => modalsLogic.openTicketModal(mode),
+          isAssetFailed: computed(() => formLogic.isAssetFailed.value)
+      };
+
+      // 3. INYECCIÓN DE COMPOSABLES MODULARES
+      const headerLogic = useHeader();
+      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP);
+      const formLogic   = useAssetForm(globalConfig);
+      const adminLogic  = useAdmin(globalConfig);
+      const modalsLogic = useModals(globalConfig);
+
+      // 4. MOTOR EN TIEMPO REAL Y CARGA INICIAL
+      const loadData = () => { 
+        loading.value = true;
+        google.script.run
+          .withSuccessHandler(r => { 
+            if(r?.success){
+                assets.value = r.assets || []; dbRules.value = r.rules || {}; 
+                if(r.catalogs) catalogs.value = r.catalogs; 
+                if(r.sectors) quadrantDB.value = r.sectors; 
+                if(r.matrix) matrixDB.value = r.matrix; 
+                if(r.email) emailConfig.value = r.email; 
+                if(r.aiConfig) aiSettings.value = r.aiConfig;
+                if(r.showPrevEvidence !== undefined) generalSettings.value.showPreviousEvidence = r.showPrevEvidence;
+                
+                userRoleName.value = r.userRoleName; userPermissions.value = r.userPermissions;
+                rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
+                lastSyncTime.value = r.serverTime; 
+                loading.value = false;
+            } else { 
+                Swal.fire('Error', r?.error || 'Fallo de servidor', 'error'); loading.value = false;
+            } 
+          }).getData();
+      };
+
+      onMounted(() => loadData());
+
+      // 5. EXPORTACIÓN A LA VISTA HTML
+      return {
+         loading, submitting, view, assets, dbRules, quadrantDB, statusDB, catalogs,
+         userRoleName, userPermissions, rolesDB, usersDB, aiSettings, emailConfig, generalSettings,
+         
+         ...headerLogic,
+         ...dashLogic,
+         ...formLogic,
+         ...adminLogic,
+         ...modalsLogic,
+         
+         dynamicStyle: computed(() => ({ '--theme-color': currentThemeColor.value, '--theme-color-light': currentThemeColor.value + '33' }))
+      };
+    }
+  }); 
+
+  app.use(i18n);
+  app.mount('#app');
+</script>

@@ -1,0 +1,591 @@
+<!-- ========================================== -->
+<!-- 🟢 VISTA: PANEL DE ADMINISTRACIÓN          -->
+<!-- ========================================== -->
+<main v-if="view==='admin'" class="flex-1 overflow-y-auto p-6 bg-slate-50">
+  <div class="card min-h-full flex flex-col">
+    <div class="flex border-b border-slate-200 overflow-x-auto">
+        <button v-if="userPermissions.canConfig" @click="adminTab='catalogs'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='catalogs'}">Catálogos</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='rules'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='rules'}">Reglas</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='status'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='status'}">Estados</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='email'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='email'}"><i class="fas fa-envelope mr-2"></i> Correos</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='ai'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='ai'}"><i class="fas fa-robot mr-2"></i> Copiloto IA</button>
+        <button v-if="userPermissions.canUsers" @click="adminTab='security'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='security'}"><i class="fas fa-shield-alt mr-2"></i> Seguridad</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='datahub'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='datahub'}"><i class="fas fa-database mr-2"></i> Importación Masiva</button>
+    </div>
+
+    <div class="p-8 flex-1 overflow-y-auto">
+       <!-- PESTAÑA: CATÁLOGOS -->
+       <div v-if="adminTab==='catalogs'">
+           <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+               <button @click="activeCatalogCategory = 'SECTOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'SECTOR'}"><i class="fas fa-th-large mr-2"></i>Cuadrantes</button>
+               <button @click="activeCatalogCategory = 'FACTORY'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'FACTORY'}"><i class="fas fa-industry mr-2"></i>Fábricas</button>
+               <button @click="activeCatalogCategory = 'PROJECT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'PROJECT'}"><i class="fas fa-folder mr-2"></i>Proyectos</button>
+               <button @click="activeCatalogCategory = 'AUDITOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AUDITOR'}"><i class="fas fa-user-check mr-2"></i>Responsables</button>
+               <button @click="activeCatalogCategory = 'TEMPLATE'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TEMPLATE'}"><i class="fas fa-file-excel mr-2"></i>Plantillas</button>
+               <button @click="activeCatalogCategory = 'TICKET_FIELD'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TICKET_FIELD'}"><i class="fas fa-list-check mr-2"></i>Campos de Ticket</button>
+               <button @click="activeCatalogCategory = 'EMAIL_GROUP'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'EMAIL_GROUP'}"><i class="fas fa-users mr-2"></i>Grupos de Correo</button>
+               <button @click="activeCatalogCategory = 'AI_PROMPT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AI_PROMPT'}"><i class="fas fa-comment-medical mr-2"></i>Personalidades IA</button>
+           </div>
+
+            <div class="mb-8 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+               <div>
+                   <h4 class="font-black text-slate-700 text-sm">Ayuda Visual en Verificación</h4>
+                   <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Mostrar evidencia del ticket abierto al intentar reparar</p>
+               </div>
+               <div class="flex items-center gap-4">
+                   <label class="relative inline-flex items-center cursor-pointer">
+                       <input type="checkbox" v-model="generalSettings.showPreviousEvidence" @change="saveGeneralSettings" class="sr-only peer">
+                       <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                   </label>
+                   <span class="text-[10px] font-black" :class="generalSettings.showPreviousEvidence ? 'text-emerald-600' : 'text-slate-400'">{{ generalSettings.showPreviousEvidence ? 'ACTIVADO' : 'DESACTIVADO' }}</span>
+               </div>
+           </div>
+
+           <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+               <div class="lg:col-span-1">
+                   <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 h-fit sticky top-0 shadow-sm" :class="editingCatalog ? 'border-amber-400 ring-2 ring-amber-100' : ''">
+                       <h4 class="font-black text-sm text-slate-700 mb-4 flex items-center gap-2">
+                           <i class="fas" :class="editingCatalog ? 'fa-edit text-amber-500' : 'fa-plus-circle text-[#005565]'"></i> 
+                           {{ editingCatalog ? 'Editar Elemento' : 'Nuevo Elemento' }}
+                       </h4>
+                       <div class="mb-4"><label class="lbl">Categoría Activa</label><div class="input-std bg-slate-100 text-slate-500 font-bold border-slate-200">{{ activeCatalogLabel }}</div></div>
+                       
+                       <div v-if="activeCatalogCategory !== 'TICKET_FIELD'">
+                           <label class="lbl">{{ activeCatalogCategory === 'TEMPLATE' ? 'Nombre del Reporte (Menú)' : (activeCatalogCategory === 'EMAIL_GROUP' ? 'Nombre del Grupo' : (activeCatalogCategory === 'AI_PROMPT' ? 'Nombre de la Personalidad' : 'Valor (ID)')) }}</label>
+                           <input v-model="newCatalog.id" class="input-std mb-4" :placeholder="activeCatalogCategory === 'TEMPLATE' ? 'Ej: Formato de Fallas Rev G.1' : (activeCatalogCategory === 'EMAIL_GROUP' ? 'Ej: INGENIERIA' : (activeCatalogCategory === 'AI_PROMPT' ? 'Ej: MODO_ESTRICTO' : 'Ej: A1, Planta 1...'))">
+                       </div>
+
+                       <div v-if="activeCatalogCategory === 'AI_PROMPT'" class="w-full animate-fade space-y-4 mb-4">
+                           <div>
+                               <label class="lbl">Instrucciones Secretas (System Prompt)</label>
+                               <textarea v-model="newCatalog.label" class="input-std h-24 resize-y" placeholder="Ej: Eres un asistente técnico experto..."></textarea>
+                           </div>
+
+                           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               <div>
+                                   <label class="lbl">Módulos de Conocimiento a Inyectar</label>
+                                   <div class="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 h-full content-start">
+                                       <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition">
+                                           <input type="checkbox" value="assets_basic" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-[#005565] w-3 h-3">
+                                           Resumen Estadístico (Cantidades y Totales)
+                                       </label>
+                                       <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition" title="Permite análisis profundo y mapas de calor.">
+                                           <input type="checkbox" value="assets_full" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-rose-600 w-3 h-3">
+                                           <span class="text-rose-700">Analítica Profunda (Base de Datos CSV)</span>
+                                       </label>
+                                       <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition">
+                                           <input type="checkbox" value="rules_dict" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-[#005565] w-3 h-3">
+                                           Catálogo de Reglas y Tolerancias ESD
+                                       </label>
+                                   </div>
+                               </div>
+                               <div>
+                                   <label class="lbl">Roles Autorizados</label>
+                                   <div class="flex flex-wrap gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 h-full content-start">
+                                       <label v-for="(val, roleName) in rolesDB" :key="roleName" class="flex items-center gap-1.5 text-[9px] font-bold cursor-pointer hover:bg-white p-1 rounded transition border border-transparent hover:border-slate-200">
+                                           <input type="checkbox" :value="roleName" v-model="newCatalog.config.allowedRoles" class="rounded border-slate-300 text-[#005565] w-3 h-3 cursor-pointer">
+                                           {{ roleName }}
+                                       </label>
+                                   </div>
+                               </div>
+                           </div>
+                       </div>
+                       
+                       <div v-if="activeCatalogCategory === 'EMAIL_GROUP'" class="w-full animate-fade">
+                           <label class="lbl">Destinatarios del Grupo</label>
+                           <div class="space-y-2 mb-4 border border-slate-200 p-4 rounded-xl bg-slate-50">
+                               <div v-for="(email, idx) in adminEmailGroupList" :key="'admin_email_'+idx" class="flex items-center gap-2 animate-fade">
+                                   <div class="relative flex-1">
+                                       <input v-model="adminEmailGroupList[idx]" @keyup.enter="addAdminEmailField" class="admin-email-input input-std pr-24 focus:!border-[#005565] lowercase font-mono text-sm" placeholder="nombre.apellido">
+                                       <span class="absolute right-3 top-2 text-slate-300 text-[10px] font-bold mt-0.5 pointer-events-none">@plexus.com</span>
+                                   </div>
+                                   <button v-if="adminEmailGroupList.length > 1" @click="removeAdminEmailField(idx)" class="text-rose-300 hover:text-rose-500 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-rose-50"><i class="fas fa-times-circle"></i></button>
+                               </div>
+                               <button @click="addAdminEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1 mt-2 flex items-center gap-1"><i class="fas fa-plus"></i> AGREGAR OTRO CORREO</button>
+                           </div>
+                       </div>
+                       
+                       <div v-if="activeCatalogCategory==='SECTOR'"><label class="lbl">Nombre del Color (Etiqueta)</label><input v-model="newCatalog.label" class="input-std mb-4" placeholder="Ej: Café, Rojo, Cuadrado Gris"><label class="lbl">Color Identificador</label><div class="flex gap-2 h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newCatalog.color" class="absolute -top-2 -left-2 w-[120%] h-[200%] cursor-pointer p-0 m-0"></div></div>
+                       
+                       <div v-if="activeCatalogCategory==='TEMPLATE'" class="w-full">
+                           <label class="lbl">Nombre Pestaña Excel Mapeada</label>
+                           <input v-model="newCatalog.label" class="input-std mb-4" placeholder="Ej: 7293_Fallas">
+                           <label class="lbl">¿En qué tarjeta aparecerá este reporte?</label>
+                           <select v-model="newCatalog.color" class="input-std mb-4">
+                               <option value="all">Total Activos (General)</option>
+                               <option value="compliant">Cumplimiento</option>
+                               <option value="expired">Vencidos</option>
+                               <option value="warning">Por Vencer</option>
+                               <option value="noncompliant">Fallas</option>
+                               <option v-for="dc in dynamicCards" :key="dc.name" :value="dc.name">Tarjeta: {{ dc.name }}</option>
+                           </select>
+
+                           <div class="mt-6 border-t border-slate-200 pt-6">
+                              <h5 class="font-black text-xs text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-columns text-[#005565]"></i> Constructor de Columnas</h5>
+                              
+                              <div class="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                  <label class="text-[10px] font-bold text-slate-600 uppercase w-32">Fila de Inicio:</label>
+                                  <input type="number" v-model="newCatalog.config.startRow" class="input-std w-20 text-center" title="Fila donde se dibujarán los encabezados">
+                                  <span class="text-[9px] text-slate-400">Las filas anteriores se respetarán intactas (Para logos/títulos).</span>
+                              </div>
+                              
+                              <div class="space-y-2 mb-4">
+                                  <div v-for="(col, i) in newCatalog.config.columns" :key="i" class="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-200 shadow-sm hover:border-slate-300 transition group">
+                                      
+                                      <div class="flex flex-col items-center justify-center px-2 border-r border-slate-100 gap-1 w-8">
+                                         <button @click="moveColUp(i)" :disabled="i===0" class="text-slate-300 hover:text-[#005565] disabled:opacity-20 transition"><i class="fas fa-caret-up text-sm"></i></button>
+                                         <button @click="moveColDown(i)" :disabled="i===newCatalog.config.columns.length-1" class="text-slate-300 hover:text-[#005565] disabled:opacity-20 transition"><i class="fas fa-caret-down text-sm"></i></button>
+                                      </div>
+                                      
+                                      <div class="flex-1 pl-2">
+                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Dato Interno a Extraer</label>
+                                          <select v-model="col.field" class="input-std h-8 text-xs py-0 text-[#005565] font-bold bg-slate-50">
+                                              <optgroup label="Datos Generales">
+                                                  <option value="controlNo">ID / Control Number</option>
+                                                  <option value="quadrant">Cuadrante (Solo ID)</option>
+                                                  <option value="quadrantLabel">Nombre del Color (Cuadrante)</option>
+                                                  <option value="description">Tipo / Descripción</option>
+                                                  <option value="project">Proyecto</option>
+                                                  <option value="factory">Fábrica</option>
+                                                  <option value="status">Estado Actual</option>
+                                                  <option value="responsible">Auditor Responsable</option>
+                                                  <option value="systemUser">Persona que realizó la operación (Usuario)</option>
+                                              </optgroup>
+                                              <optgroup label="Fechas y Resultados">
+                                                  <option value="lastDate">Fecha Verificación (Exacta)</option>
+                                                  <option value="nextDate">Fecha de Vencimiento</option>
+                                                  <option value="lastResult">Último Dictamen (PASS/FAIL)</option>
+                                                  <option value="comments">Comentarios Generales</option>
+                                              </optgroup>
+                                              <optgroup label="Mediciones Técnicas">
+                                              <option value="meas_surfaceRes">Surface Resistance (Fusionado)</option>
+                                              <option value="meas_floorMat">Floor Mat Resistance (Fusionado)</option>
+                                              <option value="meas_surfaceRes_m">Surface Resistance - Mantisa (Número)</option>
+                                              <option value="meas_surfaceRes_e">Surface Resistance - Exponente (10^x)</option>
+                                              <option value="meas_floorMat_m">Floor Mat Resistance - Mantisa (Número)</option>
+                                              <option value="meas_floorMat_e">Floor Mat Resistance - Exponente (10^x)</option>
+                                              <option value="meas_elecRes">Electrical Resistance</option>
+                                              <option value="meas_impedance">Impedance</option>
+                                              <option value="meas_voltage">Voltage</option>
+                                              <option value="meas_jack">Jack</option>
+                                          </optgroup>
+                                              <optgroup label="Datos del Ticket (CAPA)">
+                                                  <option value="tkt_id_number"># Número de Ticket (Solo dígitos)</option>
+                                                  <option value="tkt_open_date">Fecha de Falla (Apertura)</option>
+                                                  <option value="tkt_status">Estado del Ticket</option>
+                                                  <option v-for="tf in catalogs.ticketFields" :key="tf.id" :value="'tkt_data_' + tf.id">
+                                                      Ticket: {{ tf.id }}
+                                                  </option>
+                                              </optgroup>
+                                          </select>
+                                      </div>
+                                      
+                                      <div class="flex-1">
+                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Título del Encabezado Impreso</label>
+                                          <input v-model="col.header" class="input-std h-8 text-xs py-0" placeholder="Ej: # Article">
+                                      </div>
+                                      
+                                      <button @click="newCatalog.config.columns.splice(i, 1)" class="w-8 h-8 rounded-lg text-rose-300 hover:bg-rose-50 hover:text-rose-500 transition ml-2"><i class="fas fa-trash-alt"></i></button>
+                                  </div>
+                                  <div v-if="!newCatalog.config.columns || newCatalog.config.columns.length === 0" class="text-center py-6 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-xs font-bold">
+                                      No has agregado ninguna columna. El reporte saldrá vacío.
+                                  </div>
+                              </div>
+                              
+                              <div class="flex gap-2">
+                                  <button @click="newCatalog.config.columns.push({field:'controlNo', header:'Nuevo Encabezado'})" class="flex-1 py-2 rounded-lg text-[10px] font-black text-[#005565] bg-teal-50 hover:bg-teal-100 border border-teal-200 transition uppercase tracking-wider"><i class="fas fa-plus mr-1"></i> Añadir Columna</button>
+                                  <button @click="previewTemplate" class="flex-1 py-2 rounded-lg text-[10px] font-black text-white bg-slate-800 hover:bg-slate-900 shadow-md transition uppercase tracking-wider"><i class="fas fa-eye mr-1"></i> Generar Vista Previa</button>
+                              </div>
+                           </div>
+                       </div>
+
+                       <div v-if="activeCatalogCategory === 'TICKET_FIELD'" class="w-full">
+                           <label class="lbl">Nombre del Campo (Aparecerá en el formulario)</label>
+                           <input v-model="newCatalog.id" class="input-std mb-4" placeholder="Ej: Acción Correctiva Implementada">
+                           
+                           <label class="lbl">Tipo de Entrada (Componente)</label>
+                           <select v-model="newCatalog.label" class="input-std mb-4">
+                               <option value="TEXT">Texto Corto (Ej: Nombre)</option>
+                               <option value="TEXTAREA">Párrafo (Ej: Detalles / Observaciones)</option>
+                               <option value="SELECT">Lista Desplegable (Opciones Cerradas)</option>
+                               <option value="DATE">Fecha</option>
+                               <option value="FILE">Archivo Simple (PDF/Doc)</option>
+                               <option value="CAMERA">Cámara Pro (Fotografías / Video)</option>
+                               <option value="EMAIL_LIST">Lista de Correos Automática (@plexus)</option>
+                           </select>
+
+                           <div v-if="newCatalog.label === 'SELECT'" class="bg-amber-50 border border-amber-200 p-3 rounded-lg mb-4">
+                               <label class="lbl text-amber-800"><i class="fas fa-info-circle"></i> Opciones de la Lista</label>
+                               <input v-model="newCatalog.color" class="input-std border-amber-300" placeholder="Ej: Alta, Media, Baja (Separadas por coma)">
+                               <p class="text-[9px] font-bold text-amber-600 mt-1">Escribe las opciones separadas por una coma.</p>
+                           </div>
+
+                           <div class="bg-slate-50 border border-slate-200 p-5 rounded-xl mb-4 space-y-4">
+                               <h4 class="font-black text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2"><i class="fas fa-cogs text-[#005565]"></i> Comportamiento del Campo</h4>
+                               
+                               <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
+                                   <div>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">Campo Obligatorio</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">No dejará guardar el ticket si está vacío.</p>
+                                   </div>
+                                   <input type="checkbox" v-model="newCatalog.config.required" class="w-5 h-5 accent-rose-500 cursor-pointer">
+                               </div>
+
+                               <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
+                                   <div>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">Mostrar en Apertura (Momento de Falla)</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">Se pide inmediatamente al rechazar el equipo.</p>
+                                   </div>
+                                   <input type="checkbox" v-model="newCatalog.config.showOnOpen" class="w-5 h-5 accent-[#005565] cursor-pointer">
+                               </div>
+
+                               <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
+                                   <div>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">Mostrar en Cierre (Momento de Reparación)</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">Se pide antes de volver a medir el equipo.</p>
+                                   </div>
+                                   <input type="checkbox" v-model="newCatalog.config.showOnClose" class="w-5 h-5 accent-emerald-500 cursor-pointer">
+                               </div>
+                           </div>
+                       </div>
+                       
+                       <button @click="saveCatalogItem" class="w-full text-white py-3 rounded-xl text-xs font-bold shadow-lg transition mt-6 flex justify-center items-center gap-2" :class="editingCatalog ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'"><i class="fas" :class="editingCatalog ? 'fa-sync' : 'fa-save'"></i> {{ editingCatalog ? 'ACTUALIZAR' : 'GUARDAR' }}</button>
+                       <button v-if="editingCatalog" @click="cancelCatalogEdit" class="w-full bg-slate-200 text-slate-500 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-slate-300">CANCELAR EDICIÓN</button>
+                   </div>
+               </div>
+               <div class="lg:col-span-2">
+                   <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                       <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><span class="font-black text-xs text-slate-600 uppercase tracking-wide">Lista de {{ activeCatalogLabel }}</span><span class="badge bg-[#005565] text-white px-3 py-1">{{ activeList.length }}</span></div>
+                       <div class="max-h-[500px] overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                           <div v-for="item in activeList" :key="item.id" class="flex justify-between items-center p-4 rounded-xl border border-slate-100 hover:border-slate-300 hover:shadow-md transition bg-white group cursor-pointer" @click="editCatalog(item)">
+                               <div class="flex items-center gap-3">
+                                   <div v-if="activeCatalogCategory==='SECTOR'" class="w-8 h-8 rounded-lg shadow-sm flex-none border border-slate-100" :style="{backgroundColor: item.hex}"></div>
+                                   <div v-else class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">{{ item.id.substring(0,2).toUpperCase() }}</div>
+                                   <div><p class="font-bold text-xs text-slate-700">{{ item.id }}</p><p v-if="item.label && item.label !== item.id" class="text-[9px] text-slate-400 font-bold uppercase">{{ item.label }}</p></div>
+                               </div>
+                               <div class="flex gap-2"><button class="text-slate-300 group-hover:text-amber-500 transition"><i class="fas fa-edit"></i></button><button @click.stop="deleteCatalogItem(activeCatalogCategory, item.id)" class="text-slate-300 group-hover:text-rose-500 transition"><i class="fas fa-trash-alt"></i></button></div>
+                           </div>
+                           <div v-if="activeList.length === 0" class="col-span-full py-10 text-center text-slate-300 font-bold text-xs uppercase">No hay elementos registrados</div>
+                       </div>
+                   </div>
+               </div>
+           </div>
+       </div>
+       
+       <!-- PESTAÑA: REGLAS -->
+       <div v-if="adminTab==='rules'"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-slate-700">Matriz</h3><button @click="openRuleModal()" class="px-4 py-2 bg-[#005565] text-white rounded-lg text-xs font-bold shadow">NUEVA REGLA</button></div><table class="w-full text-left text-sm border-collapse"><thead class="bg-slate-50 text-xs text-slate-500 uppercase"><tr><th class="p-3 border-b">ID</th><th class="p-3 border-b text-center">Icono</th><th class="p-3 border-b">Mediciones</th><th class="p-3 border-b text-right">Acción</th></tr></thead><tbody><tr v-for="(r, k) in dbRules" :key="k" class="hover:bg-slate-50 transition"><td class="p-3 border-b font-bold text-slate-700">{{ k }}</td><td class="p-3 border-b text-center"><i class="fas text-slate-400" :class="r.defaultIcon"></i></td><td class="p-3 border-b"><div class="flex gap-1 flex-wrap"><span v-for="m in getActiveMeasurements(r)" class="text-[9px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded font-bold uppercase">{{m}}</span></div></td><td class="p-3 border-b text-right"><div class="flex justify-end gap-2"><button @click="openRuleModal(k, r)" class="text-blue-500 hover:bg-blue-50 p-2 rounded"><i class="fas fa-edit"></i></button><button @click="deleteRule(k)" class="text-rose-400 hover:bg-rose-50 p-2 rounded"><i class="fas fa-trash"></i></button></div></td></tr></tbody></table></div>
+       
+       <!-- PESTAÑA: ESTADOS -->
+       <div v-if="adminTab==='status'">
+           <div class="max-w-3xl mx-auto space-y-6">
+               <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                   <h4 class="font-black text-slate-700 mb-4 text-sm flex items-center gap-2"><i class="fas fa-plus-circle text-[#005565]"></i> Nuevo Estado</h4>
+                   <div class="flex flex-col md:flex-row gap-4 items-end">
+                       <div class="flex-1"><label class="lbl">Nombre del Estado</label><input v-model="newStatus.name" placeholder="Ej: BAJA, CUARENTENA..." class="input-std uppercase"></div>
+                       <div class="flex flex-col gap-2 mb-2">
+                           <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                               <input type="checkbox" v-model="newStatus.showCard" id="chkCard" class="w-4 h-4 accent-[#005565] cursor-pointer">
+                               <label for="chkCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">¿Crear Tarjeta en Dashboard?</label>
+                           </div>
+                           <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                               <input type="checkbox" v-model="newStatus.isAdmin" id="chkAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                               <label for="chkAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">Movimiento Administrativo (Omitir Mediciones)</label>
+                           </div>
+                       </div>
+                       <div v-if="newStatus.showCard"><label class="lbl">Color</label><div class="h-9 w-12 rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newStatus.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
+                       <button @click="addStatus" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs"><i class="fas fa-save mr-1"></i> GUARDAR</button>
+                   </div>
+               </div>
+               <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                   <div class="bg-slate-50 px-6 py-3 border-b border-slate-100"><span class="font-black text-xs text-slate-600 uppercase">Estados Registrados</span></div>
+                   <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                       <div v-for="(s, idx) in statusDB" :key="idx" class="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:shadow-md transition group bg-white">
+                           <div>
+                               <span class="font-bold text-xs uppercase text-slate-700 block mb-1">{{ s.name }}</span>
+                               <span v-if="s.showCard" class="text-[9px] font-bold px-2 py-0.5 rounded text-white shadow-sm flex inline-flex items-center gap-1" :style="{backgroundColor: s.color}"><i class="fas fa-chart-pie text-[8px]"></i> Tarjeta Activa</span>
+                               <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">Sin Tarjeta</span>
+                           </div>
+                           <div class="flex gap-2"><button @click="openEditStateModal(s)" class="text-slate-300 hover:text-blue-500 transition w-8 h-8 rounded-full hover:bg-blue-50"><i class="fas fa-edit"></i></button><button @click="deleteStatus(idx)" class="text-slate-300 hover:text-rose-500 transition w-8 h-8 rounded-full hover:bg-rose-50"><i class="fas fa-trash"></i></button></div>
+                       </div>
+                   </div>
+               </div>
+           </div>
+       </div>
+       
+       <!-- PESTAÑA: EMAIL -->
+       <transition name="fade" mode="out-in">
+         <div v-if="adminTab === 'email'" class="max-w-5xl mx-auto space-y-6">
+             <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                 <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2 text-lg"><i class="fas fa-envelope-open-text text-[#005565]"></i> Centro de Notificaciones Automáticas</h3>
+                 
+                 <div class="flex gap-2 mb-8 bg-slate-100 p-1 rounded-xl">
+                     <button v-for="type in ['OPEN', 'CLOSE', 'FORCED']" :key="type" 
+                             @click="activeEmailType = type"
+                             :class="activeEmailType === type ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:bg-white/50'"
+                             class="flex-1 py-2 rounded-lg text-[10px] font-black transition-all">
+                         <i class="fas mr-1" :class="{'fa-exclamation-circle text-rose-500': type==='OPEN', 'fa-check-circle text-emerald-500': type==='CLOSE', 'fa-shield-alt text-amber-500': type==='FORCED'}"></i>
+                         {{ type === 'OPEN' ? 'FALLA (APERTURA)' : (type === 'CLOSE' ? 'SOLUCIÓN (CIERRE)' : 'ALERTA CALIDAD') }}
+                     </button>
+                 </div>
+
+                 <div v-if="emailConfig[activeEmailType]" class="space-y-5 animate-fade">
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div class="col-span-2 md:col-span-1">
+                             <label class="lbl">Destinatarios Fijos (Separados por coma)</label>
+                             <input v-model="emailConfig[activeEmailType].to" class="input-std" placeholder="mantenimiento@plexus.com, calidad@plexus.com">
+                         </div>
+                         <div class="col-span-2 md:col-span-1">
+                             <label class="lbl">Asunto del Correo</label>
+                             <input v-model="emailConfig[activeEmailType].subject" class="input-std" placeholder="⚠️ Reporte de Falla">
+                         </div>
+                     </div>
+                     <div>
+                         <label class="lbl">Cuerpo del Mensaje (Instrucciones)</label>
+                         <textarea v-model="emailConfig[activeEmailType].body" class="input-std h-24 resize-y" placeholder="Escriba el mensaje que recibirá el personal..."></textarea>
+                     </div>
+                     
+                     <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-[10px] text-blue-700 flex items-start gap-3">
+                         <i class="fas fa-info-circle mt-0.5 text-blue-500"></i>
+                         <div class="flex-1">
+                             <p v-if="activeEmailType === 'OPEN'"><b>Lógica de Apertura:</b> Este correo se enviará cuando un equipo sea rechazado. Incluirá automáticamente el link a las fotos y los datos del responsable.</p>
+                             <p v-if="activeEmailType === 'CLOSE'"><b>Lógica de Cierre:</b> Se enviará cuando un ticket abierto vuelva a CUMPLIR. Ideal para avisar que el equipo está listo para producción.</p>
+                             <p v-if="activeEmailType === 'FORCED'"><b>Lógica de Calidad:</b> Se dispara cuando un auditor aprueba/rechaza un equipo saltándose el cálculo de las matemáticas de la plataforma.</p>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="pt-6 mt-6 border-t border-slate-100 flex justify-end">
+                     <button @click="saveEmailConfig" :disabled="submitting" class="bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition flex items-center gap-2">
+                         <i class="fas fa-save"></i> GUARDAR CONFIGURACIÓN
+                     </button>
+                </div>
+             </div>
+         </div>
+        </transition>
+
+         <!-- PESTAÑA: COPILOTO IA -->
+         <transition name="fade" mode="out-in">
+          <div v-if="adminTab === 'ai'" class="max-w-5xl mx-auto space-y-6">
+              <div class="bg-gradient-to-br from-slate-900 to-[#003d4d] p-6 rounded-2xl text-white shadow-xl relative overflow-hidden">
+                  <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-brain text-6xl"></i></div>
+                  <div class="relative z-10">
+                      <h4 class="font-black text-lg mb-1 flex items-center gap-2"><i class="fas fa-microchip text-cyan-400"></i> Cerebro ESD v2.0</h4>
+                      <p class="text-[10px] text-cyan-200/70 font-bold uppercase tracking-widest">Gestión de Tokens y Personalidades</p>
+                  </div>
+              </div>
+
+              <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+                  <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div>
+                          <p class="text-xs font-black text-slate-700 uppercase">Estado del Copiloto</p>
+                          <p class="text-[9px] text-slate-400 font-bold">Activación global del servicio</p>
+                      </div>
+                      <label class="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" v-model="aiSettings.enabled" class="sr-only peer">
+                          <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                      </label>
+                  </div>
+
+                  <div>
+                      <label class="lbl">Pool de API Keys (Rotación Automática)</label>
+                      <div class="space-y-2 border border-slate-100 p-4 rounded-xl bg-slate-50/50">
+                          <div v-for="(key, idx) in aiSettings.apiKeys" :key="idx" class="flex gap-2 animate-fade">
+                              <div class="relative flex-1">
+                                  <i class="fas fa-key absolute left-3 top-2.5 text-slate-300 text-xs"></i>
+                                  <input type="password" v-model="aiSettings.apiKeys[idx]" class="input-std pl-9" placeholder="AIzaSy...">
+                              </div>
+                              <button v-if="aiSettings.apiKeys.length > 1" @click="aiSettings.apiKeys.splice(idx,1)" class="text-rose-400 p-2 hover:bg-rose-50 rounded-lg"><i class="fas fa-trash"></i></button>
+                          </div>
+                          <button @click="aiSettings.apiKeys.push('')" class="text-[10px] text-blue-600 font-black mt-2 hover:underline">+ AGREGAR OTRA LLAVE DE RESPALDO</button>
+                      </div>
+                  </div>
+
+                  <div>
+                      <label class="lbl">Personalidad Activa (System Prompt)</label>
+                      <select v-model="aiSettings.activePromptId" class="input-std">
+                          <option value="">-- SELECCIONAR PROMPT DEL CATÁLOGO --</option>
+                          <option v-for="p in catalogs.aiPrompts" :key="p.id" :value="p.id">{{ p.id }}</option>
+                      </select>
+                      <div v-if="aiSettings.activePromptId" class="mt-3 p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                          <p class="text-[10px] font-black text-amber-700 uppercase mb-1">Vista Previa de la Instrucción:</p>
+                          <p class="text-xs text-amber-800 italic">"{{ (catalogs.aiPrompts.find(x => x.id === aiSettings.activePromptId) || {}).label }}"</p>
+                      </div>
+                      <p class="text-[9px] text-slate-400 mt-2">Para crear o editar estas instrucciones, ve a la pestaña <b>Catálogos > Personalidades IA</b>.</p>
+                  </div>
+
+                  <button @click="saveAiConfig" :disabled="submitting" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs shadow-xl hover:bg-black transition flex justify-center items-center gap-2">
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i> {{ submitting ? 'GUARDANDO...' : 'SINCRONIZAR CEREBRO' }}
+                  </button>
+              </div>
+          </div>
+        </transition>
+
+         <!-- PESTAÑA: SEGURIDAD (RBAC) -->
+         <transition name="fade" mode="out-in">
+         <div v-if="adminTab === 'security'" class="max-w-6xl mx-auto space-y-8 animate-fade">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card p-8 bg-white shadow-sm">
+                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-user-shield text-[#005565]"></i> Matriz de Roles</h3>
+                    <div class="space-y-4">
+                        <div v-for="(perms, roleName) in rolesDB" :key="roleName" class="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition group">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="font-black text-xs uppercase tracking-widest text-[#005565]">{{ roleName }}</span>
+                                <button @click="deleteRole(roleName)" v-if="roleName !== 'SUPER_ADMIN' && roleName !== 'INVITADO'" class="text-rose-300 hover:text-rose-500 text-xs"><i class="fas fa-trash-alt"></i></button>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label v-for="(val, pKey) in perms" :key="pKey" class="flex items-center gap-2 cursor-pointer p-2 bg-white rounded border border-slate-100 shadow-sm">
+                                    <input type="checkbox" v-model="rolesDB[roleName][pKey]" :disabled="roleName === 'SUPER_ADMIN'" class="w-4 h-4 accent-[#005565]">
+                                    <span class="text-[9px] font-bold text-slate-500 uppercase">{{ pKey.replace('can','').replace(/([A-Z])/g, ' $1') }}</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button @click="addNewRole" class="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-xs hover:bg-slate-50 transition">+ CREAR NUEVO ROL</button>
+                        <button @click="saveRoles" class="w-full bg-[#005565] text-white py-3 rounded-xl font-bold text-xs mt-4 shadow-lg hover:bg-[#004455] transition">GUARDAR MATRIZ DE ROLES</button>
+                    </div>
+                </div>
+                <div class="card p-8 bg-white shadow-sm">
+                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-users-cog text-[#005565]"></i> Usuarios y Accesos</h3>
+                    <div class="flex gap-2 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <input v-model="newUserEmail" class="input-std flex-1" placeholder="correo@plexus.com">
+                        <select v-model="newUserRole" class="input-std w-32">
+                            <option v-for="(_, rName) in rolesDB" :key="rName" :value="rName">{{ rName }}</option>
+                        </select>
+                        <button @click="addUser" class="bg-emerald-600 text-white px-4 rounded-lg hover:bg-emerald-700 transition"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                        <div v-for="(uRole, uEmail) in usersDB" :key="uEmail" class="flex justify-between items-center p-3 border-b border-slate-50 hover:bg-slate-50 transition group">
+                            <div>
+                                <p class="font-bold text-xs text-slate-700">{{ uEmail }}</p>
+                                <span class="text-[9px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 uppercase">{{ uRole }}</span>
+                            </div>
+                            <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                                <button @click="deleteUser(uEmail)" class="text-rose-400 hover:text-rose-600"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <button @click="saveUsers" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs mt-6 shadow-lg hover:bg-black transition uppercase tracking-widest">Sincronizar Usuarios</button>
+                </div>
+            </div>
+        </div>
+        </transition>
+
+        <!-- PESTAÑA: IMPORTACIÓN MASIVA (DATA HUB) -->
+        <transition name="fade" mode="out-in">
+          <div v-if="adminTab === 'datahub'" class="max-w-6xl mx-auto space-y-8 animate-fade">
+            <div class="card p-0 bg-white shadow-sm overflow-hidden border border-slate-200">
+              <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-5 flex justify-between items-center text-white">
+                <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> Importación Masiva (CSV)</h3>
+              </div>
+              
+              <div class="p-8 bg-slate-50 min-h-[400px]">
+               <div v-if="bulkDataPreview.length === 0" class="space-y-6 animate-fade">
+                  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div class="flex-1 w-full">
+                      <label class="lbl text-[#005565]"><i class="fas fa-crosshairs mr-1"></i> 1. ¿Qué datos deseas importar?</label>
+                      <select v-model="importTarget" class="input-std font-bold text-slate-700 bg-slate-50 border-slate-300">
+                        <option value="ASSETS">📦 Inventario Principal (Equipos ESD)</option>
+                        <option value="USERS">👥 Usuarios y Accesos (Roles)</option>
+                        <option value="RULES">📏 Reglas y Tolerancias Matemáticas</option>
+                      </select>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                      <button @click="downloadTemplate" class="bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg hover:bg-black transition flex items-center justify-center gap-2 text-[10px]">
+                        <i class="fas fa-file-csv"></i> EXCEL (.CSV)
+                      </button>
+                      <button @click="createGoogleSheetTemplate" class="bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2 text-[10px]">
+                        <i class="fab fa-google-drive"></i> GOOGLE SHEETS
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <label class="lbl text-[#005565] mb-4"><i class="fas fa-cloud-upload-alt mr-1"></i> 3. Método de Carga de Datos</label>
+                    <div class="flex gap-3 mb-6 bg-slate-100 p-1.5 rounded-xl">
+                      <button @click="importMethod = 'CSV'" :class="importMethod === 'CSV' ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2.5 rounded-lg font-black text-[10px] sm:text-xs transition flex items-center justify-center gap-2 uppercase tracking-wide">
+                        <i class="fas fa-file-csv text-lg"></i> Archivo Excel (.CSV)
+                      </button>
+                      <button @click="importMethod = 'GOOGLE'" :class="importMethod === 'GOOGLE' ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2.5 rounded-lg font-black text-[10px] sm:text-xs transition flex items-center justify-center gap-2 uppercase tracking-wide">
+                        <i class="fab fa-google-drive text-lg"></i> Google Sheets (URL)
+                      </button>
+                    </div>
+
+                    <div v-if="importMethod === 'CSV'" class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition bg-white group animate-fade">
+                      <i class="fas fa-upload text-5xl text-slate-300 mb-4 group-hover:-translate-y-2 transition-transform duration-300"></i>
+                      <h3 class="text-base font-black text-slate-700">Sube tu archivo .CSV lleno</h3>
+                      <p class="text-xs text-slate-500 mb-6 font-medium">No modifiques la fila 1 (los nombres de las columnas) de tu plantilla.</p>
+                      <label class="cursor-pointer bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition inline-flex items-center gap-2">
+                        <i class="fas fa-folder-open"></i> Explorar Archivos
+                        <input type="file" accept=".csv" class="hidden" @change="handleCSVUpload">
+                      </label>
+                    </div>
+
+                    <div v-if="importMethod === 'GOOGLE'" class="border border-emerald-200 rounded-xl p-8 bg-gradient-to-br from-emerald-50 to-white shadow-inner animate-fade">
+                      <h3 class="text-base font-black text-emerald-800 mb-2 flex items-center gap-2"><i class="fas fa-link"></i> Importar desde la Nube</h3>
+                      <p class="text-xs text-emerald-600 mb-5 font-medium">Pega el enlace de tu Google Sheet. El archivo debe tener permisos de <b>"Cualquier persona con el enlace"</b>.</p>
+                      <div class="flex flex-col sm:flex-row gap-3">
+                        <input v-model="googleSheetUrl" type="text" class="input-std flex-1 !border-emerald-200 focus:!border-emerald-500 focus:!ring-emerald-100" placeholder="https://docs.google.com/spreadsheets/d/1abc123...">
+                        <button @click="loadFromGoogleSheets" class="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-emerald-700 transition text-xs whitespace-nowrap">
+                           <i class="fas fa-sync-alt mr-1"></i> LEER DATOS
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="animate-fade space-y-6">
+                  <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex space-x-8 px-4">
+                      <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Leídos</p><p class="text-3xl font-black text-slate-800">{{ bulkStats.total }}</p></div>
+                      <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Nuevos</p><p class="text-3xl font-black text-emerald-500">{{ bulkStats.nuevos }}</p></div>
+                      <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Duplicados</p><p class="text-3xl font-black text-amber-500">{{ bulkStats.duplicados }}</p></div>
+                    </div>
+                    <button @click="clearDataHub" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                      <i class="fas fa-trash"></i> Descartar
+                    </button>
+                  </div>
+
+                  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                    <div class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
+                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><i class="fas fa-eye text-[#005565] mr-1"></i> Vista Previa de Datos</span>
+                      <span v-if="bulkDataPreview.length > 50" class="text-[10px] font-bold text-slate-400">Mostrando los primeros 50 registros...</span>
+                    </div>
+                    <div class="overflow-x-auto overflow-y-auto max-h-64">
+                      <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead class="bg-slate-100 text-slate-500 uppercase font-black sticky top-0 shadow-sm">
+                          <tr>
+                            <th class="p-3">Estado</th>
+                            <th v-for="col in Object.keys(bulkDataPreview[0] || {}).filter(k => k !== '_isDuplicate')" :key="col" class="p-3">{{ col }}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, idx) in bulkDataPreview.slice(0, 50)" :key="idx" class="border-b border-slate-100 last:border-0 transition-colors" :class="row._isDuplicate ? 'bg-amber-50/30 hover:bg-amber-50' : 'bg-emerald-50/30 hover:bg-emerald-50'">
+                            <td class="p-3 font-bold">
+                              <span v-if="row._isDuplicate" class="text-amber-600 bg-amber-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-bolt mr-1"></i> EXISTENTE</span>
+                              <span v-else class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-star mr-1"></i> NUEVO</span>
+                            </td>
+                            <td v-for="col in Object.keys(row).filter(k => k !== '_isDuplicate')" :key="col" class="p-3 text-slate-600 font-medium truncate max-w-[150px]" :title="row[col]">
+                              {{ row[col] || '---' }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  <div class="flex gap-4">
+                    <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2">
+                      <i class="fas fa-plus-circle"></i> Inyectar {{ bulkStats.nuevos }} Nuevos
+                    </button>
+                    <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2">
+                      <i class="fas fa-bolt"></i> Actualizar {{ bulkStats.duplicados }} Existentes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+    </div>
+  </div>
+</main>

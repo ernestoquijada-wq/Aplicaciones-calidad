@@ -1,0 +1,16 @@
+<script>
+/**
+ * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO
+ * Maneja el cambio de idiomas y configuraciones globales de la barra superior.
+ */
+function useHeader() {
+    // Usamos el hook de i18n global que definimos antes del app
+    const { locale } = VueI18n.useI18n({ useScope: 'global' });
+    
+    const toggleLanguage = () => { 
+        locale.value = locale.value === 'ES' ? 'EN' : 'ES'; 
+    };
+
+    return { toggleLanguage };
+}
+</script>

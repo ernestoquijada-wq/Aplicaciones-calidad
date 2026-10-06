@@ -1,0 +1,377 @@
+<script>
+/**
+ * 🟢 COMPOSABLE: LÓGICA DE ADMINISTRACIÓN
+ * Maneja Catálogos, Reglas, Estados, DataHub, Seguridad y Ajustes.
+ */
+function useAdmin(globalConfig) {
+    const { ref, computed, nextTick } = Vue;
+    
+    // Extraemos las dependencias y variables maestras del Main
+    const { 
+        runGAS, loadData, Swal, Toast, submitting, assets,
+        catalogs, dbRules, statusDB, rolesDB, usersDB, 
+        aiSettings, emailConfig, generalSettings, FIELD_MAP, ICONS 
+    } = globalConfig;
+
+    // ==========================================
+    // 1. ESTADO DE NAVEGACIÓN Y UI
+    // ==========================================
+    const adminTab = ref('catalogs');
+    const activeCatalogCategory = ref('SECTOR');
+    const editingCatalog = ref(false);
+    const editingCatalogOriginalId = ref('');
+    const newCatalog = ref({ category:'SECTOR', id:'', label:'', color:'#000000', config: { startRow: 8, columns: [], required: true, showOnOpen: true, showOnClose: false } });
+    
+    const newStatus = ref({ name:'', showCard: false, color: '#64748b', isAdmin: false });
+    const ruleModal = ref({ open:false, isEdit:false, data:{}, tempActive:{} });
+    const editModal = ref({ open:false, oldValue:'', newValue:{ name:'', showCard: false, color: '#64748b', isAdmin: false } });
+    const iconSelectorOpen = ref(false);
+
+    // ==========================================
+    // 2. LÓGICA DE CATÁLOGOS (CRUD UNIVERSAL)
+    // ==========================================
+    const activeCatalogLabel = computed(() => {
+        const map = { 
+            'SECTOR': 'CUADRANTES', 'FACTORY': 'FÁBRICAS', 'PROJECT': 'PROYECTOS', 
+            'AUDITOR': 'RESPONSABLES', 'TEMPLATE': 'PLANTILLAS DE REPORTE', 
+            'TICKET_FIELD': 'CAMPOS DE SEGUIMIENTO', 'EMAIL_GROUP': 'GRUPOS DE CORREO',
+            'AI_PROMPT': 'PERSONALIDADES IA' 
+        };
+        return map[activeCatalogCategory.value] || 'ELEMENTOS';
+    });
+
+    const activeList = computed(() => {
+        if(activeCatalogCategory.value === 'SECTOR') return catalogs.value.sectors;
+        if(activeCatalogCategory.value === 'FACTORY') return catalogs.value.factories;
+        if(activeCatalogCategory.value === 'PROJECT') return catalogs.value.projects;
+        if(activeCatalogCategory.value === 'AUDITOR') return catalogs.value.auditors;
+        if(activeCatalogCategory.value === 'TEMPLATE') return catalogs.value.templates || [];
+        if(activeCatalogCategory.value === 'TICKET_FIELD') return catalogs.value.ticketFields || [];
+        if(activeCatalogCategory.value === 'EMAIL_GROUP') return catalogs.value.emailGroups || [];
+        if(activeCatalogCategory.value === 'AI_PROMPT') return catalogs.value.aiPrompts || []; 
+        return [];
+    });
+
+    const saveCatalogItem = async () => { 
+        if(!newCatalog.value.id) return;
+        if (activeCatalogCategory.value === 'EMAIL_GROUP') {
+            const validEmails = adminEmailGroupList.value.filter(e => e.trim() !== '');
+            if (validEmails.length === 0) return Swal.fire("Error", "Debes ingresar al menos un correo para el grupo.", "warning");
+            newCatalog.value.label = validEmails.map(e => e.trim().toLowerCase().replace('@plexus.com', '') + '@plexus.com').join(', ');
+        }
+
+        submitting.value = true;
+        try { 
+            if(editingCatalog.value) {
+                await runGAS('adminUpdateCatalogItem', activeCatalogCategory.value, editingCatalogOriginalId.value, JSON.parse(JSON.stringify(newCatalog.value)));
+                Toast.fire({ icon: 'success', title: 'Elemento Actualizado' });
+            } else {
+                await runGAS('adminSaveConfigItem', JSON.parse(JSON.stringify(newCatalog.value)));
+                Toast.fire({ icon: 'success', title: 'Elemento Guardado' });
+            }
+            cancelCatalogEdit();
+            await loadData(); 
+        } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value = false; } 
+    };
+
+    const editCatalog = (item) => {
+        editingCatalog.value = true;
+        editingCatalogOriginalId.value = item.id;
+        const cfg = item.config || {};
+        let c = item.hex || item.color || '';
+        
+        if ((activeCatalogCategory.value === 'TEMPLATE' || activeCatalogCategory.value === 'TICKET_FIELD') && c.startsWith('#')) {
+            c = c.substring(1);
+        } else if (!c) {
+            c = '#000000';
+        }
+
+        if (activeCatalogCategory.value === 'EMAIL_GROUP') {
+            if (item.label) adminEmailGroupList.value = item.label.split(',').map(e => e.trim().replace('@plexus.com', ''));
+            else adminEmailGroupList.value = [''];
+        }
+
+        newCatalog.value = { 
+            category: activeCatalogCategory.value, id: item.id, label: item.label, color: c, 
+            config: { 
+                startRow: cfg.startRow || 8, columns: cfg.columns || [], 
+                required: cfg.required !== false, showOnOpen: cfg.showOnOpen !== false, showOnClose: cfg.showOnClose === true,
+                modules: cfg.modules || [], allowedRoles: cfg.allowedRoles || []
+            } 
+        };
+    };
+
+    const cancelCatalogEdit = () => {
+        editingCatalog.value = false;
+        adminEmailGroupList.value = ['']; 
+        newCatalog.value={category:activeCatalogCategory.value, id:'', label:'', color:'#000000', config: { startRow: 8, columns: [], required: true, showOnOpen: true, showOnClose: false }};
+    };
+
+    const deleteCatalogItem = (cat, id) => { 
+        Swal.fire({
+            title: '¿Estás seguro?', text: "No podrás revertir esto", icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                submitting.value=true; 
+                try { await runGAS('adminDeleteConfigItem', cat, id); await loadData(); Toast.fire({ icon: 'success', title: 'Elemento Eliminado' }); } 
+                catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; }
+            }
+        });
+    };
+
+    // ==========================================
+    // 3. LÓGICA DE ESTADOS Y MATRIZ
+    // ==========================================
+    const addStatus = async () => { 
+        if(!newStatus.value.name) return; submitting.value=true; 
+        try { await runGAS('adminAddMatrixOption', JSON.parse(JSON.stringify(newStatus.value))); newStatus.value={name:'', showCard:false, color:'#64748b', isAdmin: false}; await loadData(); Toast.fire({ icon: 'success', title: 'Estado Agregado' }); } 
+        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } 
+    };
+
+    const deleteStatus = (idx) => { 
+        Swal.fire({ title: '¿Eliminar estado?', text: "Esta acción es irreversible", icon: 'warning', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, eliminar' }).then(async (result) => {
+            if(result.isConfirmed) { submitting.value=true; try { await runGAS('adminDeleteMatrixOption', statusDB.value[idx].name); await loadData(); Toast.fire({ icon: 'success', title: 'Estado Eliminado' }); } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } }
+        });
+    };
+
+    const openEditStateModal = (sObj) => { editModal.value = { open: true, oldValue: sObj.name, newValue: JSON.parse(JSON.stringify(sObj)) }; };
+
+    const confirmStateUpdate = async () => { 
+        if(!editModal.value.newValue.name) return; submitting.value=true; 
+        try { await runGAS('adminUpdateMatrixOption', editModal.value.oldValue, JSON.parse(JSON.stringify(editModal.value.newValue))); editModal.value.open=false; await loadData(); Toast.fire({ icon: 'success', title: 'Estado Actualizado' }); } 
+        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } 
+    };
+
+    // ==========================================
+    // 4. LÓGICA DE REGLAS (ESD TOLERANCES)
+    // ==========================================
+    const openRuleModal = (key, rule) => { 
+        ruleModal.value.open=true;
+        ruleModal.value.tempActive={}; 
+        if(key) { 
+            ruleModal.value.isEdit=true;
+            ruleModal.value.data = JSON.parse(JSON.stringify(rule));
+            if(!ruleModal.value.data.recs) ruleModal.value.data.recs = {};
+            ruleModal.value.data.description = key;
+            for(const k in FIELD_MAP) { 
+                if(rule[k]) { 
+                    ruleModal.value.tempActive[k] = true;
+                    if(FIELD_MAP[k].type === 'scientific') { try { const parts = String(rule[k]).toUpperCase().replace('<','').trim().split('E'); ruleModal.value.data[k + '_m'] = parts[0]; ruleModal.value.data[k + '_e'] = parts[1].replace('+',''); } catch(e) {} } 
+                } 
+            } 
+        } else { 
+            ruleModal.value.isEdit=false;
+            const cleanData = { defaultIcon:'fa-box', recommendation:'', tolerance:0.8, recs:{} };
+            for(const k in FIELD_MAP) { cleanData[k] = ''; cleanData[k+'_m'] = ''; cleanData[k+'_e'] = ''; cleanData.recs[k] = ''; }
+            ruleModal.value.data = cleanData;
+        } 
+    };
+
+    const deleteRule = (ruleId) => {
+         Swal.fire({ title: '¿Eliminar Regla?', text: "Esto afectará la creación de nuevos activos de este tipo.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'Sí, eliminar permanentemente' })
+         .then(async (result) => {
+            if (result.isConfirmed) { submitting.value=true; try { await runGAS('adminDeleteRule', ruleId); await loadData(); Toast.fire({ icon: 'success', title: 'Regla Eliminada' }); } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } }
+        });
+    };
+
+    const saveRule = async () => { 
+        submitting.value=true; 
+        const p = { description: ruleModal.value.data.description, defaultIcon: ruleModal.value.data.defaultIcon, recommendation: ruleModal.value.data.recommendation, tolerance:ruleModal.value.data.tolerance, recs: ruleModal.value.data.recs || {} }; 
+        for(const k in FIELD_MAP) { 
+            if(ruleModal.value.tempActive[k]) { 
+                if(FIELD_MAP[k].type === 'scientific') { const m = ruleModal.value.data[k + '_m'] || '1.0'; const e = ruleModal.value.data[k + '_e'] || '9'; p[k] = `< ${m}E${e}`; } 
+                else { p[k] = ruleModal.value.data[k]; } 
+            } else { p[k] = ""; } 
+        } 
+        try { await runGAS('adminSaveRule', p); ruleModal.value.open=false; await loadData(); Toast.fire({ icon: 'success', title: 'Regla Guardada' }); } 
+        catch(e) { Swal.fire('Error', e.message, 'error'); } submitting.value=false; 
+    };
+
+    // ==========================================
+    // 5. DATA HUB (IMPORTACIÓN MASIVA)
+    // ==========================================
+    const showDataHubModal = ref(false);
+    const bulkDataPreview = ref([]);
+    const bulkStats = ref({ total: 0, nuevos: 0, duplicados: 0 });
+    const isProcessingBulk = ref(false);
+    const importTarget = ref('ASSETS');
+    const importMethod = ref('CSV');
+    const googleSheetUrl = ref('');
+
+    const downloadTemplate = () => {
+       let csvContent = "";
+       if (importTarget.value === 'ASSETS') {
+           csvContent = "CONTROL_NO,CUADRANTE,COLOR_CODE,DESCRIPCION,PROYECTO,FABRICA,ESTADO_ACTUAL,RESPONSABLE,COMENTARIOS\n";
+           csvContent += "EJ-0001,A1,#005565,MESA ESD,PROYECTO X,PLANTA 1,ACTIVO,JUAN PEREZ,Borra este ejemplo antes de subir.\n";
+       } else if (importTarget.value === 'USERS') {
+           csvContent = "CORREO_ELECTRONICO,ROL_ASIGNADO\n";
+           csvContent += "nuevo.auditor@plexus.com,AUDITOR\n";
+       } else if (importTarget.value === 'RULES') {
+           csvContent = "TIPO_ACTIVO_ID,TOLERANCIA,REC_GENERAL,SURFACE_MANTISSA,SURFACE_EXPONENTE,FLOORMAT_MANTISSA,FLOORMAT_EXPONENTE,ELEC_RES,IMPEDANCE,VOLTAGE,JACK\n";
+           csvContent += "MESA_NUEVA,0.8,Limpiar superficie,1.0,9,1.0,9,N/A,N/A,N/A,N/A\n";
+       }
+       const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+       const link = document.createElement("a");
+       link.setAttribute("href", URL.createObjectURL(blob));
+       link.setAttribute("download", `Plantilla_Plexus_${importTarget.value}.csv`);
+       document.body.appendChild(link); link.click(); document.body.removeChild(link);
+       Toast.fire({ icon: 'success', title: 'Plantilla descargada' });
+    };
+
+    const createGoogleSheetTemplate = async () => {
+      submitting.value = true;
+      try {
+        const templateLists = {
+          roles: Object.keys(rolesDB.value), sectors: catalogs.value.sectors.map(s => s.id),
+          factories: catalogs.value.factories.map(f => f.id), projects: catalogs.value.projects.map(p => p.id),
+          auditors: catalogs.value.auditors.map(a => a.id), statuses: statusDB.value.map(s => s.name),
+          types: Object.keys(dbRules.value)
+        };
+        const r = await runGAS('adminCreateSheetTemplate', importTarget.value, templateLists);
+        if (r.success) { window.open(r.url, '_blank'); Toast.fire({ icon: 'success', title: 'Plantilla Inteligente Abierta' }); } 
+        else throw new Error(r.error);
+      } catch (e) { Swal.fire("Error al crear hoja", e.message, "error"); } finally { submitting.value = false; }
+    };
+
+    const processRawBulkData = (dataRows) => {
+      let parsed = [], n = 0, d = 0;
+      dataRows.forEach(row => {
+        let id = '';
+        if (importTarget.value === 'ASSETS') id = row['CONTROL_NO'] || row['ID'] || '';
+        else if (importTarget.value === 'USERS') id = row['CORREO_ELECTRONICO'] || row['EMAIL'] || '';
+        else if (importTarget.value === 'RULES') id = row['TIPO_ACTIVO_ID'] || '';
+
+        if (!id) return;
+
+        let existe = false;
+        if (importTarget.value === 'ASSETS') existe = assets.value.some(a => String(a.controlNo).trim().toUpperCase() === String(id).trim().toUpperCase());
+        else if (importTarget.value === 'USERS') existe = !!usersDB.value[String(id).toLowerCase().trim()];
+        else if (importTarget.value === 'RULES') existe = !!dbRules.value[String(id).toUpperCase().trim()];
+
+        if (existe) d++; else n++;
+        parsed.push({ ...row, _isDuplicate: existe });
+      });
+      
+      if (parsed.length === 0 && dataRows.length > 0) return Swal.fire("Encabezados Incorrectos", "El archivo no coincide con el módulo seleccionado.", "error");
+
+      bulkDataPreview.value = parsed;
+      bulkStats.value = { total: parsed.length, nuevos: n, duplicados: d };
+    };
+
+    const loadFromGoogleSheets = async () => {
+      if(!googleSheetUrl.value.includes('docs.google.com/spreadsheets')) return Swal.fire('Error', 'URL de Google Sheets no válida.', 'warning');
+      isProcessingBulk.value = true;
+      try {
+        const r = await runGAS('adminFetchExternalData', googleSheetUrl.value);
+        if (r.success) { processRawBulkData(r.data); Toast.fire({ icon: 'success', title: 'Datos sincronizados de la nube' }); } 
+        else throw new Error(r.error);
+      } catch (e) { Swal.fire("Error", e.message, "error"); } finally { isProcessingBulk.value = false; }
+    };
+
+    const handleCSVUpload = (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      isProcessingBulk.value = true;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const lines = e.target.result.split('\n').filter(l => l.trim() !== '');
+        if (lines.length < 2) { Swal.fire('Error', 'Archivo inválido', 'error'); isProcessingBulk.value = false; return; }
+        const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+        let parsed = [], n = 0, d = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(',').map(c => c.trim());
+          let obj = {};
+          headers.forEach((h, idx) => { obj[h] = row[idx] || ''; });
+          const id = obj['ID'] || obj['CONTROL NO'] || '';
+          const existe = assets.value.some(a => String(a.controlNo) === String(id));
+          if (existe) d++; else n++;
+          parsed.push({ ...obj, _isDuplicate: existe });
+        }
+        bulkDataPreview.value = parsed;
+        bulkStats.value = { total: parsed.length, nuevos: n, duplicados: d };
+        isProcessingBulk.value = false; event.target.value = null;
+      };
+      reader.readAsText(file);
+    };
+
+    const executeBulkAction = async (onlyNew) => {
+      const dataToShip = bulkDataPreview.value.filter(r => onlyNew ? !r._isDuplicate : r._isDuplicate);
+      if (dataToShip.length === 0) return;
+
+      const confirm = await Swal.fire({ title: 'Confirmar Acción Masiva', text: onlyNew ? `¿Inyectar ${dataToShip.length} registros nuevos?` : `¿Actualizar ${dataToShip.length} registros existentes?`, icon: 'question', showCancelButton: true, confirmButtonColor: '#005565' });
+      if (!confirm.isConfirmed) return;
+
+      submitting.value = true;
+      try {
+        const r = await runGAS('adminBulkProcess', importTarget.value, dataToShip, !onlyNew);
+        if (r.success) { Swal.fire("Éxito", "Operación masiva completada correctamente.", "success"); clearDataHub(); await loadData(); } 
+        else throw new Error(r.error);
+      } catch (e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value = false; }
+    };
+
+    const clearDataHub = () => { bulkDataPreview.value = []; bulkStats.value = { total: 0, nuevos: 0, duplicados: 0 }; };
+
+    // ==========================================
+    // 6. AJUSTES VARIOS (CONFIGURACIÓN, SEGURIDAD, EMAIL, IA)
+    // ==========================================
+    const activeEmailType = ref('OPEN');
+    const adminEmailGroupList = ref(['']);
+    
+    const addAdminEmailField = async () => { 
+        if (adminEmailGroupList.value[adminEmailGroupList.value.length - 1] !== '') {
+            adminEmailGroupList.value.push('');
+            await nextTick(); 
+            const inputs = document.querySelectorAll('.admin-email-input');
+            if (inputs.length > 0) inputs[inputs.length - 1].focus();
+        } 
+    };
+    const removeAdminEmailField = (idx) => adminEmailGroupList.value.splice(idx, 1);
+
+    const saveGeneralSettings = () => {
+        submitting.value = true;
+        runGAS('adminSaveGeneralSettings', JSON.parse(JSON.stringify(generalSettings.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Preferencia actualizada' }); });
+    };
+
+    const saveEmailConfig = () => {
+        submitting.value = true;
+        runGAS('adminSaveEmailConfig', JSON.parse(JSON.stringify(emailConfig.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Configuración guardada' }); else Swal.fire("Error", r.error, "error"); });
+    };
+
+    const saveAiConfig = async () => {
+        submitting.value = true;
+        try { const r = await runGAS('adminSaveAiConfig', JSON.parse(JSON.stringify(aiSettings.value))); if(r.success) Toast.fire({ icon: 'success', title: 'Cerebro IA Actualizado' }); else throw new Error(r.error); } 
+        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value = false; }
+    };
+
+    const newUserEmail = ref('');
+    const newUserRole = ref('INVITADO');
+
+    const addNewRole = async () => {
+        const { value: name } = await Swal.fire({ title: 'Nuevo Rol', input: 'text', inputPlaceholder: 'Ej: GERENCIA' });
+        if (name) rolesDB.value[name.toUpperCase().replace(/\s/g, '_')] = { canView: true, canAudit: false, canConfig: false, canUsers: false, canUseCopilot: false };
+    };
+    const deleteRole = (role) => { delete rolesDB.value[role]; };
+    const saveRoles = () => { submitting.value = true; runGAS('adminSaveRoles', JSON.parse(JSON.stringify(rolesDB.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Roles guardados' }); }); };
+        
+    const addUser = () => { if(!newUserEmail.value || !newUserEmail.value.includes('@')) return; usersDB.value[newUserEmail.value.toLowerCase().trim()] = newUserRole.value; newUserEmail.value = ''; };
+    const deleteUser = (email) => { delete usersDB.value[email]; };
+    const saveUsers = () => { submitting.value = true; runGAS('adminSaveUsers', JSON.parse(JSON.stringify(usersDB.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Usuarios guardados' }); }); };
+
+    // EXPORTAMOS TODO AL MAIN
+    return {
+        adminTab, activeCatalogCategory, activeCatalogLabel, activeList, editingCatalog, newCatalog, adminEmailGroupList, newStatus,
+        ruleModal, editModal, iconSelectorOpen, iconsList: ICONS, fieldsConfig: FIELD_MAP,
+        showDataHubModal, bulkDataPreview, bulkStats, isProcessingBulk, importTarget, importMethod, googleSheetUrl,
+        activeEmailType, newUserEmail, newUserRole,
+        
+        saveCatalogItem, editCatalog, cancelCatalogEdit, deleteCatalogItem,
+        addStatus, deleteStatus, openEditStateModal, confirmStateUpdate,
+        openRuleModal, deleteRule, saveRule,
+        
+        downloadTemplate, createGoogleSheetTemplate, loadFromGoogleSheets, handleCSVUpload, executeBulkAction, clearDataHub,
+        addAdminEmailField, removeAdminEmailField, saveGeneralSettings, saveEmailConfig, saveAiConfig,
+        addNewRole, deleteRole, saveRoles, addUser, deleteUser, saveUsers
+    };
+}
+</script>

@@ -1,0 +1,21 @@
+<!-- ========================================== -->
+<!-- 🟢 VISTA: HEADER / BARRA SUPERIOR          -->
+<!-- ========================================== -->
+<header class="bg-slate-900 text-white px-6 py-3 shadow-xl z-20 flex justify-between items-center bg-gradient-to-r from-[#005565] to-[#003d4d]">
+  <div class="flex items-center gap-3">
+    <div class="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/10 shadow-inner">
+        <i class="fas fa-bolt text-yellow-300 text-lg"></i>
+    </div>
+    <div>
+      <h1 class="font-black text-lg tracking-tight leading-none text-white">ESD Control <span class="text-[9px] bg-white/20 px-2 py-0.5 rounded-full ml-1 align-middle font-bold text-white/90 border border-white/10">V1.0</span></h1>
+      <p class="text-[8px] text-emerald-200 font-bold uppercase tracking-widest mt-0.5 pl-0.5">{{ $t('header.developedBy') }}</p>
+    </div>
+  </div>
+  <div class="flex gap-2">
+    <button @click="toggleLanguage" class="text-white/70 hover:bg-white/20 hover:text-white px-3 py-2 rounded-lg text-[10px] font-black transition-all duration-300 border border-white/10 mr-2 uppercase">
+      {{ $t('header.btn_lang') }}
+    </button>
+    <button @click="view='dashboard'" :class="view==='dashboard'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2"><i class="fas fa-chart-pie"></i> {{ $t('header.btn_dashboard') }}</button>
+    <button v-if="userPermissions.canConfig || userPermissions.canUsers" @click="view='admin'" :class="view==='admin'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2"><i class="fas fa-cogs"></i> {{ $t('header.btn_config') }}</button>
+  </div>
+</header>

@@ -1,0 +1,362 @@
+<!-- ========================================== -->
+<!-- 🟢 VISTA: MODALES FLOTANTES GLOBALES       -->
+<!-- ========================================== -->
+
+<!-- MODAL: HISTORIAL -->
+<div v-if="historyModal.open" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
+      <div class="bg-[#005565] p-6 text-white text-center relative overflow-hidden">
+          <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+          <h3 class="font-black text-xs uppercase tracking-widest text-emerald-300 relative z-10 mb-2">Historial de Verificación</h3>
+          <div class="relative z-10 mb-1">
+              <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider block">ID ACTIVO</span>
+              <p class="text-4xl font-black text-white leading-none tracking-tighter">{{ editAsset.controlNo }}</p>
+          </div>
+          <div class="inline-block mt-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/10 relative z-10">
+              <p class="text-[10px] font-bold text-white uppercase tracking-wide">
+                  <span class="text-emerald-200 mr-1 opacity-80">TIPO:</span>{{ editAsset.description }}
+              </p>
+          </div>
+          <button @click="historyModal.open=false" class="absolute top-4 right-4 text-white/50 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      
+      <div class="p-0 max-h-[400px] overflow-y-auto bg-slate-50">
+          <div v-for="(h, i) in auditHistory" :key="i" class="p-5 border-b border-slate-200 bg-white hover:bg-slate-50 transition relative group">
+              <div class="flex justify-between items-start mb-3">
+                  <div class="flex flex-col gap-1.5">
+                       <div class="flex items-center gap-2">
+                          <span class="text-[9px] font-black text-[#005565] bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 uppercase tracking-wide w-14 text-center">Verif</span>
+                          <span class="font-mono text-xs font-bold text-slate-700">{{ h.date.split(' ')[0] }}</span>
+                       </div>
+                       <div class="flex items-center gap-2">
+                          <span class="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-wide w-14 text-center">Vence</span>
+                          <span class="font-mono text-xs font-bold text-slate-500">{{ getHistoryExpiration(h.technicalData, h.date) }}</span>
+                       </div>
+                  </div>
+                  <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm" :class="h.result==='CUMPLE'?'bg-emerald-100 text-emerald-600 border border-emerald-200':'bg-rose-100 text-rose-600 border border-rose-200'">{{ h.result }}</span>
+              </div>
+              <div class="text-[10px] text-slate-500 mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono overflow-x-auto whitespace-pre-wrap">
+                  <div v-for="(val, k) in parseHistoryData(h.technicalData)" :key="k" class="flex justify-between items-center text-[10px] border-b border-dashed border-slate-200 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
+                      <span class="font-bold text-slate-400 uppercase tracking-wide">{{ formatKey(k) }}</span>
+                      <span class="font-mono text-slate-700 font-bold bg-white px-1.5 rounded shadow-sm">{{ formatValue(val) }}</span>
+                  </div>
+              </div>
+              <div v-if="getHistoryComments(h.technicalData)" class="mt-3 text-[10px] text-slate-600 bg-amber-50/50 p-3 rounded-xl border border-amber-100/50 flex flex-col gap-1">
+                  <div class="flex items-center gap-1.5 mb-1">
+                      <i class="fas fa-comment-alt text-amber-400 text-xs"></i>
+                      <span class="font-black text-[9px] text-amber-600/70 uppercase tracking-widest">OBSERVACIONES:</span>
+                  </div>
+                  <p class="italic pl-1">"{{ getHistoryComments(h.technicalData) }}"</p>
+              </div>
+          </div>
+      </div>
+      <div class="p-4 bg-slate-100 text-center border-t border-slate-200">
+          <button @click="historyModal.open=false" class="text-xs font-bold text-slate-500 hover:text-slate-800 uppercase tracking-widest">Cerrar Ventana</button>
+      </div>
+  </div>
+</div>
+
+<!-- MODAL: AYUDA -->
+<div v-if="helpModal" class="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+        <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+            <h3 class="font-black text-slate-700 flex items-center gap-2"><i class="fas fa-question-circle text-[#005565]"></i> Centro de Ayuda</h3>
+            <button @click="helpModal=false" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="overflow-y-auto flex-1 p-0">
+            <div class="help-section">
+                <h4 class="help-title"><i class="fas fa-play-circle"></i> Flujo de Trabajo</h4>
+                <p class="help-text mb-2">1. <b>Registrar Activo:</b> Use el botón flotante (+) para dar de alta equipos nuevos. Es obligatorio llenar todos los datos.</p>
+                <p class="help-text">2. <b>Verificación:</b> Seleccione una tarjeta del Dashboard para auditar. Puede APROBAR (PASS) o RECHAZAR (FAIL).</p>
+            </div>
+            <div class="help-section bg-slate-50">
+                <h4 class="help-title"><i class="fas fa-traffic-light"></i> Interpretación de Colores</h4>
+                <ul class="help-text space-y-1">
+                    <li><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1"></span><b>Verde (OK):</b> Medición dentro del estándar.</li>
+                    <li><span class="w-2 h-2 rounded-full bg-amber-500 inline-block mr-1"></span><b>Ámbar (Riesgo):</b> Dentro del límite pero cercano a fallar (Tolerancia).</li>
+                    <li><span class="w-2 h-2 rounded-full bg-rose-500 inline-block mr-1"></span><b>Rojo (Falla):</b> Fuera del límite permitido. Requiere acción.</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4 class="help-title"><i class="fas fa-ban"></i> Botón N/A</h4>
+                <p class="help-text">Si una medición no aplica para el equipo actual, presione el botón <b>[N/A]</b> junto al campo numérico. Esto evita guardar ceros o espacios vacíos.</p>
+            </div>
+            <div class="help-section bg-[#005565] text-white">
+                <h4 class="help-title text-white"><i class="fas fa-headset"></i> Soporte Técnico</h4>
+                <p class="text-xs opacity-80">Si encuentra un error o necesita un nuevo tipo de activo, contacte a Ingeniería de Calidad.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: REGLAS -->
+<div v-if="ruleModal.open" class="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="px-8 py-5 bg-slate-50 border-b flex justify-between items-center"><h3 class="font-black text-slate-700">Configuración Regla</h3><button @click="ruleModal.open=false"><i class="fas fa-times text-slate-400 hover:text-red-500"></i></button></div>
+        <div class="p-8 overflow-y-auto flex-1 space-y-6">
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="lbl">Tipo</label><input v-model="ruleModal.data.description" class="input-std uppercase font-bold" :disabled="ruleModal.isEdit"></div>
+                <div>
+                    <label class="lbl">Icono</label>
+                    <button @click="iconSelectorOpen=!iconSelectorOpen" class="w-full input-std text-left flex justify-between"><i class="fas" :class="ruleModal.data.defaultIcon"></i><i class="fas fa-chevron-down"></i></button>
+                    <div v-if="iconSelectorOpen" class="absolute z-10 bg-white border p-2 grid grid-cols-6 gap-2 shadow-xl rounded-xl mt-1">
+                        <button v-for="icon in iconsList" :key="icon" @click="ruleModal.data.defaultIcon=icon;iconSelectorOpen=false" class="w-8 h-8 hover:bg-slate-100 rounded"><i class="fas" :class="icon"></i></button>
+                    </div>
+                </div>
+                <div class="col-span-1"><label class="lbl">Recomendación General</label><input v-model="ruleModal.data.recommendation" class="input-std"></div>
+                <div class="col-span-1"><label class="lbl">Tolerancia Riesgo (0.1 - 1.0)</label><input type="number" step="0.1" v-model="ruleModal.data.tolerance" class="input-std" placeholder="0.8"></div>
+            </div>
+            <div class="border-t pt-4">
+                <h4 class="lbl mb-3">Límites y Recomendaciones Específicas</h4>
+                <div class="grid grid-cols-2 gap-4">
+                    <div v-for="(conf, key) in fieldsConfig" :key="key" class="bg-slate-50 p-3 rounded border" :class="ruleModal.tempActive[key]?'border-[#005565]':'opacity-60'">
+                        <div class="flex items-center gap-2 mb-2 cursor-pointer" @click="ruleModal.tempActive[key]=!ruleModal.tempActive[key]">
+                            <div class="w-4 h-4 border rounded flex items-center justify-center" :class="ruleModal.tempActive[key]?'bg-[#005565] border-[#005565]':'bg-white'"><i v-if="ruleModal.tempActive[key]" class="fas fa-check text-white text-[8px]"></i></div>
+                            <span class="text-xs font-bold">{{conf.label}}</span>
+                        </div>
+                        <div v-if="ruleModal.tempActive[key]" class="pl-6 space-y-2">
+                            <div v-if="conf.type==='scientific'" class="flex gap-2">
+                                <input v-model="ruleModal.data[key+'_m']" type="number" class="input-std h-8 text-xs text-center" placeholder="1.0">
+                                <input v-model="ruleModal.data[key+'_e']" type="number" class="input-std h-8 text-xs text-center" placeholder="9">
+                            </div>
+                            <div v-else>
+                                <input v-model="ruleModal.data[key]" type="number" class="input-std h-8 text-xs" placeholder="Valor">
+                            </div>
+                            <input v-model="ruleModal.data.recs[key]" class="input-std h-8 text-xs text-amber-700 bg-amber-50 border-amber-100 placeholder-amber-400" placeholder="Rec. Específica...">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="p-5 bg-slate-50 border-t flex justify-end gap-3"><button @click="ruleModal.open=false" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded">Cancelar</button><button @click="saveRule" class="px-6 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-lg">Guardar</button></div>
+    </div>
+</div>
+
+<!-- MODAL: EDITAR ESTADO -->
+<div v-if="editModal.open" class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 class="font-black text-slate-700 mb-4">Editar Estado</h3>
+        <label class="lbl">Nombre</label><input v-model="editModal.newValue.name" class="input-std uppercase mb-4">
+        <div class="flex flex-col gap-2 mb-4">
+            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.showCard" id="chkEditCard" class="w-4 h-4 accent-[#005565] cursor-pointer"><label for="chkEditCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">¿Crear Tarjeta en Dashboard?</label></div>
+            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.isAdmin" id="chkEditAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer"><label for="chkEditAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">Movimiento Administrativo</label></div>
+        </div>
+        <div v-if="editModal.newValue.showCard" class="mb-6"><label class="lbl">Color de Tarjeta</label><div class="h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="editModal.newValue.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
+        <div class="flex justify-end gap-2"><button @click="editModal.open=false" class="px-4 py-2 text-xs font-bold text-slate-400">Cancelar</button><button @click="confirmStateUpdate" class="px-4 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-md">Actualizar</button></div>
+    </div>
+</div>
+
+<!-- COPILOTO IA CHAT -->
+<transition name="fade">
+    <div v-if="showChat" class="fixed bottom-24 right-8 w-[90%] md:w-96 h-[70vh] bg-white rounded-3xl shadow-2xl z-40 border border-slate-200 flex flex-col overflow-hidden animate-fade">
+        <div class="bg-slate-900 p-5 text-white flex justify-between items-center relative">
+            <div class="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+            <div class="flex items-center gap-3 relative z-10">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/50 animate-bounce"><i class="fas fa-bolt text-white text-xs"></i></div>
+                <div class="flex-1 mr-4">
+                    <select v-model="selectedAiPersonality" class="bg-slate-800 text-white text-[10px] font-black border-none rounded-lg p-1.5 focus:ring-1 ring-cyan-500 w-full outline-none cursor-pointer">
+                        <option value="" disabled>¿Con quién quieres hablar?</option>
+                        <option v-for="p in myPersonalities" :key="p.id" :value="p.id">🤖 {{ p.id }}</option>
+                    </select>
+                </div>
+            </div>
+            <button @click="showChat=false" class="text-white/50 hover:text-white transition relative z-10"><i class="fas fa-minus"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50" id="chat-container">
+            <div v-for="(msg, idx) in chatMessages" :key="idx" :class="msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'" class="max-w-[85%] p-3 text-sm font-medium animate-fade">
+                <div v-if="msg.role === 'ai'" class="md-content" v-html="parseMarkdown(msg.text)"></div>
+                <div v-else>{{ msg.text }}</div>
+            </div>
+            <div v-if="isAiTyping" class="chat-bubble-ai p-3 flex gap-1 items-center animate-pulse"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+        </div>
+        <div class="p-4 bg-white border-t border-slate-100">
+            <div class="relative flex items-center gap-2">
+                <input v-model="userMessage" @keyup.enter="sendToAi" placeholder="Pregúntame algo..." class="input-std !rounded-full pr-12 !py-3 border-slate-200 focus:!border-cyan-500" :disabled="isAiTyping">
+                <button @click="sendToAi" :disabled="isAiTyping || !userMessage.trim()" class="absolute right-1.5 w-9 h-9 rounded-full bg-cyan-600 text-white flex items-center justify-center hover:bg-slate-900 transition disabled:opacity-30"><i class="fas fa-paper-plane text-xs"></i></button>
+            </div>
+            <p class="text-[8px] text-center text-slate-400 mt-2 font-bold uppercase tracking-tighter">Powered by Quality Solutions</p>
+        </div>
+    </div>
+</transition>
+
+<!-- MODAL: TICKETS (CAPA) -->
+<div v-if="showTicketModal" class="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-rose-100">
+        <div class="bg-gradient-to-r from-rose-600 to-rose-800 px-6 py-5 flex justify-between items-center shadow-md z-10 relative">
+            <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+            <h3 class="font-black text-white flex items-center gap-2 relative"><i class="fas fa-tools"></i> Seguimiento de Falla (CAPA)</h3>
+            <button @click="showTicketModal=false" :disabled="submitting" class="text-rose-200 transition relative" :class="submitting ? 'opacity-50 cursor-not-allowed' : 'hover:text-white'"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50 relative">
+            <div class="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-0.5">ID del Activo Afectado</p>
+                    <p class="text-xl font-mono font-black text-rose-700">{{ editAsset.controlNo }}</p>
+                </div>
+                <i class="fas fa-clipboard-check text-3xl text-rose-100"></i>
+            </div>
+
+            <div v-for="field in visibleTicketFields" :key="field.id" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-rose-300 transition-colors">
+                <label class="lbl !text-slate-700 !text-[11px] mb-2 flex items-center gap-1">
+                    <i v-if="field.label === 'EMAIL_LIST'" class="fas fa-envelope text-blue-500 mr-1"></i>
+                    <i v-else-if="field.label === 'CAMERA'" class="fas fa-camera text-rose-500 mr-1"></i>
+                    {{ field.id }} <span v-if="field.config && field.config.required" class="text-rose-500" title="Requerido">*</span>
+                </label>
+                
+                <input v-if="field.label === 'TEXT'" type="text" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100" :placeholder="'Ingrese ' + field.id">
+                <textarea v-else-if="field.label === 'TEXTAREA'" v-model="ticketForm[field.id]" class="input-std h-24 resize-y focus:!border-rose-500 focus:!ring-rose-100" :placeholder="'Detalles de ' + field.id"></textarea>
+                <input v-else-if="field.label === 'DATE'" type="date" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100 cursor-pointer">
+                
+                <select v-else-if="field.label === 'SELECT'" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100 cursor-pointer">
+                    <option value="" disabled>Seleccione una opción...</option>
+                    <option v-for="opt in (field.color || '').split(',')" :value="opt.trim()">{{ opt.trim() }}</option>
+                </select>
+
+                <div v-else-if="field.label === 'FILE'" class="space-y-2">
+                    <div class="flex items-center gap-3">
+                        <label :for="'file_'+field.id" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-rose-50 hover:border-rose-400 transition-all text-slate-500 hover:text-rose-600">
+                            <i class="fas" :class="ticketForm[field.id] ? 'fa-check-circle text-emerald-500' : 'fa-paperclip'"></i>
+                            <span class="text-[11px] font-bold">{{ ticketForm[field.id] ? 'Archivo cargado con éxito' : 'Subir Archivo' }}</span>
+                        </label>
+                        <input type="file" :id="'file_'+field.id" class="hidden" accept="image/*,application/pdf" @change="handleFileUpload($event, field.id)">
+                    </div>
+                    <p v-if="ticketForm[field.id]" class="text-[10px] text-emerald-600 font-bold flex items-center gap-1"><i class="fas fa-file-alt"></i> {{ ticketForm[field.id].name }}</p>
+                </div>
+
+                <div v-else-if="field.label === 'EMAIL_LIST'" class="space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="group in catalogs.emailGroups" :key="group.id" @click="toggleEmailGroup(group)" :class="isGroupSelected(group) ? 'bg-[#005565] text-white border-[#004455] shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'" class="px-4 py-2 rounded-xl border text-[10px] font-black transition-all flex items-center gap-2 uppercase tracking-tighter">
+                            <i class="fas" :class="isGroupSelected(group) ? 'fa-check-circle' : 'fa-users'"></i>
+                            {{ group.id }}
+                        </button>
+                    </div>
+                    <div class="space-y-2 border-t border-slate-100 pt-4">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Correos adicionales o externos:</p>
+                        <div v-for="(email, idx) in ticketEmails" :key="idx" class="flex items-center gap-2 animate-fade">
+                            <div class="relative flex-1">
+                                <input v-model="ticketEmails[idx]" @keyup.enter="addEmailField" class="email-input-field input-std pr-24 focus:!border-[#005565]" placeholder="nombre.apellido">
+                                <span class="absolute right-3 top-2 text-slate-300 text-[10px] font-bold mt-0.5 pointer-events-none">@plexus.com</span>
+                            </div>
+                            <button v-if="ticketEmails.length > 1" @click="removeEmailField(idx)" class="text-rose-300 hover:text-rose-500 transition"><i class="fas fa-times-circle"></i></button>
+                        </div>
+                        <button @click="addEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1">+ AÑADIR OTRO DESTINATARIO</button>
+                    </div>
+                </div>
+
+                <div v-else-if="field.label === 'CAMERA'">
+                    <div v-if="capturedPhotos.length > 0" class="flex gap-2 overflow-x-auto pb-3 mb-3">
+                        <div v-for="(img, idx) in capturedPhotos" :key="idx" class="relative flex-shrink-0 w-20 h-20 rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                            <img :src="img.data" class="w-full h-full object-cover">
+                            <button @click="removePhoto(idx)" class="absolute top-1 right-1 bg-white/90 text-rose-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-white shadow"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                    <button @click="startCamera" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold text-xs hover:bg-rose-50 hover:border-rose-400 hover:text-rose-600 transition flex items-center justify-center gap-2">
+                        <i class="fas fa-camera text-lg"></i> {{ capturedPhotos.length > 0 ? 'TOMAR MÁS FOTOGRAFÍAS' : 'ABRIR CÁMARA Y TOMAR FOTO' }}
+                    </button>
+                </div>
+            </div>
+            
+            <div v-if="visibleTicketFields.length === 0" class="text-center p-6 bg-slate-100 rounded-xl border border-slate-200">
+                <p class="text-xs font-bold text-slate-500">No hay campos configurados para esta fase.</p>
+            </div>
+        </div>
+        
+        <div class="p-5 bg-white border-t border-slate-100 flex justify-end gap-3 z-10 relative">
+            <div v-if="submitting" class="absolute inset-0 z-20"></div>
+            <button @click="showTicketModal=false" :disabled="submitting" class="px-6 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition disabled:opacity-50">Cancelar</button>
+            <button @click="submitTicket" :disabled="submitting" class="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-200 transition flex items-center gap-2 disabled:opacity-80">
+                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? 'ENVIANDO EVIDENCIA...' : 'GUARDAR' }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CÁMARA WEB -->
+<div v-if="cameraActive" class="fixed inset-0 z-[120] bg-black flex flex-col animate-fade">
+    <div class="p-4 flex justify-between items-center bg-zinc-900 text-white shadow-md">
+        <span class="font-bold text-sm flex items-center gap-2"><i class="fas fa-camera text-rose-500"></i> Evidencia Fotográfica</span>
+        <button @click="stopCamera" class="text-2xl hover:text-rose-500 transition"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="flex-1 relative overflow-hidden flex items-center justify-center bg-black">
+        <video ref="videoStream" autoplay playsinline class="max-h-full max-w-full object-contain"></video>
+        <div class="absolute inset-0 border-[2px] border-dashed border-white/30 pointer-events-none m-8 rounded-xl flex items-center justify-center"><i class="fas fa-plus text-white/20 text-4xl"></i></div>
+    </div>
+    <div class="h-28 bg-zinc-900 flex gap-3 p-3 overflow-x-auto border-t border-zinc-800">
+        <div v-for="(img, idx) in capturedPhotos" :key="idx" @click="previewImage = idx" class="relative flex-shrink-0 h-full aspect-[3/4] bg-zinc-800 rounded-lg overflow-hidden border border-white/10 hover:border-emerald-500 cursor-pointer shadow-lg transition group">
+            <img :src="img.data" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">
+            <button @click.stop="removePhoto(idx)" class="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-80 hover:opacity-100 transition shadow"><i class="fas fa-times"></i></button>
+        </div>
+        <div v-if="capturedPhotos.length === 0" class="flex items-center justify-center w-full text-zinc-600 text-xs font-bold uppercase tracking-widest">Enfoque la falla y dispare (Usa la Barra Espaciadora)</div>
+    </div>
+    
+    <div v-if="previewImage !== null" class="fixed inset-0 z-[130] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade">
+        <button @click="previewImage = null" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-times"></i></button>
+        <button v-if="capturedPhotos.length > 1" @click.stop="prevImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-chevron-left"></i></button>
+        <img :src="capturedPhotos[previewImage].data" class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10">
+        <button v-if="capturedPhotos.length > 1" @click.stop="nextImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-chevron-right"></i></button>
+        <div class="absolute bottom-6 flex flex-col items-center">
+            <span class="text-white font-mono font-bold bg-zinc-800/80 px-4 py-1 rounded-full text-sm tracking-widest">{{ previewImage + 1 }} / {{ capturedPhotos.length }}</span>
+            <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-2">Usa las flechas para navegar</p>
+        </div>
+    </div>
+
+    <div class="p-6 bg-zinc-950 flex justify-between items-center">
+        <div class="w-24 text-left text-white text-[10px] font-bold uppercase tracking-widest text-zinc-400">{{ capturedPhotos.length }} FOTOS</div>
+        <button @click="takePhoto" class="w-16 h-16 bg-white rounded-full border-4 border-zinc-400 flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-90 transition"><div class="w-12 h-12 border-2 border-zinc-900 rounded-full"></div></button>
+        <button @click="stopCamera" class="w-24 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition shadow-lg tracking-wider">LISTO</button>
+    </div>
+</div>
+
+<!-- VISOR DE EVIDENCIAS -->
+<div v-if="viewingEvidenceIdx !== null && activeTicketEvidence" class="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade" @click="closeGallery">
+    <button @click.stop="closeGallery" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-times"></i></button>
+    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="prevGalleryImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-chevron-left"></i></button>
+    <img :src="activeTicketEvidence.fotos[viewingEvidenceIdx]" @click.stop class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10 cursor-default">
+    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="nextGalleryImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-chevron-right"></i></button>
+    <div class="absolute bottom-6 flex flex-col items-center z-20" @click.stop>
+        <span class="text-white font-mono font-bold bg-zinc-800/80 px-4 py-1 rounded-full text-sm tracking-widest">{{ viewingEvidenceIdx + 1 }} / {{ activeTicketEvidence.fotos.length }}</span>
+        <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-2">Usa las flechas del teclado para navegar</p>
+    </div>
+</div>
+
+<!-- MODAL: DATA HUB (MASIVO) -->
+<div v-if="showDataHubModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex justify-center items-center p-4 animate-fade">
+  <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-5 flex justify-between items-center text-white shadow-md">
+      <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> Data Hub - Importación Masiva</h3>
+      <button @click="showDataHubModal = false" class="text-slate-400 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-8 overflow-y-auto bg-slate-50">
+      <div v-if="bulkDataPreview.length === 0" class="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center hover:bg-white transition bg-white shadow-sm">
+        <i class="fas fa-file-csv text-6xl text-slate-300 mb-4"></i>
+        <h3 class="text-lg font-black text-slate-700">Sube tu plantilla .CSV</h3>
+        <p class="text-xs text-slate-500 mb-6 font-medium">El sistema analizará los datos y detectará duplicados antes de guardarlos.</p>
+        <label class="cursor-pointer bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition inline-flex items-center gap-2">
+          <i class="fas fa-upload"></i> Seleccionar Archivo CSV
+          <input type="file" accept=".csv" class="hidden" @change="handleCSVUpload">
+        </label>
+      </div>
+      <div v-else class="animate-fade space-y-6">
+        <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex space-x-8 px-4">
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Leídos</p><p class="text-3xl font-black text-slate-800">{{ bulkStats.total }}</p></div>
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Nuevos</p><p class="text-3xl font-black text-emerald-500">{{ bulkStats.nuevos }}</p></div>
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Duplicados</p><p class="text-3xl font-black text-amber-500">{{ bulkStats.duplicados }}</p></div>
+          </div>
+          <button @click="clearDataHub" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
+            <i class="fas fa-trash"></i> Descartar
+          </button>
+        </div>
+        <div class="flex gap-4">
+          <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2">
+            <i class="fas fa-plus-circle"></i> Inyectar {{ bulkStats.nuevos }} Nuevos
+          </button>
+          <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2">
+            <i class="fas fa-bolt"></i> Actualizar {{ bulkStats.duplicados }} Existentes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

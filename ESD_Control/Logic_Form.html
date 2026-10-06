@@ -1,0 +1,363 @@
+<script>
+/**
+ * 🟢 COMPOSABLE: LÓGICA DEL FORMULARIO DE ACTIVOS
+ * Maneja altas, auditorías, N/A, alertas matemáticas y guardado.
+ */
+function useAssetForm(globalConfig) {
+    const { ref, computed, watch } = Vue;
+    // Extraemos las dependencias globales que le pasaremos desde el Main
+    const { 
+        view, submitting, dbRules, catalogs, statusDB, currentThemeColor, 
+        loadData, openTicketModal, isAssetFailed, runGAS, Swal, Toast, FIELD_MAP 
+    } = globalConfig;
+
+    // 1. ESTADO LOCAL DEL FORMULARIO
+    const editAsset = ref({});
+    const form = ref({ measurements:{}, result: '', validationDate: '' });
+    const isNewAsset = ref(false);
+    const isAuditMode = ref(false);
+    const activeInput = ref(null);
+    const auditHistory = ref([]);
+    const activeTicketEvidence = ref(null);
+
+    // 2. COMPUTADOS
+    const sectorColor = computed(() => currentThemeColor.value);
+    const sectorLabel = computed(() => { 
+        if(!editAsset.value.quadrant) return 'AUTO';
+        const search = String(editAsset.value.quadrant).toUpperCase().trim();
+        const sector = catalogs.value.sectors.find(s => s.id.toUpperCase() === search);
+        return sector ? sector.label : 'NO ENCONTRADO'; 
+    });
+
+    const isCurrentStatusAdmin = computed(() => {
+        const st = statusDB.value.find(s => s.name === editAsset.value.status);
+        return st ? st.isAdmin : false;
+    });
+
+    // 🟢 MAGIA MATEMÁTICA: Genera los campos dinámicos según el Activo
+    const activeFields = computed(() => {
+       if(!editAsset.value.description) return [];
+       const rule = dbRules.value[editAsset.value.description] || {};
+       const fields = [];
+       const specificRecs = rule.recs || {}; 
+
+       for(const k in FIELD_MAP) {
+          if(rule[k]) {
+             if(!form.value.measurements[k]) form.value.measurements[k] = FIELD_MAP[k].type === 'scientific' ? {mantissa:null, exponent:null} : null;
+             let limitM=0, limitE=0, limitVal=0;
+             if(FIELD_MAP[k].type === 'scientific') { 
+                 try { 
+                     const parts = String(rule[k]).toUpperCase().replace('<','').trim().split('E'); 
+                     limitM=parseFloat(parts[0]); 
+                     limitE=parseFloat(parts[1].replace('+','')); 
+                 } catch(e){} 
+             } else { 
+                 limitVal=parseFloat(String(rule[k]).replace(/[<a-zA-Z]/g, '')); 
+             }
+             
+             const tolerance = rule.tolerance ? parseFloat(rule.tolerance) : 0.8; 
+             const finalRec = specificRecs[k] || rule.recommendation || "Revisar parámetros.";
+
+             fields.push({ key:k, ...FIELD_MAP[k], limit: FIELD_MAP[k].type==='scientific'?{m:limitM,e:limitE}:limitVal, specText:rule[k], recText:finalRec, tolerance:tolerance });
+          }
+       }
+       return fields;
+    });
+
+    // 3. MÉTODOS Y HELPERS
+    const isNA = (key) => {
+        const val = form.value.measurements[key];
+        if(!val) return false;
+        if(typeof val === 'string' && val === 'N/A') return true;
+        if(typeof val === 'object' && val.mantissa === 'N/A') return true;
+        return false;
+    };
+    
+    const toggleNA = (key) => {
+        if(isNA(key)) {
+            form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? {mantissa:null, exponent:null} : null;
+        } else {
+            form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A';
+        }
+    };
+    
+    const getAlert = (field) => {
+       if(isNA(field.key)) return {message:'NO APLICA', class:'bg-slate-100 text-slate-500', borderClass:'border-slate-200 bg-slate-50'};
+       const val = form.value.measurements[field.key];
+       if(!val) return {message:''};
+       
+       let num=0, limit=0;
+       if(field.type === 'scientific') {
+          if(val.mantissa==null || val.exponent==null || val.mantissa==="" || val.exponent==="") return {message:''};
+          num = val.mantissa * Math.pow(10, val.exponent);
+          limit = field.limit.m * Math.pow(10, field.limit.e);
+       } else { 
+          if(val==="" || val===null) return {message:''};
+          num = Number(val); 
+          limit = Number(field.limit); 
+       }
+       if(!limit) return {message:''};
+       
+       if(num > limit) return {message:'FUERA DE RANGO', class:'bg-rose-100 text-rose-600', borderClass:'border-rose-300 bg-rose-50/30', showRec:true};
+       if(num > (limit * field.tolerance)) return {message:'RIESGO', class:'bg-amber-100 text-amber-600', borderClass:'border-amber-300 bg-amber-50/30', showRec:true};
+       
+       return {message:'OK', class:'bg-emerald-100 text-emerald-600', borderClass:'border-emerald-300 bg-emerald-50/20', showRec:false};
+    };
+
+    const startNewAsset = () => { 
+        isNewAsset.value = true; 
+        editAsset.value = { status: 'ACTIVO' };
+        currentThemeColor.value = '#005565'; 
+        view.value = 'form'; 
+        isAuditMode.value = true; 
+        form.value = { measurements: {}, result: '' };
+        auditHistory.value = []; 
+        activeTicketEvidence.value = null;
+    };
+    
+    const selectAsset = (a) => {
+       isNewAsset.value = false;
+       editAsset.value = JSON.parse(JSON.stringify(a));
+       const q = catalogs.value.sectors.find(x => x.id.toUpperCase() === (a.quadrant||'').toUpperCase());
+       currentThemeColor.value = q ? q.hex : '#005565';
+       isAuditMode.value = false;
+       form.value = { measurements:{}, result:'', validationDate: new Date().toISOString().split('T')[0] };
+       
+       if(a.measurements) {
+           for(const k in a.measurements) {
+               if(a.measurements[k]) form.value.measurements[k] = JSON.parse(JSON.stringify(a.measurements[k]));
+           }
+       }
+       
+       view.value = 'form';
+       auditHistory.value = [];
+       runGAS('getAssetHistory', a.controlNo).then(h => auditHistory.value = h);
+       
+       activeTicketEvidence.value = null;
+       const rStatus = (a.lastResult || '').toUpperCase();
+       const isAdministrative = statusDB.value.find(s => s.name.toUpperCase() === rStatus)?.isAdmin;
+       if (rStatus && !['CUMPLE', 'PASS', 'OK', 'PENDIENTE'].includes(rStatus) && !isAdministrative) {
+           runGAS('getActiveTicketData', a.controlNo).then(data => { 
+               if (data) activeTicketEvidence.value = data; 
+           });
+       }
+    };
+
+    const evaluateRepair = () => {
+        let validMeasurementsCount = 0;
+        for(const field of activeFields.value) {
+            if (isNA(field.key)) continue; 
+            
+            const val = form.value.measurements[field.key];
+            let isEmpty = false;
+            
+            if(field.type === 'scientific') { 
+                if(val.mantissa == null || val.mantissa === "" || val.exponent == null || val.exponent === "") isEmpty = true;
+            } else { 
+                if(val === null || val === "") isEmpty = true;
+            }
+            
+            if(isEmpty) {
+                activeInput.value = field.key;
+                Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición real para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#005565' });
+                isAuditMode.value = true;
+                return;
+            } else { 
+                validMeasurementsCount++;
+            }
+        }
+
+        if (validMeasurementsCount === 0 && activeFields.value.length > 0) {
+            Swal.fire({ icon: 'error', title: 'Medición Obligatoria', text: 'Para evaluar la reparación, DEBES capturar al menos un valor numérico real.', confirmButtonColor: '#e11d48' });
+            isAuditMode.value = true;
+            return;
+        }
+        
+        openTicketModal('CLOSE');
+    };
+
+    const performSave = async () => {
+       submitting.value = true;
+       editAsset.value.colorCode = currentThemeColor.value;
+       
+       const emailEv = activeFields.value.map(f => {
+           let valStr = "N/A";
+           const val = form.value.measurements[f.key];
+           if (val && !isNA(f.key)) {
+               if (f.type === 'scientific') {
+                   if (val.mantissa !== null && val.mantissa !== "") valStr = `${val.mantissa} x 10^${val.exponent}`;
+               } else {
+                   if (val !== null && val !== "") valStr = String(val);
+               }
+           }
+           return { label: f.label, value: valStr }; 
+       });
+       form.value.emailEvidence = emailEv; 
+
+       const m = form.value.measurements;
+       for(const k in activeFields.value) {
+           const key = activeFields.value[k].key;
+           if(!m[key]) { m[key] = activeFields.value[k].type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; } 
+       }
+       
+       const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
+       try {
+          const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
+          if(r.success) { 
+              Toast.fire({ icon: 'success', title: isNewAsset.value ? 'Activo Registrado' : 'Verificación Guardada' });
+              await loadData(); 
+              view.value = 'dashboard'; 
+          } else { throw new Error(r.error); }
+       } catch(e) { Swal.fire('Error', e.message, 'error'); }
+       submitting.value = false;
+    };
+
+    const submit = async (resultType) => {
+       if (submitting.value) return;
+       submitting.value = true; 
+       
+       if (!editAsset.value.status || !editAsset.value.responsible || !editAsset.value.factory || !editAsset.value.project || !editAsset.value.quadrant || !editAsset.value.description) {
+           submitting.value = false;
+           Swal.fire({ icon: 'warning', title: 'Datos Incompletos', text: 'Por favor completa: Estado, Responsable, Fábrica, Proyecto, Cuadrante y Tipo.', confirmButtonColor: '#005565' });
+           return;
+       }
+
+       if (resultType === 'ADMIN') {
+           for(const field of activeFields.value) { form.value.measurements[field.key] = field.type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; }
+           form.value.result = editAsset.value.status;
+           form.value.requiresSecondRevision = false; isAuditMode.value = true; 
+           submitting.value = false; 
+           Swal.fire({ title: 'Confirmar Movimiento', html: `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, icon: 'info', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, Registrar' }).then((r) => { if(r.isConfirmed) performSave(); });
+           return; 
+       }
+
+       let validMeasurementsCount = 0;
+       for(const field of activeFields.value) {
+           if(!isNA(field.key)) {
+               const val = form.value.measurements[field.key];
+               let isEmpty = false;
+               if(field.type === 'scientific') { if(val.mantissa == null || val.mantissa === "" || val.exponent == null || val.exponent === "") isEmpty = true; } 
+               else { if(val === null || val === "") isEmpty = true; }
+               
+               if(isEmpty) { 
+                   activeInput.value = field.key;
+                   submitting.value = false; 
+                   Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#005565' });
+                   return; 
+               } else { 
+                   validMeasurementsCount++; 
+               }
+           }
+       }
+       
+       if (validMeasurementsCount === 0 && activeFields.value.length > 0) { 
+           submitting.value = false;
+           Swal.fire({ icon: 'error', title: 'Auditoría Inválida', text: 'No puedes registrar una auditoría con todas las mediciones en "N/A". Debes capturar al menos un número real.', confirmButtonColor: '#e11d48' });
+           return; 
+       }
+       
+       const failures = activeFields.value.filter(f => getAlert(f).message === 'FUERA DE RANGO');
+       form.value.requiresSecondRevision = false; 
+
+       if(isNewAsset.value) {
+           const calculatedResult = failures.length > 0 ? 'NO CUMPLE' : 'CUMPLE';
+           if (failures.length > 0) { 
+               submitting.value = false;
+               Swal.fire({ title: '¡Alerta!', text: 'Un equipo nuevo no puede fallar en su primera verificación.', icon: 'error' });
+               return; 
+           }
+           form.value.result = calculatedResult; 
+           performSave();
+           return;
+       }
+
+       const isMathFail = failures.length > 0;
+       const isUserFail = (resultType === 'FAIL' || resultType === 'NO CUMPLE');
+       
+       if (isMathFail && !isUserFail) {
+            let recsHtml = '<div class="text-left text-xs bg-rose-50 p-3 rounded border border-rose-100 max-h-40 overflow-y-auto">';
+            failures.forEach(f => { recsHtml += `<div class="mb-2 last:mb-0 border-b border-rose-100 pb-2 last:border-0 last:pb-0"><p class="font-bold text-rose-700 uppercase mb-0.5"><i class="fas fa-exclamation-triangle mr-1"></i> ${f.label}</p><p class="text-slate-600 pl-4">${f.recText || 'Sin recomendación específica.'}</p></div>`; });
+            recsHtml += '</div>';
+
+            submitting.value = false; 
+            Swal.fire({
+                title: '¡ALERTA DE CALIDAD!',
+                html: `<div class="mb-4"><p class="text-sm text-slate-600 mb-2">Las mediciones indican FALLA, pero intentas APROBAR el equipo.</p>${recsHtml}</div><p class="font-bold text-rose-600 text-center mt-4">Si fuerzas la aprobación, se notificará a Gerencia.</p>`,
+                icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'SÍ, APROBAR', cancelButtonText: 'CORREGIR'
+            }).then((r) => { 
+                if (r.isConfirmed) {
+                    form.value.requiresSecondRevision = true; 
+                    form.value.result = 'CUMPLE';
+                    if (isAssetFailed.value) { openTicketModal('CLOSE'); } else { performSave(); }
+                }
+            });
+            return;
+       } 
+       
+       if (!isMathFail && isUserFail) {
+            submitting.value = false;
+            Swal.fire({
+               title: '¡VERIFICACIÓN DE CRITERIO!',
+               html: `<div class="text-left"><p class="mb-3 text-sm text-slate-600">Las mediciones están <b>OK</b>, pero intentas RECHAZARLO.</p><p class="font-bold text-slate-800 text-center">¿Confirmas la falla (Ej. Daño visual)?</p></div>`,
+               icon: 'question', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'SÍ, REGISTRAR FALLA', cancelButtonText: 'REVISAR'
+           }).then((r) => { 
+               if (r.isConfirmed) {
+                   form.value.requiresSecondRevision = true; 
+                   form.value.result = 'NO CUMPLE';
+                   if (isAssetFailed.value) { openTicketModal('CLOSE'); } else { openTicketModal('OPEN'); }
+               }
+           });
+           return;
+       }
+
+       form.value.result = resultType;
+       submitting.value = false; 
+       
+       if (isAssetFailed.value) { openTicketModal('CLOSE'); } 
+       else if (isUserFail) { openTicketModal('OPEN'); } 
+       else { performSave(); }
+    };
+
+    // 4. WATCHERS
+    watch(() => editAsset.value.quadrant, (val) => {
+        if(!val) { currentThemeColor.value = '#005565'; return; }
+        const search = String(val).toUpperCase().trim();
+        const sector = catalogs.value.sectors.find(s => s.id.toUpperCase() === search);
+        currentThemeColor.value = sector ? sector.hex : '#005565';
+    });
+
+    watch(isAuditMode, (newVal) => {
+        if (isNewAsset.value) return; 
+
+        if (newVal === true) {
+            const cleanMeas = {};
+            for (const key in FIELD_MAP) {
+                if (FIELD_MAP[key].type === 'scientific') {
+                    cleanMeas[key] = { mantissa: null, exponent: null };
+                } else {
+                    cleanMeas[key] = null;
+                }
+            }
+            form.value.measurements = cleanMeas;
+            form.value.result = ''; 
+            form.value.comments = ''; 
+            form.value.validationDate = new Date().toISOString().split('T')[0];
+        } else {
+            if (editAsset.value.measurements) {
+                 form.value.measurements = JSON.parse(JSON.stringify(editAsset.value.measurements));
+            }
+            form.value.comments = editAsset.value.comments || '';
+             if(editAsset.value.lastDate) {
+                 form.value.validationDate = editAsset.value.lastDate;
+             }
+        }
+    });
+
+    // 5. EXPORTAR TODO AL MAIN
+    return {
+        editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
+        sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields,
+        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, submit, performSave
+    };
+}
+</script>

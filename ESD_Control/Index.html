@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESD Control V1.00 (Arquitectura Modular)</title>
+  
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://unpkg.com/vue-i18n@9/dist/vue-i18n.global.prod.js"></script>
+  
+  <?!= include('Styles'); ?>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+  <div id="app" class="flex-1 flex flex-col h-full relative" :style="dynamicStyle">
+    
+    <div v-if="loading || submitting" class="loader">
+      <div class="relative">
+        <div class="w-16 h-16 border-4 border-slate-100 rounded-full"></div>
+        <div class="w-16 h-16 border-4 border-[#005565] rounded-full animate-spin absolute top-0 left-0 border-t-transparent"></div>
+      </div>
+      <p class="mt-4 text-xs font-black tracking-[0.25em] text-slate-400 uppercase animate-pulse">
+        {{ submitting ? 'GUARDANDO...' : 'CARGANDO SISTEMA...' }}
+      </p>
+    </div>
+
+    <?!= include('View_Header'); ?>
+    <?!= include('View_Dashboard'); ?>
+    <?!= include('View_Admin'); ?>
+    <?!= include('View_Form'); ?>
+    <?!= include('View_Modals'); ?>
+
+  </div> <?!= include('Diccionario'); ?>
+  <?!= include('Logic_Header'); ?>
+  <?!= include('Logic_Dashboard'); ?>
+  <?!= include('Logic_Form'); ?>
+  <?!= include('Logic_Admin'); ?>
+  <?!= include('Logic_Modals'); ?>
+  
+  <?!= include('Main_js'); ?>
+
+</body>
+</html>

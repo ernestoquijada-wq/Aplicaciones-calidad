@@ -1,0 +1,242 @@
+<script>
+/**
+ * 🟢 COMPOSABLE: LÓGICA DE MODALES GLOBALES
+ * Maneja Copiloto IA, Cámara, Tickets CAPA, Ayuda e Historial.
+ */
+function useModals(globalConfig) {
+    const { ref, computed, nextTick, watch } = Vue;
+    const { 
+        runGAS, Swal, Toast, submitting, editAsset, form, catalogs, userRoleName,
+        activeFields, isNA, performSave, activeTicketEvidence, FIELD_MAP
+    } = globalConfig;
+
+    // ==========================================
+    // 1. MODAL DE AYUDA E HISTORIAL
+    // ==========================================
+    const helpModal = ref(false);
+    const historyModal = ref({ open: false });
+    const auditHistory = ref([]); // Se llena desde selectAsset en Logic_Form
+
+    const parseHistoryData = (jsonStr) => { 
+        try { 
+            if(!jsonStr) return {};
+            const data = JSON.parse(jsonStr); 
+            const clean = {}; 
+            for (const k in data) { 
+                if(k === 'comments' || k === 'nextDate' || k === 'validationDate') continue;
+                if (data[k] === null || data[k] === 'N/A' || data[k] === '') continue;
+                if (typeof data[k] === 'object' && (!data[k].mantissa || data[k].mantissa === 'N/A')) continue; 
+                clean[k] = data[k];
+            } 
+            return clean;
+        } catch (e) { return {}; } 
+    };
+
+    const getHistoryComments = (jsonStr) => {
+        try { return JSON.parse(jsonStr).comments || null; } catch(e) { return null; }
+    };
+
+    const getHistoryExpiration = (jsonStr, verifDateStr) => {
+        try {
+            if(jsonStr) {
+                const data = JSON.parse(jsonStr);
+                if(data.nextDate && data.nextDate !== 'N/A') return data.nextDate;
+            }
+            if(!verifDateStr) return 'N/A';
+            const parts = verifDateStr.split(' ')[0].split('/'); 
+            if(parts.length < 3) return 'N/A';
+            const date = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+            date.setFullYear(date.getFullYear() + 1);
+            date.setMonth(date.getMonth() + 1, 0); 
+            return date.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'}).toUpperCase().replace('.','');
+        } catch(e) { return 'N/A'; }
+    };
+
+    const formatKey = (k) => FIELD_MAP[k]?.label || k;
+    const formatValue = (v) => (typeof v === 'object' && v.mantissa) ? `${v.mantissa} x 10^${v.exponent}` : v;
+
+    // ==========================================
+    // 2. COPILOTO IA (CHAT)
+    // ==========================================
+    const showChat = ref(false);
+    const isAiTyping = ref(false);
+    const userMessage = ref('');
+    const chatMessages = ref([{ role: 'ai', text: '¡Hola! Selecciona con quién quieres hablar y hazme tu pregunta.' }]);
+    const selectedAiPersonality = ref('');
+    
+    const myPersonalities = computed(() => {
+        const role = userRoleName.value;
+        return (catalogs.value.aiPrompts || []).filter(p => p.config?.allowedRoles?.includes(role));
+    });
+
+    watch(showChat, (val) => {
+        if(val && !selectedAiPersonality.value && myPersonalities.value.length > 0) {
+            selectedAiPersonality.value = myPersonalities.value[0].id;
+        }
+    });
+
+    const parseMarkdown = (text) => typeof marked !== 'undefined' ? marked.parse(text) : text;
+
+    const sendToAi = async () => {
+        if (!userMessage.value.trim() || isAiTyping.value) return;
+        if (!selectedAiPersonality.value) return Swal.fire("Atención", "Selecciona una personalidad antes de preguntar.", "warning");
+        
+        const text = userMessage.value;
+        chatMessages.value.push({ role: 'user', text });
+        userMessage.value = '';
+        isAiTyping.value = true;
+        await nextTick();
+        const container = document.getElementById('chat-container');
+        if(container) container.scrollTop = container.scrollHeight;
+
+        try {
+            const r = await runGAS('askGemini', text, selectedAiPersonality.value);
+            chatMessages.value.push({ role: 'ai', text: r.success ? r.answer : `Error: ${r.error}` });
+        } catch (e) { chatMessages.value.push({ role: 'ai', text: 'Error de conexión con el cerebro.' }); } 
+        finally {
+            isAiTyping.value = false;
+            await nextTick();
+            if(container) container.scrollTop = container.scrollHeight;
+        }
+    };
+
+    // ==========================================
+    // 3. TICKETS CAPA Y CÁMARA WEB
+    // ==========================================
+    const showTicketModal = ref(false);
+    const currentTicketMode = ref('OPEN');
+    const ticketForm = ref({});
+    const ticketEmails = ref(['']);
+    const selectedGroups = ref([]);
+
+    const cameraActive = ref(false);
+    const videoStream = ref(null);
+    const capturedPhotos = ref([]);
+    const previewImage = ref(null);
+    const viewingEvidenceIdx = ref(null);
+
+    // Funciones de Cámara
+    const startCamera = async () => {
+        cameraActive.value = true; await nextTick(); 
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            if (videoStream.value) videoStream.value.srcObject = stream;
+        } catch (e) { Swal.fire('Error', 'Sin acceso a cámara.', 'error'); cameraActive.value = false; }
+    };
+    const stopCamera = () => { if (videoStream.value?.srcObject) videoStream.value.srcObject.getTracks().forEach(t => t.stop()); cameraActive.value = false; };
+    const takePhoto = () => {
+        if (!videoStream.value) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = videoStream.value.videoWidth; canvas.height = videoStream.value.videoHeight;
+        canvas.getContext('2d').drawImage(videoStream.value, 0, 0);
+        capturedPhotos.value.push({ data: canvas.toDataURL('image/jpeg', 0.8) });
+    };
+    const removePhoto = (idx) => capturedPhotos.value.splice(idx, 1);
+    const nextImage = () => { if (previewImage.value !== null) previewImage.value = (previewImage.value + 1) % capturedPhotos.value.length; };
+    const prevImage = () => { if (previewImage.value !== null) previewImage.value = (previewImage.value - 1 + capturedPhotos.value.length) % capturedPhotos.value.length; };
+
+    // Funciones de Galería
+    const openGallery = (idx) => { viewingEvidenceIdx.value = idx; };
+    const closeGallery = () => { viewingEvidenceIdx.value = null; };
+    const nextGalleryImage = () => { if (activeTicketEvidence.value?.fotos) viewingEvidenceIdx.value = (viewingEvidenceIdx.value + 1) % activeTicketEvidence.value.fotos.length; };
+    const prevGalleryImage = () => { if (activeTicketEvidence.value?.fotos) viewingEvidenceIdx.value = (viewingEvidenceIdx.value - 1 + activeTicketEvidence.value.fotos.length) % activeTicketEvidence.value.fotos.length; };
+
+    // Funciones de Correos
+    const addEmailField = async () => { 
+        if (ticketEmails.value[ticketEmails.value.length - 1] !== '') {
+            ticketEmails.value.push(''); await nextTick(); 
+            const inputs = document.querySelectorAll('.email-input-field');
+            if (inputs.length > 0) inputs[inputs.length - 1].focus();
+        } 
+    };
+    const removeEmailField = (idx) => ticketEmails.value.splice(idx, 1);
+    const toggleEmailGroup = (group) => {
+        const idx = selectedGroups.value.indexOf(group.id);
+        if (idx > -1) selectedGroups.value.splice(idx, 1); else selectedGroups.value.push(group.id);
+    };
+    const isGroupSelected = (group) => selectedGroups.value.includes(group.id);
+    watch(showTicketModal, (val) => { if(val) selectedGroups.value = []; }); 
+
+    const handleFileUpload = (event, fieldId) => {
+        const file = event.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => { ticketForm.value[fieldId] = { name: file.name, data: e.target.result }; };
+        reader.readAsDataURL(file);
+    };
+
+    const openTicketModal = (mode = 'CLOSE') => {
+        ticketForm.value = {}; currentTicketMode.value = mode; 
+        ticketEmails.value = ['']; capturedPhotos.value = [];
+        showTicketModal.value = true;
+    };
+
+    const visibleTicketFields = computed(() => {
+        if (!catalogs.value.ticketFields) return [];
+        return catalogs.value.ticketFields.filter(f => {
+            const cfg = f.config || {};
+            if (currentTicketMode.value === 'OPEN') return cfg.showOnOpen !== false;
+            if (currentTicketMode.value === 'CLOSE') return cfg.showOnClose === true;
+            return true;
+        });
+    });
+
+    const submitTicket = async () => {
+        if (submitting.value) return;
+        for(const f of visibleTicketFields.value) {
+            if (f.config?.required) {
+                if (f.label === 'CAMERA' && capturedPhotos.value.length === 0) return Swal.fire("Evidencia", `Toma foto para "${f.id}".`, "warning");
+                if (f.label === 'EMAIL_LIST' && (!ticketEmails.value[0] || ticketEmails.value[0].trim() === '')) return Swal.fire("Destinatario", `Ingresa correo en "${f.id}".`, "warning");
+                if (!['CAMERA', 'EMAIL_LIST'].includes(f.label) && !ticketForm.value[f.id]) return Swal.fire("Incompleto", `El campo "${f.id}" es obligatorio.`, "warning");
+            }
+        }
+        
+        submitting.value = true;
+        try {
+            let finalFormData = { ...ticketForm.value };
+            for (const key in finalFormData) {
+                const val = finalFormData[key];
+                if (val?.data) {
+                    const fileRes = await runGAS('uploadTicketFile', val, editAsset.value.controlNo, editAsset.value.project, editAsset.value.description);
+                    if (fileRes.success) finalFormData[key] = fileRes.url; else throw new Error(fileRes.error);
+                }
+            }
+
+            const passed = (form.value.result === 'CUMPLE');
+            let finalEmails = [];
+            selectedGroups.value.forEach(groupId => {
+                const group = catalogs.value.emailGroups.find(g => g.id === groupId);
+                if (group?.label) finalEmails.push(...group.label.split(',').map(e => e.trim()));
+            });
+            ticketEmails.value.forEach(e => {
+                if (e.trim() !== "") finalEmails.push(e.trim().toLowerCase().includes('@') ? e.trim().toLowerCase() : `${e.trim().toLowerCase()}@plexus.com`);
+            });
+
+            const payload = { 
+                assetId: editAsset.value.controlNo, assetInfo: JSON.parse(JSON.stringify(editAsset.value)),
+                formData: finalFormData, mode: currentTicketMode.value, measurements: form.value.measurements, 
+                passed: passed, emails: [...new Set(finalEmails)], photos: capturedPhotos.value 
+            };
+
+            const r = await runGAS('saveTicketRecord', payload);
+            if(r.success) {
+                if (currentTicketMode.value === 'OPEN') { performSave(); showTicketModal.value = false; } 
+                else {
+                    await performSave();
+                    if (passed) Swal.fire("¡Ticket Cerrado!", "Las mediciones fueron aprobadas.", "success");
+                    else Swal.fire({ icon: 'warning', title: 'Sigue en Falla', text: 'El equipo se reportó como NO CUMPLE. El ticket sigue ABIERTO.', confirmButtonColor: '#f59e0b' });
+                    showTicketModal.value = false;
+                }
+            } else { Swal.fire("Error", r.error, "error"); }
+        } catch(e) { Swal.fire("Error", e.message, "error"); }
+        submitting.value = false;
+    };
+
+    return {
+        helpModal, historyModal, auditHistory, parseHistoryData, getHistoryComments, getHistoryExpiration, formatKey, formatValue,
+        showChat, isAiTyping, userMessage, chatMessages, selectedAiPersonality, myPersonalities, sendToAi, parseMarkdown,
+        showTicketModal, currentTicketMode, ticketForm, ticketEmails, selectedGroups, cameraActive, videoStream, capturedPhotos, previewImage, viewingEvidenceIdx,
+        startCamera, stopCamera, takePhoto, removePhoto, nextImage, prevImage, openGallery, closeGallery, nextGalleryImage, prevGalleryImage,
+        addEmailField, removeEmailField, toggleEmailGroup, isGroupSelected, handleFileUpload, openTicketModal, visibleTicketFields, submitTicket
+    };
+}
+</script>
