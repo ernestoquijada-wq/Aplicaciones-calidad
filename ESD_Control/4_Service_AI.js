@@ -71,7 +71,7 @@ function askGemini(userQuestion, personalityId) {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const assetData = ss.getSheetByName(CONF.SHEET_ASSETS).getDataRange().getValues();
     
-    const normalizeTexto = (texto) => {
+    const normalizeTexto = (typeof Utils !== 'undefined' && Utils.normalizeText) ? Utils.normalizeText : (texto) => {
       if (!texto) return "";
       return String(texto).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     };

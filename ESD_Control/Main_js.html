@@ -1,5 +1,5 @@
 <script>
-  const { createApp, ref, computed, onMounted, watch, onBeforeUnmount, nextTick } = Vue;
+  const { createApp, ref, computed, onMounted } = Vue;
 
   // CONSTANTES MAESTRAS
   const FIELD_MAP = { surfaceRes: { label: 'Surface Resistance', type: 'scientific' }, floorMat: { label: 'Floor Mat Resistance', type: 'scientific' }, elecRes: { label: 'Electrical Resistance', type: 'numeric' }, impedance: { label: 'Impedance', type: 'numeric' }, voltage: { label: 'Voltage', type: 'numeric' }, jack: { label: 'Jack', type: 'numeric' } };
@@ -37,7 +37,6 @@
 
       const currentThemeColor = ref('#005565');
       const lastSyncTime = ref(null);
-      let pollingInterval = null;
 
       const statusDB = computed(() => {
           if (!matrixDB.value || !matrixDB.value.validationReasons) return [];

@@ -5,8 +5,8 @@
 function getData() {
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
-    const clean = (v) => (v === null || v === undefined) ? "" : String(v).trim();
-    const formatDateISO = (d) => {
+    const clean = (typeof Utils !== 'undefined' && Utils.clean) ? Utils.clean : (v) => (v === null || v === undefined) ? "" : String(v).trim();
+    const formatDateISO = (typeof Utils !== 'undefined' && Utils.formatDateISO) ? Utils.formatDateISO : (d) => {
       if (!d) return "";
       if (d instanceof Date) { try { return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); } catch (e) { return ""; } }
       return String(d);
@@ -97,7 +97,7 @@ function getData() {
         let c = clean(r[2]);
         if(!c || c === "#000000" || c === "#000") { 
             const foundSector = catalogs.sectors.find(s => s.id.toUpperCase() === q);
-            c = foundSector ? foundSector.hex : "#005565"; 
+            c = foundSector ? foundSector.hex : CONF.DEFAULT_COLOR; 
         }
         
         const estadoReg = estadoColIndex > -1 ? clean(r[estadoColIndex]).toUpperCase() : "ACTIVO";
@@ -162,7 +162,10 @@ function getData() {
 }
 
 function saveNewAsset(payload) {
-  const lock = LockService.getScriptLock(); lock.tryLock(10000);
+  if (!payload || !payload.asset) {
+    return { success: false, error: "Datos de activo inválidos o incompletos." };
+  }
+  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK_SHORT);
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
@@ -176,7 +179,7 @@ function saveNewAsset(payload) {
     const newId = payload.asset.controlNo || (maxId + 1);
 
     const a = payload.asset;
-    const f = payload.formData;
+    const f = payload.formData || {};
     const m = f.measurements || {};
     const chk = (val) => (val === null || val === undefined || val === "") ? "N/A" : val;
 
@@ -206,7 +209,10 @@ function saveNewAsset(payload) {
 }
 
 function processAudit(payload) {
-  const lock = LockService.getScriptLock(); lock.tryLock(10000);
+  if (!payload || !payload.asset || typeof payload.asset.rowIndex !== 'number' || payload.asset.rowIndex < 2) {
+    return { success: false, error: "Datos de activo o índice de fila inválidos." };
+  }
+  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK_SHORT);
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
@@ -283,7 +289,7 @@ function autoConfigurarBaseDatos() {
     if (estadoColIndex === -1) {
       const newColIndex = numCols + 1;
       sheet.getRange(1, newColIndex).setValue("Estado_Registro");
-      sheet.getRange(1, newColIndex).setFontWeight('bold').setBackground('#005565').setFontColor('white');
+      sheet.getRange(1, newColIndex).setFontWeight('bold').setBackground(CONF.DEFAULT_COLOR).setFontColor('white');
       const numRows = sheet.getLastRow();
       if (numRows > 1) {
         const activosArray = new Array(numRows - 1).fill(["ACTIVO"]);

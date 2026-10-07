@@ -28,7 +28,12 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
 
     const isExpired = (d) => { 
         if(!d || d === 'PENDIENTE') return false; 
-        return new Date(d) < new Date(); 
+        const target = new Date(d);
+        if (isNaN(target.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        target.setHours(0, 0, 0, 0);
+        return target < today; 
     };
 
     const filteredAssets = computed(() => {
@@ -141,7 +146,7 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
     };
 
     const getQuadrantColor = (n) => { const q=quadrantDB.value.find(x=>x.id===n); return q?q.hex:'#cbd5e1'; };
-    const getStatusColor = (s) => '#cbd5e1';
+    const getStatusColor = (s) => { const st = (statusDB.value || []).find(x => (x.name || '').toUpperCase() === (s || '').toUpperCase()); return st ? st.color : '#cbd5e1'; };
     const getIcon = (t) => dbRules.value[t]?.defaultIcon || 'fa-box';
     const highlightMatch = (t) => searchQuery.value ? String(t).replace(new RegExp(`(${searchQuery.value})`,'gi'), '<span class="bg-yellow-200 text-yellow-900">$1</span>') : t;
 

@@ -59,12 +59,15 @@ function uploadTicketFiles(files, ticketId, assetData) {
 }
 
 function saveTicketRecord(payload) {
-  const lock = LockService.getScriptLock(); lock.tryLock(15000);
+  if (!payload || !payload.assetId || !payload.mode) {
+    return { success: false, error: "Datos de ticket incompletos o inválidos." };
+  }
+  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK);
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
-    let sh = ss.getSheetByName('DB_Tickets');
+    let sh = ss.getSheetByName(CONF.SHEET_TICKETS);
     if (!sh) {
-      sh = ss.insertSheet('DB_Tickets');
+      sh = ss.insertSheet(CONF.SHEET_TICKETS);
       sh.appendRow(["TICKET_ID", "ASSET_ID", "FECHA_APERTURA", "ESTADO_TICKET", "DATA_JSON"]);
       sh.getRange(1, 1, 1, 5).setFontWeight("bold").setBackground("#e11d48").setFontColor("#ffffff");
     }
@@ -136,7 +139,7 @@ function saveTicketRecord(payload) {
 function getActiveTicketData(assetId) {
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
-    const sh = ss.getSheetByName('DB_Tickets');
+    const sh = ss.getSheetByName(CONF.SHEET_TICKETS);
     if (!sh) return null;
 
     const data = sh.getDataRange().getValues();

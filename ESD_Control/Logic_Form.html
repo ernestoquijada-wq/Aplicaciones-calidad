@@ -212,9 +212,9 @@ function useAssetForm(globalConfig) {
        form.value.emailEvidence = emailEv; 
 
        const m = form.value.measurements;
-       for(const k in activeFields.value) {
-           const key = activeFields.value[k].key;
-           if(!m[key]) { m[key] = activeFields.value[k].type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; } 
+       for (const field of activeFields.value) {
+           const key = field.key;
+           if (!m[key]) { m[key] = field.type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A'; }
        }
        
        const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };

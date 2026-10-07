@@ -8,7 +8,15 @@ const CONF = {
   SHEET_CONFIG: 'DB_Config',
   SHEET_MATRIX: 'DB_Matrix',
   SHEET_LOGS: 'Registros',
-  SHEET_AI_LOGS: 'DB_AI_Logs' 
+  SHEET_AI_LOGS: 'DB_AI_Logs',
+  SHEET_TICKETS: 'DB_Tickets',
+  SHEET_ROLES: 'Seguridad_Roles',
+  SHEET_USERS: 'Seguridad_Usuarios',
+  DEFAULT_COLOR: '#005565',
+  TIMEOUTS: {
+    LOCK: 15000,
+    LOCK_SHORT: 10000
+  }
 };
 
 function doGet() {

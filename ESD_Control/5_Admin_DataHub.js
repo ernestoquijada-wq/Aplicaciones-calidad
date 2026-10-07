@@ -3,7 +3,7 @@
 // ==========================================
 
 function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false) {
-  const lock = LockService.getScriptLock(); lock.tryLock(15000);
+  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK);
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd_HHmm");
@@ -20,7 +20,7 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
       const dataAssets = shAssets.getDataRange().getValues();
       const idSet = new Set(targetIds.map(String));
 
-      const shTickets = ss.getSheetByName('DB_Tickets');
+      const shTickets = ss.getSheetByName(CONF.SHEET_TICKETS);
       let ticketsDB = {}; 
       if (shTickets) {
         const dataTickets = shTickets.getDataRange().getValues();
@@ -57,11 +57,13 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
         const id = String(row[0]);
         if (idSet.has(id)) {
           const fmtMeas = (m, e) => (m && m !== "N/A" && e && e !== "N/A") ? `${m} x 10^${e}` : (m || "N/A");
-          const safeDate = (d) => {
-              if (!d || d === "N/A" || d === "PENDIENTE") return "N/A";
-              if (d instanceof Date) { try { return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd-MMM-yyyy"); } catch(e) {} }
-              return String(d);
-          };
+          const safeDate = (typeof Utils !== 'undefined' && Utils.formatDateDisplay)
+            ? ((d) => Utils.formatDateDisplay(d, "dd-MMM-yyyy"))
+            : ((d) => {
+                if (!d || d === "N/A" || d === "PENDIENTE") return "N/A";
+                if (d instanceof Date) { try { return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd-MMM-yyyy"); } catch(e) {} }
+                return String(d);
+              });
           
           let assetData = {
             controlNo: id, quadrant: row[1], quadrantLabel: sectorLabels[String(row[1]).toUpperCase()] || "N/A", 
@@ -128,7 +130,7 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
       if (cols.length > 0) {
         const headerRow = cols.map(c => c.header);
         tempSheet.getRange(startRow, 1, 1, headerRow.length).setValues([headerRow]);
-        tempSheet.getRange(startRow, 1, 1, headerRow.length).setFontWeight("bold").setBackground("#005565").setFontColor("#ffffff").setBorder(true, true, true, true, true, true);
+        tempSheet.getRange(startRow, 1, 1, headerRow.length).setFontWeight("bold").setBackground(CONF.DEFAULT_COLOR).setFontColor("#ffffff").setBorder(true, true, true, true, true, true);
 
         const rowsToInsert = [];
         activeAssets.forEach(asset => rowsToInsert.push(cols.map(c => asset[c.field] || "N/A")));
@@ -143,7 +145,7 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
       const basicData = [["ID ACTIVO", "TIPO", "ESTADO", "CUADRANTE", "FÁBRICA", "PROYECTO", "VENCIMIENTO"]];
       activeAssets.forEach(a => basicData.push([a.controlNo, a.description, a.status, a.quadrant, a.factory, a.project, a.nextDate]));
       sheet.getRange(1, 1, basicData.length, basicData[0].length).setValues(basicData);
-      sheet.getRange(1, 1, 1, basicData[0].length).setFontWeight("bold").setBackground("#005565").setFontColor("#ffffff");
+      sheet.getRange(1, 1, 1, basicData[0].length).setFontWeight("bold").setBackground(CONF.DEFAULT_COLOR).setFontColor("#ffffff");
     }
 
     const file = DriveApp.getFileById(newSS.getId());
@@ -173,7 +175,7 @@ function adminCreateSheetTemplate(target, lists) {
     else if (target === 'USERS') headers = ["CORREO_ELECTRONICO", "ROL_ASIGNADO"];
     else if (target === 'RULES') headers = ["TIPO_ACTIVO_ID", "TOLERANCIA", "REC_GENERAL", "SURFACE_MANTISSA", "SURFACE_EXPONENTE", "FLOORMAT_MANTISSA", "FLOORMAT_EXPONENTE", "ELEC_RES", "IMPEDANCE", "VOLTAGE", "JACK"];
     
-    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#005565').setFontColor('white');
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground(CONF.DEFAULT_COLOR).setFontColor('white');
     sh.setFrozenRows(1);
     for(let i=1; i<=headers.length; i++) sh.setColumnWidth(i, 150);
 
@@ -261,7 +263,7 @@ function bulkProcessAssets(ss, data, isUpdate) {
   } else {
     const rowsToInject = data.map(r => {
       let newRow = new Array(headers.length).fill("");
-      newRow[0] = r.CONTROL_NO || r.ID; newRow[1] = r.CUADRANTE; newRow[2] = r.COLOR_CODE || "#005565";
+      newRow[0] = r.CONTROL_NO || r.ID; newRow[1] = r.CUADRANTE; newRow[2] = r.COLOR_CODE || CONF.DEFAULT_COLOR;
       newRow[3] = r.DESCRIPCION; newRow[4] = r.PROYECTO; newRow[5] = r.FABRICA; newRow[6] = r.ESTADO_ACTUAL || "ACTIVO";
       newRow[16] = new Date(); newRow[18] = r.RESPONSABLE; newRow[19] = r.COMENTARIOS;
       if (estadoRegCol > 0) newRow[estadoRegCol - 1] = "ACTIVO";

@@ -2,6 +2,38 @@
 // ⏱️ UTILIDADES: LOGS, CORREOS Y SETUP
 // ==========================================
 
+const Utils = {
+  clean: function(v) {
+    return (v === null || v === undefined) ? "" : String(v).trim();
+  },
+  formatDateISO: function(d) {
+    if (!d) return "";
+    if (d instanceof Date) {
+      try { return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); } catch (e) { return ""; }
+    }
+    return String(d);
+  },
+  formatDateDisplay: function(d, format = "dd-MMM-yy") {
+    if (!d || d === "N/A" || d === "PENDIENTE") return "N/A";
+    if (d instanceof Date) {
+      try { return Utilities.formatDate(d, Session.getScriptTimeZone(), format); } catch (e) { return ""; }
+    }
+    return String(d);
+  },
+  normalizeText: function(text) {
+    if (!text) return "";
+    return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  },
+  buildResponse: function(success, dataOrError = {}, error = null) {
+    if (success) {
+      const data = (typeof dataOrError === 'object' && dataOrError !== null) ? dataOrError : { data: dataOrError };
+      return { success: true, ...data };
+    }
+    const err = error || dataOrError;
+    return { success: false, error: err ? (err.message || String(err)) : "Error desconocido" };
+  }
+};
+
 function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
   try {
     const props = PropertiesService.getScriptProperties();
@@ -18,7 +50,7 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
     let photoLinks = "<p style='color: #64748b;'>Sin evidencia fotográfica adjunta.</p>";
     if (tData.evidencia_fotos && tData.evidencia_fotos.length > 0) {
         photoLinks = tData.evidencia_fotos.map((url, i) => 
-            `<a href="${url}" target="_blank" style="display:inline-block; margin: 5px 10px 5px 0; padding:8px 15px; background-color:${type==='CLOSE'?'#10b981':'#005565'}; color:#ffffff; text-decoration:none; font-weight:bold; border-radius:5px; font-size: 12px;">Ver Foto ${i+1}</a>`
+            `<a href="${url}" target="_blank" style="display:inline-block; margin: 5px 10px 5px 0; padding:8px 15px; background-color:${type==='CLOSE'?'#10b981':CONF.DEFAULT_COLOR}; color:#ffffff; text-decoration:none; font-weight:bold; border-radius:5px; font-size: 12px;">Ver Foto ${i+1}</a>`
         ).join('');
     }
     
@@ -36,7 +68,7 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
                 <p style="margin:5px 0; font-size: 14px;"><b>Cuadrante:</b> ${aInfo.quadrant}</p>
                 <p style="margin:5px 0; font-size: 14px;"><b>Reportado por:</b> ${tData.systemUser || 'Sistema Automático'}</p>
             </div>
-            <h3 style="color: #005565; font-size: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 25px;">Evidencia</h3>
+            <h3 style="color: ${CONF.DEFAULT_COLOR}; font-size: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 25px;">Evidencia</h3>
             <div style="margin: 15px 0;">${photoLinks}</div>
             <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
                 Este es un mensaje automático generado por el Sistema PLEXUS ESD. No responda a este correo.
@@ -98,12 +130,8 @@ function getUpdates(lastSyncTime) {
       for(let i=1; i<logData.length; i++) auditCounts[String(logData[i][2])] = (auditCounts[String(logData[i][2])] || 0) + 1;
     }
 
-    const clean = (v) => (v === null || v === undefined) ? "" : String(v).trim();
-    const formatDateISO = (d) => {
-      if (!d) return "";
-      if (d instanceof Date) { try { return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); } catch (e) { return ""; } }
-      return String(d);
-    };
+    const clean = Utils.clean;
+    const formatDateISO = Utils.formatDateISO;
 
     const updates = [];
     const syncTimeMs = new Date(lastSyncTime).getTime();
@@ -131,7 +159,7 @@ function getUpdates(lastSyncTime) {
 }
 
 function getNextFolio(reportName) {
-  const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  const lock = LockService.getScriptLock(); lock.waitLock(CONF.TIMEOUTS.LOCK_SHORT);
   try {
     const props = PropertiesService.getScriptProperties();
     const key = 'FOLIO_' + String(reportName).toUpperCase().replace(/\s+/g, '_');
@@ -150,11 +178,11 @@ function setupDatabase() {
       { name: CONF.SHEET_RULES, headers: ['Tipo de Activo (ID)', 'Icono', 'Recomendación General', 'Tolerancia', 'Configuraciones (JSON)', 'Reglas Específicas...'] },
       { name: CONF.SHEET_CONFIG, headers: ['Categoría', 'ID (Valor)', 'Etiqueta / Correos', 'Color / Configuración Extra'] },
       { name: CONF.SHEET_MATRIX, headers: ['Nombre del Estado', 'Mostrar Tarjeta (TRUE/FALSE)', 'Color de Tarjeta', 'Es Administrativo (TRUE/FALSE)'] },
-      { name: 'DB_Tickets', headers: ['Folio', 'ID de Activo', 'Fecha de Movimiento', 'Estado del Ticket', 'Datos del Ticket (JSON)'] },
+      { name: CONF.SHEET_TICKETS, headers: ['Folio', 'ID de Activo', 'Fecha de Movimiento', 'Estado del Ticket', 'Datos del Ticket (JSON)'] },
       { name: CONF.SHEET_LOGS, headers: ['Fecha y Hora', 'Usuario', 'Acción Realizada', 'ID Relacionado', 'Detalle Técnico'] },
       { name: CONF.SHEET_AI_LOGS, headers: ['Fecha/Hora', 'Usuario', 'Rol', 'Pregunta Usuario', 'Personalidad Usada', 'Respuesta IA', 'Tokens/Status'] },
-      { name: 'Seguridad_Roles', headers: ['Nombre del Rol', 'Permisos (JSON)'] },
-      { name: 'Seguridad_Usuarios', headers: ['Correo Electrónico', 'Rol Asignado'] }
+      { name: CONF.SHEET_ROLES, headers: ['Nombre del Rol', 'Permisos (JSON)'] },
+      { name: CONF.SHEET_USERS, headers: ['Correo Electrónico', 'Rol Asignado'] }
     ];
     let creadas = 0;
 
@@ -162,12 +190,12 @@ function setupDatabase() {
       let sheet = ss.getSheetByName(table.name);
       if (!sheet) {
         sheet = ss.insertSheet(table.name);
-        sheet.getRange(1, 1, 1, table.headers.length).setValues([table.headers]).setFontWeight('bold').setBackground('#005565').setFontColor('white').setHorizontalAlignment('center');
+        sheet.getRange(1, 1, 1, table.headers.length).setValues([table.headers]).setFontWeight('bold').setBackground(CONF.DEFAULT_COLOR).setFontColor('white').setHorizontalAlignment('center');
         sheet.setFrozenRows(1); sheet.autoResizeColumns(1, table.headers.length); creadas++;
       }
     });
 
-    const shRoles = ss.getSheetByName('Seguridad_Roles');
+    const shRoles = ss.getSheetByName(CONF.SHEET_ROLES);
     if (shRoles && shRoles.getLastRow() <= 1) shRoles.appendRow(['SUPER_ADMIN', JSON.stringify({canView: true, canAudit: true, canConfig: true, canUsers: true, canUseCopilot: true})]);
 
     return `¡Éxito! Se crearon/verificaron ${creadas} pestañas de la base de datos. Tu sistema está listo para operar.`;

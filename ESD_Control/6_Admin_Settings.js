@@ -123,8 +123,8 @@ function adminSaveRoles(rolesObj) {
 function adminSaveUsers(usersObj) {
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
-    let sh = ss.getSheetByName('Seguridad_Usuarios');
-    if (!sh) { sh = ss.insertSheet('Seguridad_Usuarios'); sh.appendRow(['Correo Electrónico', 'Rol Asignado']); }
+    let sh = ss.getSheetByName(CONF.SHEET_USERS);
+    if (!sh) { sh = ss.insertSheet(CONF.SHEET_USERS); sh.appendRow(['Correo Electrónico', 'Rol Asignado']); }
     
     if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 2).clearContent();
     const rows = [];
