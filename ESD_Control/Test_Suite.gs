@@ -128,6 +128,11 @@ function runAllTests() {
     testTC05_SecurityAndDatabaseConsistency(ctx5);
     ctx5.finish();
 
+    log("--- TC-06: Control de Presencia y Sincronización en Tiempo Real (PresenceManager y VersionManager) ---");
+    const ctx6 = createTestContext("TC-06: Presencia y Sincronización");
+    testTC06_PresenceAndSyncRealtime(ctx6);
+    ctx6.finish();
+
   } catch (fatalError) {
     log(`\n[FATAL ERROR] Ocurrió una excepción no controlada en el ejecutor: ${fatalError.message}\n${fatalError.stack}`);
   }
@@ -226,6 +231,29 @@ function testTC02_UtilityFunctions(ctx) {
   const respErrObj = Utils.buildResponse(false, new Error("Conexión interrumpida"));
   ctx.assertEqual(respErrObj.success, false, "TC-02.18", "Utils.buildResponse(false, Error) debe marcar success: false");
   ctx.assertEqual(respErrObj.error, "Conexión interrumpida", "TC-02.19", "Utils.buildResponse debe extraer el mensaje de instancias Error");
+
+  // Validator (Validación estricta anti-nulos/blancos)
+  ctx.assert(typeof Validator !== 'undefined' && Validator !== null, "TC-02.20", "El namespace Validator debe estar definido");
+  ctx.assertEqual(Validator.isBlank(""), true, "TC-02.21", "Validator.isBlank('') debe ser true");
+  ctx.assertEqual(Validator.isBlank("   "), true, "TC-02.22", "Validator.isBlank('   ') debe ser true");
+  ctx.assertEqual(Validator.isBlank(null), true, "TC-02.23", "Validator.isBlank(null) debe ser true");
+  ctx.assertEqual(Validator.isBlank(undefined), true, "TC-02.24", "Validator.isBlank(undefined) debe ser true");
+  ctx.assertEqual(Validator.isBlank("ESD-100"), false, "TC-02.25", "Validator.isBlank con valor no vacío debe ser false");
+  ctx.assertEqual(Validator.sanitize("  VALOR  "), "VALOR", "TC-02.26", "Validator.sanitize debe recortar espacios");
+
+  const validReq = Validator.validateRequired({ a: "1", b: "2" }, ["a", "b"]);
+  ctx.assertEqual(validReq.valid, true, "TC-02.27", "Validator.validateRequired debe ser true con campos presentes");
+  const invalidReq = Validator.validateRequired({ a: "1", b: "   " }, ["a", "b"]);
+  ctx.assertEqual(invalidReq.valid, false, "TC-02.28", "Validator.validateRequired debe ser false con campos en blanco");
+
+  // withScriptLock (Concurrencia y exclusión mutua)
+  ctx.assert(typeof withScriptLock === 'function', "TC-02.29", "withScriptLock debe ser una función disponible");
+  const lockResult = withScriptLock(() => ({ success: true, processed: 1 }), 1000, "Prueba");
+  ctx.assertEqual(lockResult.success, true, "TC-02.30", "withScriptLock debe ejecutar y retornar resultado de la función");
+
+  // CacheManager (Gestión de caché e invalidación)
+  ctx.assert(typeof CacheManager !== 'undefined', "TC-02.31", "El namespace CacheManager debe estar definido");
+  ctx.assert(typeof CacheManager.invalidateCatalogs === 'function', "TC-02.32", "CacheManager.invalidateCatalogs debe ser una función disponible");
 }
 
 /**
@@ -363,6 +391,67 @@ function testTC05_SecurityAndDatabaseConsistency(ctx) {
   ctx.assert(!uniqueTables.has(undefined) && !uniqueTables.has(""), "TC-05.07", "Ningún nombre de tabla maestra debe ser indefinido o vacío");
 }
 
+/**
+ * TC-06: Control de Presencia y Sincronización en Tiempo Real
+ */
+function testTC06_PresenceAndSyncRealtime(ctx) {
+  // 1. Verificación de namespaces y endpoints
+  ctx.assert(typeof PresenceManager !== 'undefined', "TC-06.01", "PresenceManager debe estar definido");
+  ctx.assert(typeof VersionManager !== 'undefined', "TC-06.02", "VersionManager debe estar definido");
+  ctx.assert(typeof acquireAssetPresence === 'function', "TC-06.03", "acquireAssetPresence debe ser una función disponible");
+  ctx.assert(typeof renewAssetPresence === 'function', "TC-06.04", "renewAssetPresence debe ser una función disponible");
+  ctx.assert(typeof releaseAssetPresence === 'function', "TC-06.05", "releaseAssetPresence debe ser una función disponible");
+  ctx.assert(typeof checkSyncStatus === 'function', "TC-06.06", "checkSyncStatus debe ser una función disponible");
+
+  // 2. Flujo de Presencia: Adquisición por Usuario A
+  const assetTestId = "TEST-ESD-999";
+  const userA = "auditor.alpha@plexus.com";
+  const userB = "auditor.beta@plexus.com";
+
+  // Liberar previo para asegurar estado limpio
+  PresenceManager.release(assetTestId, userA);
+  PresenceManager.release(assetTestId, userB);
+
+  const resA = PresenceManager.acquire({ assetId: assetTestId, userEmail: userA, userName: "Alpha", force: false });
+  ctx.assertEqual(resA.status, "ACQUIRED", "TC-06.07", "Usuario A debe adquirir el lock exitosamente");
+  ctx.assertEqual(resA.holder.userEmail, userA, "TC-06.08", "El poseedor registrado debe ser Usuario A");
+
+  // 3. Intento de adquisición concurrente por Usuario B (Conflicto)
+  const resB = PresenceManager.acquire({ assetId: assetTestId, userEmail: userB, userName: "Beta", force: false });
+  ctx.assertEqual(resB.status, "LOCKED", "TC-06.09", "Usuario B debe ser bloqueado con status LOCKED");
+  ctx.assertEqual(resB.holder.userEmail, userA, "TC-06.10", "El reporte de bloqueo debe identificar al Usuario A");
+
+  // 4. Renovación de Heartbeat
+  const renewRes = PresenceManager.renew(assetTestId, userA);
+  ctx.assertEqual(renewRes.status, "RENEWED", "TC-06.11", "Usuario A debe renovar el heartbeat exitosamente");
+
+  // 5. Usuario B toma el control forzadamente (force: true)
+  const resBForce = PresenceManager.acquire({ assetId: assetTestId, userEmail: userB, userName: "Beta", force: true });
+  ctx.assertEqual(resBForce.status, "OVERRIDDEN", "TC-06.12", "Usuario B con force:true debe tomar el control con status OVERRIDDEN");
+
+  // 6. Intento de renovación por Usuario A despojado
+  const renewResAOld = PresenceManager.renew(assetTestId, userA);
+  ctx.assertEqual(renewResAOld.status, "OVERRIDDEN", "TC-06.13", "Usuario A debe ser notificado de OVERRIDDEN al intentar renovar");
+
+  // 7. Liberación de lock
+  PresenceManager.release(assetTestId, userB);
+  const checkAfterRelease = PresenceManager.check(assetTestId);
+  ctx.assertEqual(checkAfterRelease, null, "TC-06.14", "Tras liberación, el lock en caché debe ser nulo");
+
+  // 8. VersionManager y Polling de sincronización
+  const vInitial = VersionManager.getVersion();
+  ctx.assert(typeof vInitial === 'string' && vInitial.length > 0, "TC-06.15", "VersionManager.getVersion() debe retornar un string de versión");
+
+  const syncSame = VersionManager.checkSyncStatus(vInitial);
+  ctx.assertEqual(syncSame.hasChanges, false, "TC-06.16", "Cliente con versión actual debe reportar hasChanges: false");
+
+  const vNew = VersionManager.bumpVersion("ASSET_UPDATE");
+  ctx.assert(typeof vNew === 'string' && vNew.length > 0, "TC-06.17", "VersionManager.bumpVersion() debe retornar versión actualizada");
+
+  const syncOutdated = VersionManager.checkSyncStatus("0");
+  ctx.assertEqual(syncOutdated.hasChanges, true, "TC-06.18", "Cliente con versión antigua debe reportar hasChanges: true");
+}
+
 // Soporte para ejecución en entornos de testing locales / Node.js
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -371,6 +460,7 @@ if (typeof module !== 'undefined' && module.exports) {
     testTC02_UtilityFunctions,
     testTC03_DefensiveGuards,
     testTC04_BatchingAndPerformance,
-    testTC05_SecurityAndDatabaseConsistency
+    testTC05_SecurityAndDatabaseConsistency,
+    testTC06_PresenceAndSyncRealtime
   };
 }

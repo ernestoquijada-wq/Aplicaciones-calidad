@@ -1,7 +1,7 @@
 <!-- ========================================== -->
 <!-- 🟢 VISTA: HEADER / BARRA SUPERIOR          -->
 <!-- ========================================== -->
-<header class="bg-slate-900 text-white px-6 py-3 shadow-xl z-20 flex justify-between items-center bg-gradient-to-r from-[#005565] to-[#003d4d]">
+<header class="bg-slate-900 text-white px-6 py-3 shadow-xl z-20 flex justify-between items-center bg-gradient-to-r from-[#005565] to-[#003d4d] relative">
   <div class="flex items-center gap-3">
     <div class="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/10 shadow-inner">
         <i class="fas fa-bolt text-yellow-300 text-lg"></i>
@@ -11,11 +11,47 @@
       <p class="text-[8px] text-emerald-200 font-bold uppercase tracking-widest mt-0.5 pl-0.5">{{ $t('header.developedBy') }}</p>
     </div>
   </div>
-  <div class="flex gap-2">
-    <button @click="toggleLanguage" class="text-white/70 hover:bg-white/20 hover:text-white px-3 py-2 rounded-lg text-[10px] font-black transition-all duration-300 border border-white/10 mr-2 uppercase">
-      {{ $t('header.btn_lang') }}
+
+  <div class="flex items-center gap-2">
+    <!-- Selector de Idiomas (4 Idiomas: ES, EN, ZH, TH) -->
+    <div class="relative mr-2">
+      <button 
+        @click="showLangDropdown = !showLangDropdown" 
+        class="flex items-center gap-2 bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/20 shadow-sm"
+        :title="$t('header.lang_title')">
+        <span class="text-sm leading-none">{{ currentLanguage.flag }}</span>
+        <span class="font-extrabold text-[11px] tracking-wide">{{ currentLanguage.name }}</span>
+        <i class="fas fa-chevron-down text-[9px] opacity-75 ml-1 transition-transform duration-200" :class="{'rotate-180': showLangDropdown}"></i>
+      </button>
+
+      <!-- Menú Desplegable Flotante -->
+      <div 
+        v-if="showLangDropdown" 
+        class="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl py-2 z-50 border border-slate-200 animate-fade">
+        <div class="px-3.5 py-1 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-1">
+          <i class="fas fa-globe mr-1 text-[#005565]"></i> {{ $t('header.lang_title') }}
+        </div>
+        <button 
+          v-for="lang in availableLanguages" 
+          :key="lang.code" 
+          @click="setLanguage(lang.code)" 
+          class="w-full text-left px-3.5 py-2 text-xs font-bold flex items-center justify-between hover:bg-slate-50 transition-colors"
+          :class="locale === lang.code ? 'text-[#005565] bg-cyan-50/70 font-black' : 'text-slate-700'">
+          <span class="flex items-center gap-2.5">
+            <span class="text-base leading-none">{{ lang.flag }}</span>
+            <span>{{ lang.name }}</span>
+          </span>
+          <i v-if="locale === lang.code" class="fas fa-check text-[#005565] text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Navegación Dashboard / Configuración -->
+    <button @click="view='dashboard'" :class="view==='dashboard'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2">
+      <i class="fas fa-chart-pie"></i> {{ $t('header.btn_dashboard') }}
     </button>
-    <button @click="view='dashboard'" :class="view==='dashboard'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2"><i class="fas fa-chart-pie"></i> {{ $t('header.btn_dashboard') }}</button>
-    <button v-if="userPermissions.canConfig || userPermissions.canUsers" @click="view='admin'" :class="view==='admin'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2"><i class="fas fa-cogs"></i> {{ $t('header.btn_config') }}</button>
+    <button v-if="userPermissions.canConfig || userPermissions.canUsers" @click="view='admin'" :class="view==='admin'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2">
+      <i class="fas fa-cogs"></i> {{ $t('header.btn_config') }}
+    </button>
   </div>
 </header>

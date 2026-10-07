@@ -1,6 +1,7 @@
 <script>
   // ==========================================
   // 🟢 DICCIONARIO MAESTRO (Vue-i18n)
+  // Soporte Multi-idioma: ES, EN, ZH (Chino), TH (Tailandés)
   // ==========================================
   const messages = {
     ES: {
@@ -8,7 +9,7 @@
         developedBy: "Desarrollado sobre Google Workspace",
         btn_dashboard: "DASHBOARD",
         btn_config: "CONFIG",
-        btn_lang: "🇺🇸 EN"
+        lang_title: "Idioma"
       },
       dash: {
         cards: {
@@ -29,7 +30,8 @@
           quadrant: "Cuadrante",
           month: "Mes Vencimiento",
           all: "TODOS",
-          basic: "BÁSICO"
+          basic: "BÁSICO",
+          clear: "Limpiar Filtros"
         },
         list: {
           results: "Resultados",
@@ -45,7 +47,8 @@
           project: "PROYECTO",
           quadrant: "CUADRANTE",
           alert: "ALERTA",
-          expires: "VENCIMIENTO"
+          expires: "VENCIMIENTO",
+          audits: "Verificaciones"
         }
       },
       form: {
@@ -71,6 +74,7 @@
         verif_date: "Fecha de Verificación",
         limit: "Límite",
         na: "NO APLICA",
+        na_hint: "Marcar como No Aplica",
         real_value: "Valor Real",
         tech_rec: "Recomendación Técnica",
         obs: "Observaciones Adicionales",
@@ -82,6 +86,112 @@
         btn_admin_move: "REGISTRAR MOVIMIENTO ADMINISTRATIVO",
         btn_reject: "RECHAZAR (FAIL)",
         btn_approve: "APROBAR (PASS)"
+      },
+      admin: {
+        tabs: {
+          catalogs: "Catálogos",
+          rules: "Reglas ESD",
+          status: "Estados",
+          email: "Correos",
+          ai: "Copiloto IA",
+          security: "Seguridad",
+          datahub: "Importación Masiva"
+        },
+        catalogs: {
+          quadrants: "Cuadrantes",
+          factories: "Fábricas",
+          projects: "Proyectos",
+          auditors: "Responsables",
+          templates: "Plantillas",
+          ticketFields: "Campos de Ticket",
+          emailGroups: "Grupos de Correo",
+          aiPersonalities: "Personalidades IA"
+        },
+        visual_help_title: "Ayuda Visual en Verificación",
+        visual_help_desc: "Mostrar evidencia del ticket abierto al intentar reparar",
+        active: "ACTIVADO",
+        inactive: "DESACTIVADO",
+        edit_element: "Editar Elemento",
+        new_element: "Nuevo Elemento",
+        active_cat: "Categoría Activa"
+      },
+      modals: {
+        history: {
+          title: "Historial de Verificación",
+          assetId: "ID ACTIVO",
+          type: "TIPO",
+          verif: "Verif",
+          expires: "Vence",
+          obs: "OBSERVACIONES",
+          close: "Cerrar Ventana"
+        },
+        help: {
+          title: "Centro de Ayuda",
+          workflow: "Flujo de Trabajo",
+          workflow_1: "1. Registrar Activo: Use el botón (+) para dar de alta equipos nuevos. Es obligatorio llenar todos los campos.",
+          workflow_2: "2. Verificación: Seleccione una tarjeta del Dashboard para auditar. Puede APROBAR (PASS) o RECHAZAR (FAIL).",
+          colors: "Interpretación de Colores",
+          green: "Verde (OK): Medición dentro del estándar.",
+          amber: "Ámbar (Riesgo): Dentro del límite pero cercano a fallar (Tolerancia).",
+          red: "Rojo (Falla): Fuera del límite permitido. Requiere acción.",
+          na_title: "Botón N/A",
+          na_desc: "Si una medición no aplica para el equipo actual, presione el botón [N/A] junto al campo numérico.",
+          support_title: "Soporte Técnico",
+          support_desc: "Si encuentra un error o necesita un nuevo tipo de activo, contacte a Ingeniería de Calidad."
+        },
+        ticket: {
+          title: "Seguimiento de Falla (CAPA)",
+          affected_asset: "ID del Activo Afectado",
+          upload_file: "Subir Archivo",
+          file_uploaded: "Archivo cargado con éxito",
+          take_photo: "ABRIR CÁMARA Y TOMAR FOTO",
+          take_more: "TOMAR MÁS FOTOGRAFÍAS",
+          extra_emails: "Correos adicionales o externos:",
+          add_recipient: "+ AÑADIR OTRO DESTINATARIO",
+          submit_btn: "GUARDAR",
+          submitting_btn: "ENVIANDO EVIDENCIA..."
+        },
+        camera: {
+          title: "Evidencia Fotográfica",
+          shoot_hint: "Enfoque la falla y dispare (Usa la Barra Espaciadora)",
+          photos_count: "FOTOS",
+          done: "LISTO",
+          nav_hint: "Navegar con flechas • ESC Cerrar"
+        },
+        datahub: {
+          title: "Data Hub - Importación Masiva",
+          upload_hint: "Sube tu plantilla .CSV",
+          upload_desc: "El sistema analizará los datos y detectará duplicados antes de guardarlos.",
+          btn_select_csv: "Seleccionar Archivo CSV",
+          total_read: "Total Leídos",
+          new_records: "Nuevos",
+          duplicate_records: "Duplicados",
+          discard: "Descartar",
+          inject_new: "Inyectar Nuevos",
+          update_existing: "Actualizar Existentes"
+        }
+      },
+      status: {
+        ACTIVO: "Activo",
+        FALLA: "Falla",
+        VENCIDO: "Vencido",
+        POR_VENCER: "Por Vencer",
+        CUMPLE: "Cumple",
+        BAJA: "Baja",
+        PENDIENTE: "Pendiente",
+        REPARACION: "En Reparación",
+        PASS: "Cumple",
+        FAIL: "Falla",
+        OK: "Correcto"
+      },
+      common: {
+        save: "Guardar",
+        cancel: "Cancelar",
+        close: "Cerrar",
+        loading: "Cargando...",
+        processing: "Procesando...",
+        success: "Operación Exitosa",
+        error: "Error"
       }
     },
     EN: {
@@ -89,7 +199,7 @@
         developedBy: "Built on Google Workspace",
         btn_dashboard: "DASHBOARD",
         btn_config: "SETTINGS",
-        btn_lang: "🇲🇽 ES"
+        lang_title: "Language"
       },
       dash: {
         cards: {
@@ -110,7 +220,8 @@
           quadrant: "Quadrant",
           month: "Expiration Month",
           all: "ALL",
-          basic: "BASIC"
+          basic: "BASIC",
+          clear: "Clear Filters"
         },
         list: {
           results: "Results",
@@ -126,7 +237,8 @@
           project: "PROJECT",
           quadrant: "QUADRANT",
           alert: "ALERT",
-          expires: "EXPIRATION"
+          expires: "EXPIRATION",
+          audits: "Audits"
         }
       },
       form: {
@@ -152,6 +264,7 @@
         verif_date: "Verification Date",
         limit: "Limit",
         na: "N/A",
+        na_hint: "Mark as Not Applicable",
         real_value: "Real Value",
         tech_rec: "Technical Recommendation",
         obs: "Additional Observations",
@@ -163,6 +276,492 @@
         btn_admin_move: "REGISTER ADMIN MOVEMENT",
         btn_reject: "REJECT (FAIL)",
         btn_approve: "APPROVE (PASS)"
+      },
+      admin: {
+        tabs: {
+          catalogs: "Catalogs",
+          rules: "ESD Rules",
+          status: "Statuses",
+          email: "Email Alerts",
+          ai: "AI Copilot",
+          security: "Security & Roles",
+          datahub: "Bulk Data Hub"
+        },
+        catalogs: {
+          quadrants: "Quadrants",
+          factories: "Factories",
+          projects: "Projects",
+          auditors: "Responsible Staff",
+          templates: "Templates",
+          ticketFields: "Ticket Fields",
+          emailGroups: "Email Groups",
+          aiPersonalities: "AI Personalities"
+        },
+        visual_help_title: "Visual Verification Aid",
+        visual_help_desc: "Show open ticket evidence during repair evaluation",
+        active: "ACTIVE",
+        inactive: "DISABLED",
+        edit_element: "Edit Item",
+        new_element: "New Item",
+        active_cat: "Active Category"
+      },
+      modals: {
+        history: {
+          title: "Verification History",
+          assetId: "ASSET ID",
+          type: "TYPE",
+          verif: "Audit",
+          expires: "Expires",
+          obs: "OBSERVATIONS",
+          close: "Close Window"
+        },
+        help: {
+          title: "Help Center",
+          workflow: "Workflow",
+          workflow_1: "1. Register Asset: Use the (+) button to register new equipment. All fields are required.",
+          workflow_2: "2. Verification: Select a card from Dashboard to audit. You can APPROVE (PASS) or REJECT (FAIL).",
+          colors: "Color Coding",
+          green: "Green (OK): Measurement within standard limits.",
+          amber: "Amber (Risk): Within limit but near failure (Tolerance).",
+          red: "Red (Fail): Outside permissible limits. Corrective action required.",
+          na_title: "N/A Button",
+          na_desc: "If a measurement does not apply, click the [N/A] button next to the input.",
+          support_title: "Technical Support",
+          support_desc: "If you encounter any issues or need a new asset rule, contact Quality Engineering."
+        },
+        ticket: {
+          title: "Failure Follow-up (CAPA)",
+          affected_asset: "Affected Asset ID",
+          upload_file: "Upload File",
+          file_uploaded: "File uploaded successfully",
+          take_photo: "OPEN CAMERA & TAKE PHOTO",
+          take_more: "TAKE MORE PHOTOS",
+          extra_emails: "Additional or external emails:",
+          add_recipient: "+ ADD ANOTHER RECIPIENT",
+          submit_btn: "SAVE",
+          submitting_btn: "SENDING EVIDENCE..."
+        },
+        camera: {
+          title: "Photographic Evidence",
+          shoot_hint: "Focus on defect and shoot (Use Spacebar)",
+          photos_count: "PHOTOS",
+          done: "DONE",
+          nav_hint: "Navigate with arrows • ESC Close"
+        },
+        datahub: {
+          title: "Data Hub - Bulk Import",
+          upload_hint: "Upload your .CSV template",
+          upload_desc: "The system analyzes data and checks for duplicates before saving.",
+          btn_select_csv: "Select CSV File",
+          total_read: "Total Read",
+          new_records: "New Records",
+          duplicate_records: "Duplicates",
+          discard: "Discard",
+          inject_new: "Inject New",
+          update_existing: "Update Existing"
+        }
+      },
+      status: {
+        ACTIVO: "Active",
+        FALLA: "Failed",
+        VENCIDO: "Expired",
+        POR_VENCER: "Expiring Soon",
+        CUMPLE: "Compliant",
+        BAJA: "Decommissioned",
+        PENDIENTE: "Pending",
+        REPARACION: "Under Repair",
+        PASS: "Compliant",
+        FAIL: "Failed",
+        OK: "OK"
+      },
+      common: {
+        save: "Save",
+        cancel: "Cancel",
+        close: "Close",
+        loading: "Loading...",
+        processing: "Processing...",
+        success: "Success",
+        error: "Error"
+      }
+    },
+    ZH: {
+      header: {
+        developedBy: "基于 Google Workspace 构建",
+        btn_dashboard: "控制面板",
+        btn_config: "系统配置",
+        lang_title: "语言"
+      },
+      dash: {
+        cards: {
+          total: "总资产数",
+          compliant: "合格达标",
+          expired: "已过期",
+          warning: "即将过期",
+          fail: "故障 / 不合格"
+        },
+        filters: {
+          search: "综合快速搜索",
+          search_ph: "输入资产编号、序列号或位置...",
+          type: "资产类别",
+          status: "设备状态",
+          resp: "检验责任人",
+          factory: "所属厂区",
+          project: "所属项目",
+          quadrant: "所在区域",
+          month: "到期月份",
+          all: "全部",
+          basic: "基础导出",
+          clear: "清空筛选"
+        },
+        list: {
+          results: "检索结果",
+          show: "每页显示",
+          empty: "请选择上方卡片或输入筛选条件"
+        },
+        item: {
+          id: "资产编号",
+          type: "资产类型",
+          status: "运行状态",
+          resp: "检验责任人",
+          factory: "厂区",
+          project: "项目",
+          quadrant: "区域象限",
+          alert: "报警提示",
+          expires: "到期日期",
+          audits: "检验次数"
+        }
+      },
+      form: {
+        title_new: "登记新资产",
+        title_verify: "防静电定期检验",
+        id: "资产编号:",
+        fail_alert: "设备处于故障状态 (工单处理中)",
+        fail_desc: "如需评估维修效果并关闭 CAPA 工单，请在下方测量表单中录入最新的实测数值。",
+        capture_meas: "录入实测读数",
+        prev_evidence: "故障报告初始凭证与照片",
+        no_photos: "此工单暂未附加照片凭证。",
+        info_gen: "基础通用信息",
+        status: "当前状态",
+        resp: "检验责任人",
+        factory: "所属厂区",
+        project: "所属项目",
+        quadrant: "所在区域",
+        quadrant_auto: "自动识别区域",
+        asset_type: "资产类别",
+        select: "请选择...",
+        tech_readings: "技术测量参数",
+        enable_edit: "开启数据录入",
+        verif_date: "检验日期",
+        limit: "技术标准阈值",
+        na: "不适用 (N/A)",
+        na_hint: "标记为不适用",
+        real_value: "实测数值",
+        tech_rec: "技术改进建议",
+        obs: "附加备注说明",
+        obs_ph: "请在此输入检验备注...",
+        btn_history: "查看历史检验记录",
+        btn_cancel: "取消并返回",
+        btn_processing: "正在处理...",
+        btn_register_new: "提交并注册资产",
+        btn_admin_move: "登记管理性流转变动",
+        btn_reject: "判定不合格 (FAIL)",
+        btn_approve: "判定合格通过 (PASS)"
+      },
+      admin: {
+        tabs: {
+          catalogs: "基础目录",
+          rules: "ESD 规范规则",
+          status: "状态管理",
+          email: "邮件通知配置",
+          ai: "AI 智能副驾驶",
+          security: "权限与安全",
+          datahub: "批量数据中心"
+        },
+        catalogs: {
+          quadrants: "区域象限",
+          factories: "工厂厂区",
+          projects: "生产项目",
+          auditors: "检验人员",
+          templates: "报表模板",
+          ticketFields: "工单字段",
+          emailGroups: "邮件群组",
+          aiPersonalities: "AI 人设配置"
+        },
+        visual_help_title: "复检视觉辅助支持",
+        visual_help_desc: "在复核维修效果时，显示故障工单的历史照片与凭据",
+        active: "已开启",
+        inactive: "已关闭",
+        edit_element: "编辑项目",
+        new_element: "新增项目",
+        active_cat: "当前激活分类"
+      },
+      modals: {
+        history: {
+          title: "历史检验记录详情",
+          assetId: "资产编号",
+          type: "设备类型",
+          verif: "检验",
+          expires: "到期",
+          obs: "检验备注",
+          close: "关闭窗口"
+        },
+        help: {
+          title: "防静电控制系统帮助中心",
+          workflow: "标准作业流程",
+          workflow_1: "1. 新建资产：点击右下角 (+) 浮动按钮录入新设备，所有关键属性为必填项。",
+          workflow_2: "2. 审核检验：在控制面板中选择相应卡片打开详情，录入测量值后可点击【合格】或【不合格】。",
+          colors: "状态颜色指示含义",
+          green: "绿色 (OK)：所有静电参数均在国际规范允许范围内。",
+          amber: "黄色 (风险预警)：数值仍在合格线内，但已接近临界公差上限。",
+          red: "红色 (超标故障)：超出允许公差，必须开具 CAPA 纠正工单并停机处理。",
+          na_title: "N/A 不适用按钮",
+          na_desc: "若当前设备类别无需检测某项指标，点击数值框右侧的 [N/A] 按钮，系统将规范记录为免检状态。",
+          support_title: "技术支持与联络",
+          support_desc: "如遇到系统异常或需要新增资产规范，请直接联系质量工程部 (Quality Engineering)。"
+        },
+        ticket: {
+          title: "故障跟踪与纠正预防措施 (CAPA)",
+          affected_asset: "受影响资产编号",
+          upload_file: "上传凭证文件",
+          file_uploaded: "文件已成功上传",
+          take_photo: "启动相机拍摄现场照片",
+          take_more: "继续拍摄照片",
+          extra_emails: "额外抄送邮箱 (内部/外部):",
+          add_recipient: "+ 添加其他收件人",
+          submit_btn: "提交保存工单",
+          submitting_btn: "正在上传凭证数据..."
+        },
+        camera: {
+          title: "现场拍照取证",
+          shoot_hint: "对准缺陷部位并按下拍照（亦可按键盘空格键）",
+          photos_count: "张照片",
+          done: "拍照完毕",
+          nav_hint: "键盘左右键切换照片 • ESC 退出全屏"
+        },
+        datahub: {
+          title: "数据中心 - CSV 批量导入",
+          upload_hint: "上传标准 .CSV 模板文件",
+          upload_desc: "系统将自动解析每行数据，并在写入数据库前智能排查重复项与缺失字段。",
+          btn_select_csv: "选择本地 CSV 文件",
+          total_read: "读取总计",
+          new_records: "待新增记录",
+          duplicate_records: "重复/待更新",
+          discard: "放弃重置",
+          inject_new: "确认录入新增数据",
+          update_existing: "覆盖更新已有数据"
+        }
+      },
+      status: {
+        ACTIVO: "正常运行",
+        FALLA: "故障 / 不合格",
+        VENCIDO: "已过期",
+        POR_VENCER: "即将过期",
+        CUMPLE: "合格达标",
+        BAJA: "已注销 / 报废",
+        PENDIENTE: "待审核",
+        REPARACION: "维修中",
+        PASS: "合格",
+        FAIL: "不合格",
+        OK: "正常"
+      },
+      common: {
+        save: "保存",
+        cancel: "取消",
+        close: "关闭",
+        loading: "加载中...",
+        processing: "正在处理...",
+        success: "操作成功",
+        error: "系统错误"
+      }
+    },
+    TH: {
+      header: {
+        developedBy: "พัฒนาบน Google Workspace",
+        btn_dashboard: "แดชบอร์ด",
+        btn_config: "ตั้งค่าระบบ",
+        lang_title: "ภาษา"
+      },
+      dash: {
+        cards: {
+          total: "สินทรัพย์ทั้งหมด",
+          compliant: "ผ่านเกณฑ์",
+          expired: "หมดอายุ",
+          warning: "ใกล้หมดอายุ",
+          fail: "ไม่ผ่านเกณฑ์"
+        },
+        filters: {
+          search: "ค้นหาทั่วไป",
+          search_ph: "ค้นหาตามรหัส ID, ซีเรียล, โซนที่ตั้ง...",
+          type: "ประเภทสินทรัพย์",
+          status: "สถานะ",
+          resp: "ผู้รับผิดชอบการตรวจ",
+          factory: "โรงงาน",
+          project: "โครงการ",
+          quadrant: "โซนพิกัด",
+          month: "เดือนที่หมดอายุ",
+          all: "ทั้งหมด",
+          basic: "ส่งออกพื้นฐาน",
+          clear: "ล้างตัวกรอง"
+        },
+        list: {
+          results: "ผลการค้นหา",
+          show: "แสดงหน้าละ",
+          empty: "กรุณาเลือกการ์ดด้านบนหรือใช้ตัวกรองเพื่อดูรายการ"
+        },
+        item: {
+          id: "รหัสสินทรัพย์",
+          type: "ประเภท",
+          status: "สถานะ",
+          resp: "ผู้รับผิดชอบการตรวจ",
+          factory: "โรงงาน",
+          project: "โครงการ",
+          quadrant: "โซนพิกัด",
+          alert: "การแจ้งเตือน",
+          expires: "วันหมดอายุ",
+          audits: "จำนวนครั้งที่ตรวจ"
+        }
+      },
+      form: {
+        title_new: "ลงทะเบียนสินทรัพย์ใหม่",
+        title_verify: "การตรวจสอบมาตรฐาน ESD",
+        id: "รหัส:",
+        fail_alert: "อุปกรณ์มีปัญหา (เปิดทิคเก็ตอยู่)",
+        fail_desc: "เพื่อประเมินการซ่อมแซมและปิดทิคเก็ต คุณต้องกรอกค่าการวัดจริงล่าสุดในแบบฟอร์มด้านล่าง",
+        capture_meas: "บันทึกผลการวัด",
+        prev_evidence: "หลักฐานและรูปภาพจากรายงานความเสียหาย",
+        no_photos: "ไม่มีรูปภาพแนบในทิคเก็ตนี้",
+        info_gen: "ข้อมูลทั่วไปของอุปกรณ์",
+        status: "สถานะปัจจุบัน",
+        resp: "ผู้รับผิดชอบการตรวจ",
+        factory: "โรงงาน",
+        project: "โครงการ",
+        quadrant: "โซนพิกัด",
+        quadrant_auto: "โซนพิกัด (อัตโนมัติ)",
+        asset_type: "ประเภทสินทรัพย์",
+        select: "กรุณาเลือก...",
+        tech_readings: "ค่าการวัดทางเทคนิค",
+        enable_edit: "เปิดใช้งานการบันทึกข้อมูล",
+        verif_date: "วันที่ตรวจสอบ",
+        limit: "ขีดจำกัดมาตรฐาน",
+        na: "ไม่เกี่ยวข้อง (N/A)",
+        na_hint: "ทำเครื่องหมายว่าไม่เกี่ยวข้อง",
+        real_value: "ค่าที่วัดได้จริง",
+        tech_rec: "คำแนะนำทางเทคนิค",
+        obs: "ข้อสังเกตเพิ่มเติม",
+        obs_ph: "พิมพ์ข้อสังเกตที่นี่...",
+        btn_history: "ดูประวัติการตรวจสอบย้อนหลัง",
+        btn_cancel: "ยกเลิก",
+        btn_processing: "กำลังดำเนินการ...",
+        btn_register_new: "บันทึกและลงทะเบียนสินทรัพย์",
+        btn_admin_move: "บันทึกการเคลื่อนย้ายทางธุรการ",
+        btn_reject: "ไม่อนุมัติ (FAIL)",
+        btn_approve: "อนุมัติผ่านเกณฑ์ (PASS)"
+      },
+      admin: {
+        tabs: {
+          catalogs: "แคตตาล็อก",
+          rules: "กฎเกณฑ์ ESD",
+          status: "การจัดการสถานะ",
+          email: "การแจ้งเตือนอีเมล",
+          ai: "ผู้ช่วย AI",
+          security: "ความปลอดภัยและสิทธิ์",
+          datahub: "นำเข้าข้อมูลจำนวนมาก"
+        },
+        catalogs: {
+          quadrants: "โซนพิกัด",
+          factories: "โรงงาน",
+          projects: "โครงการ",
+          auditors: "ผู้ตรวจสอบ",
+          templates: "เทมเพลตรายงาน",
+          ticketFields: "ฟิลด์ทิคเก็ต",
+          emailGroups: "กลุ่มอีเมล",
+          aiPersonalities: "บุคลิกภาพ AI"
+        },
+        visual_help_title: "ตัวช่วยแสดงผลในการตรวจสอบ",
+        visual_help_desc: "แสดงหลักฐานและรูปถ่ายจากทิคเก็ตระหว่างการประเมินการซ่อมแซม",
+        active: "เปิดใช้งาน",
+        inactive: "ปิดใช้งาน",
+        edit_element: "แก้ไขรายการ",
+        new_element: "เพิ่มรายการใหม่",
+        active_cat: "หมวดหมู่ที่ใช้งานอยู่"
+      },
+      modals: {
+        history: {
+          title: "ประวัติการตรวจสอบย้อนหลัง",
+          assetId: "รหัสสินทรัพย์",
+          type: "ประเภท",
+          verif: "ตรวจ",
+          expires: "หมดอายุ",
+          obs: "ข้อสังเกต",
+          close: "ปิดหน้าต่าง"
+        },
+        help: {
+          title: "ศูนย์ช่วยเหลือระบบควบคุม ESD",
+          workflow: "ขั้นตอนการทำงานมาตรฐาน",
+          workflow_1: "1. ลงทะเบียนสินทรัพย์: ใช้ปุ่ม (+) ด้านล่างขวาเพื่อลงทะเบียนอุปกรณ์ใหม่ จำเป็นต้องกรอกทุกช่อง",
+          workflow_2: "2. การตรวจสอบ: เลือกการ์ดจากแดชบอร์ดเพื่อตรวจสอบ จากนั้นสามารถกด อนุมัติ (PASS) หรือ ปฏิเสธ (FAIL)",
+          colors: "ความหมายของโค้ดสี",
+          green: "สีเขียว (OK): ค่าการวัดอยู่ในเกณฑ์มาตรฐานที่ยอมรับได้",
+          amber: "สีเหลือง (ความเสี่ยง): อยู่ในเกณฑ์แต่ใกล้จะเกินค่าพิกัดความเผื่อ",
+          red: "สีแดง (ล้มเหลว): เกินขีดจำกัดที่กำหนด ต้องเปิดทิคเก็ตแก้ไขทันที",
+          na_title: "ปุ่ม N/A",
+          na_desc: "หากอุปกรณ์ไม่จำเป็นต้องวัดค่าบางประเภท ให้คลิกปุ่ม [N/A] ด้านข้างช่องกรอกตัวเลข",
+          support_title: "ฝ่ายสนับสนุนด้านเทคนิค",
+          support_desc: "หากพบข้อผิดพลาดหรือต้องการความช่วยเหลือ กรุณาติดต่อฝ่ายวิศวกรรมคุณภาพ (Quality Engineering)"
+        },
+        ticket: {
+          title: "การติดตามความเสียหาย (CAPA)",
+          affected_asset: "รหัสสินทรัพย์ที่ได้รับผลกระทบ",
+          upload_file: "อัปโหลดไฟล์แนบ",
+          file_uploaded: "อัปโหลดไฟล์เรียบร้อยแล้ว",
+          take_photo: "เปิดกล้องและถ่ายภาพ",
+          take_more: "ถ่ายภาพเพิ่มเติม",
+          extra_emails: "อีเมลเพิ่มเติมหรือภายนอก:",
+          add_recipient: "+ เพิ่มผู้รับอื่น",
+          submit_btn: "บันทึกทิคเก็ต",
+          submitting_btn: "กำลังส่งหลักฐาน..."
+        },
+        camera: {
+          title: "หลักฐานภาพถ่าย",
+          shoot_hint: "โฟกัสที่จุดบกพร่องแล้วกดถ่าย (ใช้ Spacebar ได้)",
+          photos_count: "รูปภาพ",
+          done: "เสร็จสิ้น",
+          nav_hint: "เลื่อนด้วยลูกศรซ้าย-ขวา • ESC ปิดหน้าจอ"
+        },
+        datahub: {
+          title: "ศูนย์ข้อมูล - นำเข้าไฟล์ CSV จำนวนมาก",
+          upload_hint: "อัปโหลดไฟล์เทมเพลต .CSV ของคุณ",
+          upload_desc: "ระบบจะวิเคราะห์ข้อมูลและตรวจสอบรายการซ้ำโดยอัตโนมัติก่อนบันทึกลงฐานข้อมูล",
+          btn_select_csv: "เลือกไฟล์ CSV",
+          total_read: "อ่านทั้งหมด",
+          new_records: "รายการใหม่",
+          duplicate_records: "รายการซ้ำ / อัปเดต",
+          discard: "ยกเลิกข้อมูล",
+          inject_new: "ยืนยันนำเข้ารายการใหม่",
+          update_existing: "อัปเดตรายการเดิมที่มีอยู่"
+        }
+      },
+      status: {
+        ACTIVO: "ใช้งานปกติ",
+        FALLA: "ไม่ผ่านเกณฑ์ / ขัดข้อง",
+        VENCIDO: "หมดอายุ",
+        POR_VENCER: "ใกล้หมดอายุ",
+        CUMPLE: "ผ่านเกณฑ์",
+        BAJA: "จำหน่าย / ยกเลิก",
+        PENDIENTE: "รอดำเนินการ",
+        REPARACION: "กำลังซ่อมแซม",
+        PASS: "ผ่านเกณฑ์",
+        FAIL: "ไม่ผ่านเกณฑ์",
+        OK: "ปกติ"
+      },
+      common: {
+        save: "บันทึก",
+        cancel: "ยกเลิก",
+        close: "ปิด",
+        loading: "กำลังโหลด...",
+        processing: "กำลังดำเนินการ...",
+        success: "ดำเนินการสำเร็จ",
+        error: "ข้อผิดพลาด"
       }
     }
   };

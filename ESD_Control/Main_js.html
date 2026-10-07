@@ -5,14 +5,55 @@
   const FIELD_MAP = { surfaceRes: { label: 'Surface Resistance', type: 'scientific' }, floorMat: { label: 'Floor Mat Resistance', type: 'scientific' }, elecRes: { label: 'Electrical Resistance', type: 'numeric' }, impedance: { label: 'Impedance', type: 'numeric' }, voltage: { label: 'Voltage', type: 'numeric' }, jack: { label: 'Jack', type: 'numeric' } };
   const ICONS = ['fa-microscope','fa-tools','fa-robot','fa-bolt','fa-plug','fa-server','fa-desktop','fa-print','fa-box','fa-pallet','fa-industry','fa-hard-hat','fa-wrench','fa-hammer','fa-broadcast-tower','fa-wifi','fa-car-battery','fa-charging-station', 'fa-chair', 'fa-dolly', 'fa-network-wired'];
   
-  const runGAS = (func, ...args) => new Promise((resolve, reject) => { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[func](...args); });
+  // GESTIÓN DE VALIDACIÓN Y COMUNICACIÓN ASÍNCRONA
+  const FrontendValidator = {
+    isBlank(val) {
+      return val === null || val === undefined || String(val).trim() === '';
+    },
+    sanitize(val) {
+      return (val === null || val === undefined) ? '' : String(val).trim();
+    },
+    isValidEmail(email) {
+      if (this.isBlank(email)) return false;
+      const clean = String(email).trim().toLowerCase();
+      if (!clean.includes('@')) return false;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(clean);
+    }
+  };
+
+  let activeGasRequests = 0;
+  const runGAS = (func, ...args) => new Promise((resolve, reject) => { 
+    activeGasRequests++;
+    if (!window.google?.script?.run) {
+      activeGasRequests = Math.max(0, activeGasRequests - 1);
+      return reject(new Error("Google Apps Script no disponible"));
+    }
+    google.script.run
+      .withSuccessHandler(res => {
+        activeGasRequests = Math.max(0, activeGasRequests - 1);
+        resolve(res);
+      })
+      .withFailureHandler(err => {
+        activeGasRequests = Math.max(0, activeGasRequests - 1);
+        reject(err);
+      })[func](...args);
+  });
 
   const Toast = Swal.mixin({
     toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true,
     didOpen: (toast) => { toast.addEventListener('mouseenter', Swal.stopTimer); toast.addEventListener('mouseleave', Swal.resumeTimer); }
   });
 
-  const i18n = VueI18n.createI18n({ legacy: false, locale: 'ES', fallbackLocale: 'EN', messages });
+  let initialLocale = 'ES';
+  try {
+    const savedLang = localStorage.getItem('ESD_LANG');
+    if (savedLang && ['ES', 'EN', 'ZH', 'TH'].includes(savedLang)) {
+      initialLocale = savedLang;
+    }
+  } catch (e) {}
+
+  const i18n = VueI18n.createI18n({ legacy: false, locale: initialLocale, fallbackLocale: 'EN', messages });
 
   const app = createApp({
     setup() {
@@ -30,6 +71,8 @@
       const aiSettings = ref({ enabled: false, apiKeys: [''], activePromptId: '' });
       const generalSettings = ref({ showPreviousEvidence: false });
       
+      const currentUser = ref('');
+      const clientVersion = ref({ version: 0, lastUpdated: '' });
       const userRoleName = ref('INVITADO');
       const userPermissions = ref({ canView: true, canAudit: false, canConfig: false, canUsers: false, canUseCopilot: false });
       const rolesDB = ref({});
@@ -37,6 +80,66 @@
 
       const currentThemeColor = ref('#005565');
       const lastSyncTime = ref(null);
+
+      // Clave de almacenamiento local para carga instantánea
+      const LOCAL_STORE_KEY = 'ESD_LOCAL_STORE';
+      let isHydratedFromCache = false;
+
+      const hydrateFromCache = () => {
+        try {
+          const cachedRaw = localStorage.getItem(LOCAL_STORE_KEY);
+          if (cachedRaw) {
+            const c = JSON.parse(cachedRaw);
+            if (c && c.assets && Array.isArray(c.assets) && c.assets.length > 0) {
+              assets.value = c.assets || [];
+              dbRules.value = c.rules || {};
+              if (c.catalogs) catalogs.value = c.catalogs;
+              if (c.catalogs?.sectors) quadrantDB.value = c.catalogs.sectors;
+              else if (c.sectors) quadrantDB.value = c.sectors;
+              if (c.matrix) matrixDB.value = c.matrix;
+              if (c.email) emailConfig.value = c.email;
+              if (c.aiConfig) aiSettings.value = c.aiConfig;
+              if (c.showPreviousEvidence !== undefined) generalSettings.value.showPreviousEvidence = c.showPreviousEvidence;
+              if (c.userRoleName) userRoleName.value = c.userRoleName;
+              if (c.userPermissions) userPermissions.value = c.userPermissions;
+              if (c.rolesDB) rolesDB.value = c.rolesDB;
+              if (c.usersDB) usersDB.value = c.usersDB;
+              if (c.currentUser) currentUser.value = c.currentUser;
+              if (c.lastSyncTime) lastSyncTime.value = c.lastSyncTime;
+              if (c.clientVersion) clientVersion.value = c.clientVersion;
+              loading.value = false;
+              isHydratedFromCache = true;
+            }
+          }
+        } catch (e) {
+          console.warn('Error al restaurar caché local:', e);
+        }
+      };
+
+      const persistLocalStore = () => {
+        try {
+          const payload = {
+            assets: assets.value,
+            rules: dbRules.value,
+            catalogs: catalogs.value,
+            sectors: quadrantDB.value,
+            matrix: matrixDB.value,
+            email: emailConfig.value,
+            aiConfig: aiSettings.value,
+            showPreviousEvidence: generalSettings.value.showPreviousEvidence,
+            userRoleName: userRoleName.value,
+            userPermissions: userPermissions.value,
+            rolesDB: rolesDB.value,
+            usersDB: usersDB.value,
+            currentUser: currentUser.value,
+            lastSyncTime: lastSyncTime.value,
+            clientVersion: clientVersion.value
+          };
+          localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(payload));
+        } catch (e) {
+          console.warn('Error al persistir caché local:', e);
+        }
+      };
 
       const statusDB = computed(() => {
           if (!matrixDB.value || !matrixDB.value.validationReasons) return [];
@@ -47,9 +150,10 @@
       const globalConfig = {
           view, submitting, assets, dbRules, catalogs, quadrantDB, statusDB,
           rolesDB, usersDB, aiSettings, emailConfig, generalSettings, userRoleName, userPermissions,
+          currentUser, clientVersion, persistLocalStore,
           currentThemeColor, FIELD_MAP, ICONS,
-          runGAS, Swal, Toast, 
-          loadData: () => loadData(), 
+          runGAS, Swal, Toast, FrontendValidator,
+          loadData: (isSilent) => loadData(isSilent), 
           openTicketModal: (mode) => modalsLogic.openTicketModal(mode)
       };
 
@@ -58,11 +162,13 @@
       const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal });
       const formLogic   = useAssetForm(globalConfig);
       const adminLogic  = useAdmin(globalConfig);
-      const modalsLogic = useModals(globalConfig);
+      const modalsLogic = useModals({ ...globalConfig, ...formLogic });
 
       // 4. MOTOR EN TIEMPO REAL Y CARGA INICIAL
-      const loadData = () => { 
-        loading.value = true;
+      const loadData = (isSilent = false) => { 
+        if (!isSilent && !isHydratedFromCache) {
+          loading.value = true;
+        }
         google.script.run
           .withSuccessHandler(r => { 
             if(r?.success){
@@ -77,20 +183,48 @@
                 
                 userRoleName.value = r.userRoleName; userPermissions.value = r.userPermissions;
                 rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
+                if(r.user) currentUser.value = r.user;
+                if(r.serverVersion) clientVersion.value = r.serverVersion;
                 lastSyncTime.value = r.serverTime; 
                 loading.value = false;
+                persistLocalStore();
             } else { 
                 Swal.fire('Error', r?.error || 'Fallo de servidor', 'error'); loading.value = false;
             } 
           }).getData();
       };
 
-      onMounted(() => loadData());
+      // Sincronización ligera en segundo plano (Polling de versiones)
+      let syncPollInterval = null;
+      let isCheckingSync = false;
+
+      const pollSyncStatus = async () => {
+        if (isCheckingSync || submitting.value || !clientVersion.value?.version) return;
+        isCheckingSync = true;
+        try {
+          const syncRes = await runGAS('checkSyncStatus', clientVersion.value.version);
+          if (syncRes && syncRes.success && syncRes.needsRefresh) {
+            console.log('🔄 Cambios detectados en servidor (v' + syncRes.serverVersion.version + '). Sincronizando...');
+            loadData(true);
+          }
+        } catch (e) {
+          // Captura silenciosa para evitar alertas en pantalla
+        } finally {
+          isCheckingSync = false;
+        }
+      };
+
+      onMounted(() => {
+        hydrateFromCache();
+        loadData(isHydratedFromCache);
+        syncPollInterval = setInterval(pollSyncStatus, 20000);
+      });
 
       // 5. EXPORTACIÓN A LA VISTA HTML
       return {
          loading, submitting, view, assets, dbRules, quadrantDB, statusDB, catalogs,
          userRoleName, userPermissions, rolesDB, usersDB, aiSettings, emailConfig, generalSettings,
+         currentUser, clientVersion,
          
          ...headerLogic,
          ...dashLogic,

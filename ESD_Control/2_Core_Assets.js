@@ -13,77 +13,112 @@ function getData() {
     };
 
     let auditCounts = {};
-    const shLogs = ss.getSheetByName(CONF.SHEET_LOGS);
-    if(shLogs) {
-      const logData = shLogs.getDataRange().getValues();
-      for(let i=1; i<logData.length; i++) {
-        const id = String(logData[i][2]);
-        auditCounts[id] = (auditCounts[id] || 0) + 1;
-      }
+    if (typeof CacheManager !== 'undefined') {
+      const cachedCounts = CacheManager.get(CacheManager.KEYS.AUDIT_COUNTS);
+      if (cachedCounts) auditCounts = cachedCounts;
     }
-
-    let rulesDB = {};
-    const shRules = ss.getSheetByName(CONF.SHEET_RULES);
-    if(shRules) {
-      const data = shRules.getDataRange().getValues();
-      for(let i=1; i<data.length; i++) {
-        const id = clean(data[i][0]).toUpperCase();
-        if(id) {
-          rulesDB[id] = {
-            surfaceRes: data[i][1], floorMat: data[i][2], elecRes: data[i][3], jack: data[i][4], voltage: data[i][5], impedance: data[i][6],
-            defaultIcon: data[i][7] || "fa-box", recommendation: data[i][8] || "", tolerance: data[i][9],
-            recs: { surfaceRes: data[i][10] || "", floorMat: data[i][11] || "", elecRes: data[i][12] || "", impedance: data[i][13] || "", voltage: data[i][14] || "", jack: data[i][15] || "" }
-          };
+    if (Object.keys(auditCounts).length === 0) {
+      const shLogs = ss.getSheetByName(CONF.SHEET_LOGS);
+      if (shLogs) {
+        const lastRow = shLogs.getLastRow();
+        if (lastRow > 1) {
+          const colData = shLogs.getRange(2, 3, lastRow - 1, 1).getValues();
+          for (let i = 0; i < colData.length; i++) {
+            const id = String(colData[i][0]).trim();
+            if (id) auditCounts[id] = (auditCounts[id] || 0) + 1;
+          }
         }
       }
+      if (typeof CacheManager !== 'undefined' && Object.keys(auditCounts).length > 0) {
+        CacheManager.put(CacheManager.KEYS.AUDIT_COUNTS, auditCounts, CONF.TIMEOUTS.CACHE_TTL_DEFAULT || 600);
+      }
     }
 
-    let catalogs = { sectors: [], factories: [], projects: [], auditors: [], templates: [], ticketFields: [], emailGroups: [], aiPrompts: [] };
-    const shConfig = ss.getSheetByName(CONF.SHEET_CONFIG);
-    if(shConfig) {
-      const data = shConfig.getDataRange().getValues();
-      for(let i=1; i<data.length; i++) {
-        const cat = clean(data[i][0]).toUpperCase();
-        const id = clean(data[i][1]);
-        const label = clean(data[i][2]) || id;
-        let hex = clean(data[i][3]);
-        if (cat === "SECTOR" && hex && !hex.startsWith("#")) hex = "#" + hex;
-        
-        let configJson = { startRow: 8, columns: [] };
-        try { if(data[i][4]) configJson = JSON.parse(data[i][4]); } catch(e){}
+    // 🚀 Optimización de Caché: Intentar obtener catálogos, reglas y matriz desde CacheService
+    let cachedStatic = (typeof CacheManager !== 'undefined') ? CacheManager.get(CacheManager.KEYS.CATALOGS_AND_RULES) : null;
+    let rulesDB, catalogs, matrixDB;
 
-        if(id) {
-           const item = { id: id, label: label, hex: hex, config: configJson };
-           if(cat === "SECTOR") catalogs.sectors.push(item);
-           else if(cat === "FACTORY") catalogs.factories.push(item);
-           else if(cat === "PROJECT") catalogs.projects.push(item);
-           else if(cat === "AUDITOR") catalogs.auditors.push(item);
-           else if(cat === "TEMPLATE") catalogs.templates.push(item);
-           else if(cat === "TICKET_FIELD") catalogs.ticketFields.push(item);
-           else if(cat === "EMAIL_GROUP") catalogs.emailGroups.push(item);
-           else if(cat === "AI_PROMPT") catalogs.aiPrompts.push(item);
+    if (cachedStatic && cachedStatic.rulesDB && cachedStatic.catalogs && cachedStatic.matrixDB) {
+      rulesDB = cachedStatic.rulesDB;
+      catalogs = cachedStatic.catalogs;
+      matrixDB = cachedStatic.matrixDB;
+    } else {
+      rulesDB = {};
+      const shRules = ss.getSheetByName(CONF.SHEET_RULES);
+      if(shRules) {
+        const data = shRules.getDataRange().getValues();
+        for(let i=1; i<data.length; i++) {
+          const id = clean(data[i][0]).toUpperCase();
+          if(id) {
+            rulesDB[id] = {
+              surfaceRes: data[i][1], floorMat: data[i][2], elecRes: data[i][3], jack: data[i][4], voltage: data[i][5], impedance: data[i][6],
+              defaultIcon: data[i][7] || "fa-box", recommendation: data[i][8] || "", tolerance: data[i][9],
+              recs: { surfaceRes: data[i][10] || "", floorMat: data[i][11] || "", elecRes: data[i][12] || "", impedance: data[i][13] || "", voltage: data[i][14] || "", jack: data[i][15] || "" }
+            };
+          }
         }
       }
+
+      catalogs = { sectors: [], factories: [], projects: [], auditors: [], templates: [], ticketFields: [], emailGroups: [], aiPrompts: [] };
+      const shConfig = ss.getSheetByName(CONF.SHEET_CONFIG);
+      if(shConfig) {
+        const data = shConfig.getDataRange().getValues();
+        for(let i=1; i<data.length; i++) {
+          const cat = clean(data[i][0]).toUpperCase();
+          const id = clean(data[i][1]);
+          const label = clean(data[i][2]) || id;
+          let hex = clean(data[i][3]);
+          if (cat === "SECTOR" && hex && !hex.startsWith("#")) hex = "#" + hex;
+          
+          let configJson = { startRow: 8, columns: [] };
+          try { if(data[i][4]) configJson = JSON.parse(data[i][4]); } catch(e){}
+
+          if(id) {
+             const item = { id: id, label: label, hex: hex, config: configJson };
+             if(cat === "SECTOR") catalogs.sectors.push(item);
+             else if(cat === "FACTORY") catalogs.factories.push(item);
+             else if(cat === "PROJECT") catalogs.projects.push(item);
+             else if(cat === "AUDITOR") catalogs.auditors.push(item);
+             else if(cat === "TEMPLATE") catalogs.templates.push(item);
+             else if(cat === "TICKET_FIELD") catalogs.ticketFields.push(item);
+             else if(cat === "EMAIL_GROUP") catalogs.emailGroups.push(item);
+             else if(cat === "AI_PROMPT") catalogs.aiPrompts.push(item);
+          }
+        }
+      }
+
+      matrixDB = { validationReasons: [] };
+      const shMatrix = ss.getSheetByName(CONF.SHEET_MATRIX);
+      if(shMatrix) {
+        const data = shMatrix.getDataRange().getValues();
+        for(let i=1; i<data.length; i++) { 
+          if(String(data[i][0]).toUpperCase() === "VALIDATION_REASON") {
+             matrixDB.validationReasons.push({
+                 name: clean(data[i][1]),
+                 showCard: data[i][2] === true || String(data[i][2]).toLowerCase() === 'true',
+                 color: clean(data[i][3]) || '#64748b',
+                 isAdmin: data[i][4] === true || String(data[i][4]).toLowerCase() === 'true'
+             });
+          } 
+        }
+      }
+
+      if (typeof CacheManager !== 'undefined') {
+        CacheManager.put(CacheManager.KEYS.CATALOGS_AND_RULES, { rulesDB, catalogs, matrixDB });
+      }
     }
 
-    let matrixDB = { validationReasons: [] };
-    const shMatrix = ss.getSheetByName(CONF.SHEET_MATRIX);
-    if(shMatrix) {
-      const data = shMatrix.getDataRange().getValues();
-      for(let i=1; i<data.length; i++) { 
-        if(String(data[i][0]).toUpperCase() === "VALIDATION_REASON") {
-           matrixDB.validationReasons.push({
-               name: clean(data[i][1]),
-               showCard: data[i][2] === true || String(data[i][2]).toLowerCase() === 'true',
-               color: clean(data[i][3]) || '#64748b',
-               isAdmin: data[i][4] === true || String(data[i][4]).toLowerCase() === 'true'
-           });
-        } 
-      }
+    // 🚀 Optimización I/O: Lectura en bloque de todas las propiedades del script en 1 sola llamada
+    const props = PropertiesService.getScriptProperties();
+    const allProps = props.getProperties();
+
+    // Verificación única de esquema: desacoplada de la ruta crítica de lectura
+    if (allProps['DB_CONFIGURED_ESTADO_REGISTRO'] !== 'true') {
+      autoConfigurarBaseDatos();
+      props.setProperty('DB_CONFIGURED_ESTADO_REGISTRO', 'true');
     }
 
     let assets = [];
-    autoConfigurarBaseDatos(); 
     const shAssets = ss.getSheetByName(CONF.SHEET_ASSETS);
     if(shAssets) {
       const data = shAssets.getDataRange().getValues();
@@ -113,19 +148,18 @@ function getData() {
       }
     }
 
-    const props = PropertiesService.getScriptProperties();
-    const masterConfigStr = props.getProperty('EMAIL_MASTER_CONFIG');
+    const masterConfigStr = allProps['EMAIL_MASTER_CONFIG'];
     let emailSettings = masterConfigStr ? JSON.parse(masterConfigStr) : {
         OPEN: { to: '', subject: '⚠️ FALLA DETECTADA', body: 'Se ha reportado una falla en el siguiente activo.' },
         CLOSE: { to: '', subject: '✅ EQUIPO REPARADO / LIBERADO', body: 'El activo ha pasado la verificación y el ticket ha sido cerrado.' },
         FORCED: { to: '', subject: '⚠️ ALERTA: Dictamen Forzado', body: 'Se ha registrado un resultado manual que requiere revisión.' }
     };
 
-    const aiConfigStr = props.getProperty('AI_COPILOT_CONFIG');
+    const aiConfigStr = allProps['AI_COPILOT_CONFIG'];
     let aiSettings = aiConfigStr ? JSON.parse(aiConfigStr) : { enabled: false, apiKeys: [''], activePromptId: '' };
 
-    const rolesStr = props.getProperty('ROLES_DB');
-    const usersStr = props.getProperty('USERS_DB');
+    const rolesStr = allProps['ROLES_DB'];
+    const usersStr = allProps['USERS_DB'];
     let rolesDB = rolesStr ? JSON.parse(rolesStr) : {
         "SUPER_ADMIN": { canView: true, canAudit: true, canConfig: true, canUsers: true, canUseCopilot: true },
         "AUDITOR": { canView: true, canAudit: true, canConfig: false, canUsers: false, canUseCopilot: true },
@@ -143,7 +177,7 @@ function getData() {
         props.setProperty('USERS_DB', JSON.stringify(usersDB));
     }
     const userPermissions = rolesDB[userRoleName] || rolesDB["INVITADO"];
-    const showPrevEv = props.getProperty('SETTING_SHOW_PREV_EVIDENCE') === 'true';
+    const showPrevEv = allProps['SETTING_SHOW_PREV_EVIDENCE'] === 'true';
 
     // Sanitizar aiConfig: solo enviar llaves privadas a roles con permiso canConfig
     const clientAiSettings = {
@@ -152,23 +186,42 @@ function getData() {
       apiKeys: (userPermissions && userPermissions.canConfig) ? (aiSettings.apiKeys || ['']) : ['']
     };
 
+    const serverVersion = (typeof VersionManager !== 'undefined') ? VersionManager.getVersion() : { version: 1, lastUpdated: new Date().toISOString() };
+
     return { 
       success: true, assets, rules: rulesDB, catalogs, matrix: matrixDB, 
       email: emailSettings, aiConfig: clientAiSettings, rolesDB: rolesDB, usersDB: usersDB,
       userRoleName: userRoleName, userPermissions: userPermissions, showPrevEvidence: showPrevEv,
-      user: userEmail, serverTime: new Date().toISOString() 
+      user: userEmail, serverTime: new Date().toISOString(),
+      serverVersion: serverVersion
     };
   } catch (e) { return { success: false, error: e.toString() }; }
 }
 
 function saveNewAsset(payload) {
   if (!payload || !payload.asset) {
-    return { success: false, error: "Datos de activo inválidos o incompletos." };
+    return Utils.buildResponse(false, "Datos de activo inválidos o incompletos.");
   }
-  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK_SHORT);
-  try {
+
+  const a = payload.asset;
+  if (typeof Validator !== 'undefined') {
+    const valRes = Validator.validateRequired(a, ['quadrant', 'description', 'project', 'factory']);
+    if (!valRes.valid) {
+      return Utils.buildResponse(false, valRes.message);
+    }
+  }
+
+  const runner = () => {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
+
+    // Validación atómica de duplicados
+    if (a.controlNo && typeof Validator !== 'undefined') {
+      if (Validator.isDuplicateId(sh, 1, a.controlNo)) {
+        return Utils.buildResponse(false, `El ID de activo '${a.controlNo}' ya existe en la base de datos.`);
+      }
+    }
     
     const data = sh.getDataRange().getValues();
     let maxId = 0;
@@ -176,9 +229,8 @@ function saveNewAsset(payload) {
       let v = parseInt(String(data[i][0]).replace(/\D/g,''), 10);
       if(!isNaN(v) && v > maxId && v < 999999) maxId = v;
     }
-    const newId = payload.asset.controlNo || (maxId + 1);
+    const newId = a.controlNo || (maxId + 1);
 
-    const a = payload.asset;
     const f = payload.formData || {};
     const m = f.measurements || {};
     const chk = (val) => (val === null || val === undefined || val === "") ? "N/A" : val;
@@ -194,28 +246,37 @@ function saveNewAsset(payload) {
     const nDateStr = Utilities.formatDate(nDate, Session.getScriptTimeZone(), "dd-MMM-yy");
 
     const row = [
-      newId, a.quadrant, a.colorCode, a.description, a.project, a.factory, a.status,
+      newId, a.quadrant, a.colorCode || CONF.DEFAULT_COLOR, a.description, a.project, a.factory, a.status || "ACTIVO",
       chk(m.surfaceRes?.mantissa), chk(m.surfaceRes?.exponent), chk(m.floorMat?.mantissa), chk(m.floorMat?.exponent),
       chk(m.elecRes), chk(m.impedance), chk(m.voltage), chk(m.jack),
-      f.result||"", vDateStr, nDateStr, a.responsible, f.comments||""
+      f.result||"", vDateStr, nDateStr, a.responsible || "", f.comments||""
     ];
 
     sh.appendRow(row);
     stampLastModified(sh, sh.getLastRow());
     logAudit(ss, newId, f.result, { ...m, comments: f.comments, nextDate: nDateStr, validationDate: vDateStr });
     
-    return { success: true, id: newId };
-  } catch(e) { return { success: false, error: e.toString() }; } finally { lock.releaseLock(); }
+    if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ASSETS');
+    return Utils.buildResponse(true, { id: newId });
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Registro de Activo");
+  }
+  return runner();
 }
 
 function processAudit(payload) {
   if (!payload || !payload.asset || typeof payload.asset.rowIndex !== 'number' || payload.asset.rowIndex < 2) {
-    return { success: false, error: "Datos de activo o índice de fila inválidos." };
+    return Utils.buildResponse(false, "Datos de activo o índice de fila inválidos.");
   }
-  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK_SHORT);
-  try {
+
+  const runner = () => {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
+
     const { formData, asset } = payload;
     const r = asset.rowIndex;
     const numCols = Math.max(sh.getLastColumn(), 20);
@@ -273,8 +334,20 @@ function processAudit(payload) {
          sendTicketEmail("ALERTA-CALIDAD", alertData, asset, "FORCED");
       }
     }
-    return { success: true };
-  } catch(e) { return { success: false, error: e.toString() }; } finally { lock.releaseLock(); }
+
+    if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ASSETS');
+    if (asset && asset.controlNo && typeof PresenceManager !== 'undefined') {
+      const activeUser = Session.getActiveUser().getEmail() || (formData && formData.auditor) || '';
+      PresenceManager.release(asset.controlNo, activeUser);
+    }
+    return Utils.buildResponse(true);
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Auditoría de Activo");
+  }
+  return runner();
 }
 
 function autoConfigurarBaseDatos() {
@@ -300,18 +373,33 @@ function autoConfigurarBaseDatos() {
 }
 
 function adminDeleteAsset(id) {
-  try {
+  if (typeof Validator !== 'undefined' && Validator.isBlank(id)) {
+    return Utils.buildResponse(false, "ID de activo no proporcionado.");
+  }
+
+  const runner = () => {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
     const data = sh.getDataRange().getValues();
     const headers = data[0];
     const estadoColIndex = headers.indexOf("Estado_Registro") + 1;
+    if (estadoColIndex === 0) return Utils.buildResponse(false, "Columna de Estado_Registro no encontrada.");
+
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim() === String(id).trim()) {
+      if (String(data[i][0]).trim().toUpperCase() === String(id).trim().toUpperCase()) {
         sh.getRange(i + 1, estadoColIndex).setValue("INACTIVO");
-        return { success: true };
+        stampLastModified(sh, i + 1);
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+        if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ASSETS');
+        return Utils.buildResponse(true);
       }
     }
-    return { success: false, error: 'Equipo no encontrado' };
-  } catch (error) { return { success: false, error: error.toString() }; }
+    return Utils.buildResponse(false, "Equipo no encontrado");
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Eliminar Activo");
+  }
+  return runner();
 }

@@ -8,7 +8,8 @@ function useAssetForm(globalConfig) {
     // Extraemos las dependencias globales que le pasaremos desde el Main
     const { 
         view, submitting, dbRules, catalogs, statusDB, currentThemeColor, 
-        loadData, openTicketModal, runGAS, Swal, Toast, FIELD_MAP 
+        loadData, openTicketModal, runGAS, Swal, Toast, FIELD_MAP, FrontendValidator,
+        currentUser 
     } = globalConfig;
 
     // 1. ESTADO LOCAL DEL FORMULARIO
@@ -121,7 +122,59 @@ function useAssetForm(globalConfig) {
        return {message:'OK', class:'bg-emerald-100 text-emerald-600', borderClass:'border-emerald-300 bg-emerald-50/20', showRec:false};
     };
 
+    // ==========================================
+    // 🔒 CONTROL DE PRESENCIA Y CONCURRENCIA EN VIVO
+    // ==========================================
+    let presenceTimer = null;
+    let lockedAssetId = null;
+
+    const stopPresenceHeartbeat = () => {
+        if (presenceTimer) {
+            clearInterval(presenceTimer);
+            presenceTimer = null;
+        }
+    };
+
+    const startPresenceHeartbeat = (assetId) => {
+        stopPresenceHeartbeat();
+        lockedAssetId = assetId;
+        presenceTimer = setInterval(async () => {
+            if (!lockedAssetId || view.value !== 'form') {
+                stopPresenceHeartbeat();
+                return;
+            }
+            try {
+                const userEmail = (currentUser && currentUser.value) || '';
+                const res = await runGAS('renewAssetPresence', lockedAssetId, userEmail);
+                if (res && res.status === 'OVERRIDDEN') {
+                    stopPresenceHeartbeat();
+                    Toast.fire({ 
+                        icon: 'warning', 
+                        title: `El usuario ${res.byUser || 'otro auditor'} tomó el control de este activo.` 
+                    });
+                }
+            } catch (e) {
+                console.warn('Error renovando presencia:', e);
+            }
+        }, 30000);
+    };
+
+    const releasePresence = async (assetId) => {
+        stopPresenceHeartbeat();
+        const targetId = assetId || lockedAssetId || editAsset.value?.controlNo;
+        lockedAssetId = null;
+        if (targetId && !isNewAsset.value) {
+            try {
+                const userEmail = (currentUser && currentUser.value) || '';
+                await runGAS('releaseAssetPresence', targetId, userEmail);
+            } catch (e) {
+                console.warn('Error liberando presencia:', e);
+            }
+        }
+    };
+
     const startNewAsset = () => { 
+        releasePresence();
         isNewAsset.value = true; 
         editAsset.value = { status: 'ACTIVO' };
         currentThemeColor.value = '#005565'; 
@@ -132,7 +185,71 @@ function useAssetForm(globalConfig) {
         activeTicketEvidence.value = null;
     };
     
-    const selectAsset = (a) => {
+    const selectAsset = async (a) => {
+       if (!a || !a.controlNo) return;
+
+       if (lockedAssetId && lockedAssetId !== a.controlNo) {
+           releasePresence(lockedAssetId);
+       }
+
+       // 🔒 Verificación de Presencia en Tiempo Real
+       const userEmail = (currentUser && currentUser.value) || '';
+       const userName = userEmail ? userEmail.split('@')[0] : 'Auditor';
+
+       try {
+           const presRes = await runGAS('acquireAssetPresence', {
+               assetId: a.controlNo,
+               userEmail: userEmail,
+               userName: userName,
+               force: false
+           });
+
+           if (presRes && presRes.status === 'LOCKED') {
+               const holder = presRes.holder || {};
+               const holderName = holder.userName || holder.userEmail || 'Otro usuario';
+               const elapsedText = holder.elapsedSeconds !== undefined ? ` (hace ${holder.elapsedSeconds}s)` : '';
+
+               const confirmRes = await Swal.fire({
+                   title: 'Medición en Proceso',
+                   html: `<div class="text-left text-sm text-slate-700">
+                            <p class="mb-2">El usuario <b class="text-amber-600 font-bold">${holderName}</b>${elapsedText} se encuentra actualmente realizando una medición en este activo (<b>${a.controlNo}</b>).</p>
+                            <p class="text-xs text-slate-500 mt-2">¿Deseas registrar la información de todos modos o tomar el control?</p>
+                          </div>`,
+                   icon: 'warning',
+                   showCancelButton: true,
+                   showDenyButton: true,
+                   confirmButtonColor: '#005565',
+                   denyButtonColor: '#f59e0b',
+                   cancelButtonColor: '#64748b',
+                   confirmButtonText: '<i class="fas fa-hand-paper mr-1"></i> Tomar el Control',
+                   denyButtonText: '<i class="fas fa-edit mr-1"></i> Continuar de todos modos',
+                   cancelButtonText: 'Regresar'
+               });
+
+               if (confirmRes.isConfirmed) {
+                   try {
+                       await runGAS('acquireAssetPresence', {
+                           assetId: a.controlNo,
+                           userEmail: userEmail,
+                           userName: userName,
+                           force: true
+                       });
+                       startPresenceHeartbeat(a.controlNo);
+                   } catch (err) {
+                       console.warn('Error al forzar presencia:', err);
+                   }
+               } else if (confirmRes.isDenied) {
+                   stopPresenceHeartbeat();
+               } else {
+                   return;
+               }
+           } else {
+               startPresenceHeartbeat(a.controlNo);
+           }
+       } catch (err) {
+           console.warn('No se pudo verificar presencia, procediendo:', err);
+       }
+
        isNewAsset.value = false;
        editAsset.value = JSON.parse(JSON.stringify(a));
        const q = catalogs.value.sectors.find(x => x.id.toUpperCase() === (a.quadrant||'').toUpperCase());
@@ -169,9 +286,9 @@ function useAssetForm(globalConfig) {
             let isEmpty = false;
             
             if(field.type === 'scientific') { 
-                if(val.mantissa == null || val.mantissa === "" || val.exponent == null || val.exponent === "") isEmpty = true;
+                if(val == null || FrontendValidator.isBlank(val.mantissa) || FrontendValidator.isBlank(val.exponent)) isEmpty = true;
             } else { 
-                if(val === null || val === "") isEmpty = true;
+                if(FrontendValidator.isBlank(val)) isEmpty = true;
             }
             
             if(isEmpty) {
@@ -194,57 +311,91 @@ function useAssetForm(globalConfig) {
     };
 
     const performSave = async () => {
+       if (submitting.value) return;
        submitting.value = true;
-       editAsset.value.colorCode = currentThemeColor.value;
-       
-       const emailEv = activeFields.value.map(f => {
-           let valStr = "N/A";
-           const val = form.value.measurements[f.key];
-           if (val && !isNA(f.key)) {
-               if (f.type === 'scientific') {
-                   if (val.mantissa !== null && val.mantissa !== "") valStr = `${val.mantissa} x 10^${val.exponent}`;
-               } else {
-                   if (val !== null && val !== "") valStr = String(val);
-               }
-           }
-           return { label: f.label, value: valStr }; 
-       });
-       form.value.emailEvidence = emailEv; 
-
-       const m = form.value.measurements;
-       for (const field of activeFields.value) {
-           const key = field.key;
-           if (!m[key]) { m[key] = field.type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A'; }
-       }
-       
-       const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
        try {
-          const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
-          if(r.success) { 
-              Toast.fire({ icon: 'success', title: isNewAsset.value ? 'Activo Registrado' : 'Verificación Guardada' });
-              await loadData(); 
-              view.value = 'dashboard'; 
-          } else { throw new Error(r.error); }
-       } catch(e) { Swal.fire('Error', e.message, 'error'); }
-       submitting.value = false;
+           editAsset.value.colorCode = currentThemeColor.value;
+           
+           // Sanitización de strings en el activo
+           if (editAsset.value) {
+               ['responsible', 'factory', 'project', 'quadrant', 'description', 'status', 'brand', 'model', 'serialNo'].forEach(key => {
+                   if (typeof editAsset.value[key] === 'string') {
+                       editAsset.value[key] = FrontendValidator.sanitize(editAsset.value[key]);
+                   }
+               });
+           }
+           
+           const emailEv = activeFields.value.map(f => {
+               let valStr = "N/A";
+               const val = form.value.measurements[f.key];
+               if (val && !isNA(f.key)) {
+                   if (f.type === 'scientific') {
+                       if (val.mantissa !== null && val.mantissa !== "") valStr = `${val.mantissa} x 10^${val.exponent}`;
+                   } else {
+                       if (val !== null && val !== "") valStr = String(val);
+                   }
+               }
+               return { label: f.label, value: valStr }; 
+           });
+           form.value.emailEvidence = emailEv; 
+
+           const m = form.value.measurements;
+           for (const field of activeFields.value) {
+               const key = field.key;
+               if (!m[key]) { m[key] = field.type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A'; }
+           }
+           
+           const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
+           const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
+           if(r.success) { 
+               releasePresence(editAsset.value?.controlNo);
+               Toast.fire({ icon: 'success', title: isNewAsset.value ? 'Activo Registrado' : 'Verificación Guardada' });
+               await loadData(); 
+               view.value = 'dashboard'; 
+           } else { 
+               throw new Error(r.error || 'Error al guardar'); 
+           }
+       } catch(e) { 
+           Swal.fire({ icon: 'error', title: 'Error al Guardar', text: e.message || 'Error desconocido del servidor.' }); 
+       } finally {
+           submitting.value = false;
+       }
     };
 
     const submit = async (resultType) => {
        if (submitting.value) return;
-       submitting.value = true; 
        
-       if (!editAsset.value.status || !editAsset.value.responsible || !editAsset.value.factory || !editAsset.value.project || !editAsset.value.quadrant || !editAsset.value.description) {
-           submitting.value = false;
-           Swal.fire({ icon: 'warning', title: 'Datos Incompletos', text: 'Por favor completa: Estado, Responsable, Fábrica, Proyecto, Cuadrante y Tipo.', confirmButtonColor: '#005565' });
+       // Validación estricta anti-nulos/vacíos con FrontendValidator
+       if (FrontendValidator.isBlank(editAsset.value.status) || 
+           FrontendValidator.isBlank(editAsset.value.responsible) || 
+           FrontendValidator.isBlank(editAsset.value.factory) || 
+           FrontendValidator.isBlank(editAsset.value.project) || 
+           FrontendValidator.isBlank(editAsset.value.quadrant) || 
+           FrontendValidator.isBlank(editAsset.value.description)) {
+           Swal.fire({ 
+               icon: 'warning', 
+               title: 'Datos Incompletos', 
+               text: 'Por favor completa todos los campos requeridos: Estado, Responsable, Fábrica, Proyecto, Cuadrante y Tipo.', 
+               confirmButtonColor: '#005565' 
+           });
            return;
        }
 
        if (resultType === 'ADMIN') {
            for(const field of activeFields.value) { form.value.measurements[field.key] = field.type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; }
            form.value.result = editAsset.value.status;
-           form.value.requiresSecondRevision = false; isAuditMode.value = true; 
-           submitting.value = false; 
-           Swal.fire({ title: 'Confirmar Movimiento', html: `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, icon: 'info', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, Registrar' }).then((r) => { if(r.isConfirmed) performSave(); });
+           form.value.requiresSecondRevision = false; 
+           isAuditMode.value = true; 
+           Swal.fire({ 
+               title: 'Confirmar Movimiento', 
+               html: `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, 
+               icon: 'info', 
+               showCancelButton: true, 
+               confirmButtonColor: '#005565', 
+               confirmButtonText: 'Sí, Registrar' 
+           }).then((r) => { 
+               if(r.isConfirmed) performSave(); 
+           });
            return; 
        }
 
@@ -253,12 +404,14 @@ function useAssetForm(globalConfig) {
            if(!isNA(field.key)) {
                const val = form.value.measurements[field.key];
                let isEmpty = false;
-               if(field.type === 'scientific') { if(val.mantissa == null || val.mantissa === "" || val.exponent == null || val.exponent === "") isEmpty = true; } 
-               else { if(val === null || val === "") isEmpty = true; }
+               if(field.type === 'scientific') { 
+                   if(val == null || FrontendValidator.isBlank(val.mantissa) || FrontendValidator.isBlank(val.exponent)) isEmpty = true; 
+               } else { 
+                   if(FrontendValidator.isBlank(val)) isEmpty = true; 
+               }
                
                if(isEmpty) { 
                    activeInput.value = field.key;
-                   submitting.value = false; 
                    Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#005565' });
                    return; 
                } else { 
@@ -268,7 +421,6 @@ function useAssetForm(globalConfig) {
        }
        
        if (validMeasurementsCount === 0 && activeFields.value.length > 0) { 
-           submitting.value = false;
            Swal.fire({ icon: 'error', title: 'Auditoría Inválida', text: 'No puedes registrar una auditoría con todas las mediciones en "N/A". Debes capturar al menos un número real.', confirmButtonColor: '#e11d48' });
            return; 
        }
@@ -279,7 +431,6 @@ function useAssetForm(globalConfig) {
        if(isNewAsset.value) {
            const calculatedResult = failures.length > 0 ? 'NO CUMPLE' : 'CUMPLE';
            if (failures.length > 0) { 
-               submitting.value = false;
                Swal.fire({ title: '¡Alerta!', text: 'Un equipo nuevo no puede fallar en su primera verificación.', icon: 'error' });
                return; 
            }
@@ -296,7 +447,6 @@ function useAssetForm(globalConfig) {
             failures.forEach(f => { recsHtml += `<div class="mb-2 last:mb-0 border-b border-rose-100 pb-2 last:border-0 last:pb-0"><p class="font-bold text-rose-700 uppercase mb-0.5"><i class="fas fa-exclamation-triangle mr-1"></i> ${f.label}</p><p class="text-slate-600 pl-4">${f.recText || 'Sin recomendación específica.'}</p></div>`; });
             recsHtml += '</div>';
 
-            submitting.value = false; 
             Swal.fire({
                 title: '¡ALERTA DE CALIDAD!',
                 html: `<div class="mb-4"><p class="text-sm text-slate-600 mb-2">Las mediciones indican FALLA, pero intentas APROBAR el equipo.</p>${recsHtml}</div><p class="font-bold text-rose-600 text-center mt-4">Si fuerzas la aprobación, se notificará a Gerencia.</p>`,
@@ -312,7 +462,6 @@ function useAssetForm(globalConfig) {
        } 
        
        if (!isMathFail && isUserFail) {
-            submitting.value = false;
             Swal.fire({
                title: '¡VERIFICACIÓN DE CRITERIO!',
                html: `<div class="text-left"><p class="mb-3 text-sm text-slate-600">Las mediciones están <b>OK</b>, pero intentas RECHAZARLO.</p><p class="font-bold text-slate-800 text-center">¿Confirmas la falla (Ej. Daño visual)?</p></div>`,
@@ -328,7 +477,6 @@ function useAssetForm(globalConfig) {
        }
 
        form.value.result = resultType;
-       submitting.value = false; 
        
        if (isAssetFailed.value) { openTicketModal('CLOSE'); } 
        else if (isUserFail) { openTicketModal('OPEN'); } 
@@ -370,11 +518,24 @@ function useAssetForm(globalConfig) {
         }
     });
 
+    watch(view, (newVal, oldVal) => {
+        if (oldVal === 'form' && newVal !== 'form') {
+            releasePresence();
+        }
+    });
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', () => {
+            releasePresence();
+        });
+    }
+
     // 5. EXPORTAR TODO AL MAIN
     return {
         editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
         sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields, isAssetFailed, formatLimit,
-        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, submit, performSave
+        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, submit, performSave,
+        releasePresence
     };
 }
 </script>

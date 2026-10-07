@@ -4,10 +4,10 @@
  * Maneja Copiloto IA, Cámara, Tickets CAPA, Ayuda e Historial.
  */
 function useModals(globalConfig) {
-    const { ref, computed, nextTick, watch } = Vue;
+    const { ref, computed, nextTick, watch, onMounted, onUnmounted } = Vue;
     const { 
         runGAS, Swal, Toast, submitting, editAsset, form, catalogs, userRoleName,
-        activeFields, isNA, performSave, activeTicketEvidence, FIELD_MAP
+        activeFields, isNA, performSave, activeTicketEvidence, FIELD_MAP, FrontendValidator
     } = globalConfig;
 
     // ==========================================
@@ -138,8 +138,64 @@ function useModals(globalConfig) {
     // Funciones de Galería
     const openGallery = (idx) => { viewingEvidenceIdx.value = idx; };
     const closeGallery = () => { viewingEvidenceIdx.value = null; };
-    const nextGalleryImage = () => { if (activeTicketEvidence.value?.fotos) viewingEvidenceIdx.value = (viewingEvidenceIdx.value + 1) % activeTicketEvidence.value.fotos.length; };
-    const prevGalleryImage = () => { if (activeTicketEvidence.value?.fotos) viewingEvidenceIdx.value = (viewingEvidenceIdx.value - 1 + activeTicketEvidence.value.fotos.length) % activeTicketEvidence.value.fotos.length; };
+    const nextGalleryImage = () => { 
+        const fotos = activeTicketEvidence?.value?.fotos;
+        if (fotos && fotos.length > 1) viewingEvidenceIdx.value = (viewingEvidenceIdx.value + 1) % fotos.length; 
+    };
+    const prevGalleryImage = () => { 
+        const fotos = activeTicketEvidence?.value?.fotos;
+        if (fotos && fotos.length > 1) viewingEvidenceIdx.value = (viewingEvidenceIdx.value - 1 + fotos.length) % fotos.length; 
+    };
+
+    // Navegación por Teclado (Flechas y Escape)
+    const handleGalleryKeydown = (e) => {
+        // 1. Visor de evidencia de ticket (CAPA)
+        if (viewingEvidenceIdx.value !== null) {
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextGalleryImage();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevGalleryImage();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeGallery();
+            }
+            return;
+        }
+
+        // 2. Previsualización de fotos en captura de cámara
+        if (previewImage.value !== null) {
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextImage();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevImage();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                previewImage.value = null;
+            }
+            return;
+        }
+
+        // 3. Barra espaciadora para capturar foto en cámara activa
+        if (cameraActive.value && (e.code === 'Space' || e.key === ' ')) {
+            const tag = document.activeElement?.tagName;
+            if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) {
+                e.preventDefault();
+                takePhoto();
+            }
+        }
+    };
+
+    onMounted(() => {
+        window.addEventListener('keydown', handleGalleryKeydown);
+    });
+
+    onUnmounted(() => {
+        window.removeEventListener('keydown', handleGalleryKeydown);
+    });
 
     // Funciones de Correos
     const addEmailField = async () => { 
@@ -182,17 +238,59 @@ function useModals(globalConfig) {
 
     const submitTicket = async () => {
         if (submitting.value) return;
-        for(const f of visibleTicketFields.value) {
+
+        // Validación estricta de campos requeridos del ticket
+        for (const f of visibleTicketFields.value) {
             if (f.config?.required) {
-                if (f.label === 'CAMERA' && capturedPhotos.value.length === 0) return Swal.fire("Evidencia", `Toma foto para "${f.id}".`, "warning");
-                if (f.label === 'EMAIL_LIST' && (!ticketEmails.value[0] || ticketEmails.value[0].trim() === '')) return Swal.fire("Destinatario", `Ingresa correo en "${f.id}".`, "warning");
-                if (!['CAMERA', 'EMAIL_LIST'].includes(f.label) && !ticketForm.value[f.id]) return Swal.fire("Incompleto", `El campo "${f.id}" es obligatorio.`, "warning");
+                if (f.label === 'CAMERA' && capturedPhotos.value.length === 0) {
+                    return Swal.fire("Evidencia Requerida", `Debes tomar al menos una foto para "${f.id}".`, "warning");
+                }
+                if (f.label === 'EMAIL_LIST') {
+                    const validEmails = ticketEmails.value.filter(e => !FrontendValidator.isBlank(e));
+                    if (validEmails.length === 0 && selectedGroups.value.length === 0) {
+                        return Swal.fire("Destinatario Requerido", `Ingresa al menos un correo o selecciona un grupo en "${f.id}".`, "warning");
+                    }
+                }
+                if (!['CAMERA', 'EMAIL_LIST'].includes(f.label)) {
+                    if (FrontendValidator.isBlank(ticketForm.value[f.id])) {
+                        return Swal.fire("Campo Incompleto", `El campo "${f.id}" es obligatorio.`, "warning");
+                    }
+                }
             }
         }
         
+        // Validación de formato de correos antes de enviar
+        let finalEmails = [];
+        selectedGroups.value.forEach(groupId => {
+            const group = catalogs.value.emailGroups.find(g => g.id === groupId);
+            if (group?.label) {
+                group.label.split(',').map(e => e.trim()).filter(e => e.length > 0).forEach(em => {
+                    finalEmails.push(em.toLowerCase());
+                });
+            }
+        });
+
+        for (const e of ticketEmails.value) {
+            const clean = FrontendValidator.sanitize(e);
+            if (!FrontendValidator.isBlank(clean)) {
+                const fullEmail = clean.includes('@') ? clean.toLowerCase() : `${clean.toLowerCase()}@plexus.com`;
+                if (!FrontendValidator.isValidEmail(fullEmail)) {
+                    return Swal.fire("Correo Inválido", `"${clean}" no tiene formato de correo válido.`, "warning");
+                }
+                finalEmails.push(fullEmail);
+            }
+        }
+
         submitting.value = true;
         try {
             let finalFormData = { ...ticketForm.value };
+            // Sanitizar valores de texto
+            for (const key in finalFormData) {
+                if (typeof finalFormData[key] === 'string') {
+                    finalFormData[key] = FrontendValidator.sanitize(finalFormData[key]);
+                }
+            }
+
             for (const key in finalFormData) {
                 const val = finalFormData[key];
                 if (val?.data) {
@@ -202,14 +300,6 @@ function useModals(globalConfig) {
             }
 
             const passed = (form.value.result === 'CUMPLE');
-            let finalEmails = [];
-            selectedGroups.value.forEach(groupId => {
-                const group = catalogs.value.emailGroups.find(g => g.id === groupId);
-                if (group?.label) finalEmails.push(...group.label.split(',').map(e => e.trim()));
-            });
-            ticketEmails.value.forEach(e => {
-                if (e.trim() !== "") finalEmails.push(e.trim().toLowerCase().includes('@') ? e.trim().toLowerCase() : `${e.trim().toLowerCase()}@plexus.com`);
-            });
 
             const payload = { 
                 assetId: editAsset.value.controlNo, assetInfo: JSON.parse(JSON.stringify(editAsset.value)),
@@ -219,16 +309,23 @@ function useModals(globalConfig) {
 
             const r = await runGAS('saveTicketRecord', payload);
             if(r.success) {
-                if (currentTicketMode.value === 'OPEN') { performSave(); showTicketModal.value = false; } 
-                else {
+                if (currentTicketMode.value === 'OPEN') { 
+                    await performSave(); 
+                    showTicketModal.value = false; 
+                } else {
                     await performSave();
                     if (passed) Swal.fire("¡Ticket Cerrado!", "Las mediciones fueron aprobadas.", "success");
                     else Swal.fire({ icon: 'warning', title: 'Sigue en Falla', text: 'El equipo se reportó como NO CUMPLE. El ticket sigue ABIERTO.', confirmButtonColor: '#f59e0b' });
                     showTicketModal.value = false;
                 }
-            } else { Swal.fire("Error", r.error, "error"); }
-        } catch(e) { Swal.fire("Error", e.message, "error"); }
-        submitting.value = false;
+            } else { 
+                throw new Error(r.error || 'Error al guardar ticket'); 
+            }
+        } catch(e) { 
+            Swal.fire("Error", e.message || 'Error en el servidor', "error"); 
+        } finally {
+            submitting.value = false;
+        }
     };
 
     return {

@@ -60,10 +60,19 @@ function uploadTicketFiles(files, ticketId, assetData) {
 
 function saveTicketRecord(payload) {
   if (!payload || !payload.assetId || !payload.mode) {
-    return { success: false, error: "Datos de ticket incompletos o inválidos." };
+    return Utils.buildResponse(false, "Datos de ticket incompletos o inválidos.");
   }
-  const lock = LockService.getScriptLock(); lock.tryLock(CONF.TIMEOUTS.LOCK);
-  try {
+
+  if (typeof Validator !== 'undefined') {
+    if (Validator.isBlank(payload.assetId)) {
+      return Utils.buildResponse(false, "El ID de activo es obligatorio.");
+    }
+    if (Validator.isBlank(payload.mode)) {
+      return Utils.buildResponse(false, "El modo de ticket (OPEN/CLOSE) es obligatorio.");
+    }
+  }
+
+  const runner = () => {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     let sh = ss.getSheetByName(CONF.SHEET_TICKETS);
     if (!sh) {
@@ -83,6 +92,13 @@ function saveTicketRecord(payload) {
 
     let ticketId = "";
     if (payload.mode === 'OPEN') {
+        // Prevención de duplicados: validar si ya existe un ticket abierto para este activo
+        for (let i = data.length - 1; i >= 1; i--) {
+          if (String(data[i][1]).trim().toUpperCase() === String(payload.assetId).trim().toUpperCase() && 
+              String(data[i][3]).trim().toUpperCase() === "ABIERTO") {
+            return Utils.buildResponse(false, `Ya existe un ticket abierto (${data[i][0]}) para el activo ${payload.assetId}.`);
+          }
+        }
         ticketId = "TKT-" + getNextFolio('TICKETS');
     } else {
         for (let i = data.length - 1; i >= 1; i--) {
@@ -99,6 +115,7 @@ function saveTicketRecord(payload) {
         if (uploadRes.success) photoUrls = uploadRes.urls;
     }
 
+    if (!payload.formData) payload.formData = {};
     payload.formData.systemUser = userEmail;
     payload.formData.emails_notificados = emailsStr;
     if(photoUrls.length > 0) payload.formData.evidencia_fotos = photoUrls;
@@ -107,7 +124,8 @@ function saveTicketRecord(payload) {
         const initialData = { apertura: payload.formData, intentos_medicion: [] };
         sh.appendRow([ticketId, payload.assetId, dateStr, "ABIERTO", JSON.stringify(initialData)]);
         sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
-        return { success: true, ticketId: ticketId };
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+        return Utils.buildResponse(true, { ticketId: ticketId });
     } else {
         let isUpdated = false;
         for (let i = data.length - 1; i >= 1; i--) {
@@ -131,9 +149,15 @@ function saveTicketRecord(payload) {
           sh.appendRow([ticketId, payload.assetId, dateStr, payload.passed ? "CERRADO" : "ABIERTO", JSON.stringify(newData)]);
           if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
         }
-        return { success: true, ticketId: ticketId };
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+        return Utils.buildResponse(true, { ticketId: ticketId });
     }
-  } catch(e) { return { success: false, error: e.toString() }; } finally { lock.releaseLock(); }
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK, "Guardado de Ticket");
+  }
+  return runner();
 }
 
 function getActiveTicketData(assetId) {

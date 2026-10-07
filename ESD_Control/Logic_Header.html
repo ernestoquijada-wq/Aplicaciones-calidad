@@ -1,16 +1,63 @@
 <script>
 /**
  * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO
- * Maneja el cambio de idiomas y configuraciones globales de la barra superior.
+ * Maneja el cambio de 4 idiomas (ES, EN, ZH, TH), persistencia y traducciones de estados.
  */
 function useHeader() {
-    // Usamos el hook de i18n global que definimos antes del app
+    // Hook de Vue-i18n en ámbito global
     const { locale } = VueI18n.useI18n({ useScope: 'global' });
-    
-    const toggleLanguage = () => { 
-        locale.value = locale.value === 'ES' ? 'EN' : 'ES'; 
+    const showLangDropdown = Vue.ref(false);
+
+    const availableLanguages = [
+        { code: 'ES', name: 'Español', flag: '🇲🇽', label: 'ES' },
+        { code: 'EN', name: 'English', flag: '🇺🇸', label: 'EN' },
+        { code: 'ZH', name: '中文 (简体)', flag: '🇨🇳', label: 'ZH' },
+        { code: 'TH', name: 'ภาษาไทย', flag: '🇹🇭', label: 'TH' }
+    ];
+
+    const currentLanguage = Vue.computed(() => {
+        return availableLanguages.find(l => l.code === locale.value) || availableLanguages[0];
+    });
+
+    const setLanguage = (langCode) => {
+        if (['ES', 'EN', 'ZH', 'TH'].includes(langCode)) {
+            locale.value = langCode;
+            try {
+                localStorage.setItem('ESD_LANG', langCode);
+            } catch (e) {
+                console.warn('No se pudo guardar la preferencia de idioma en localStorage:', e);
+            }
+        }
+        showLangDropdown.value = false;
     };
 
-    return { toggleLanguage };
+    const toggleLanguage = () => {
+        const order = ['ES', 'EN', 'ZH', 'TH'];
+        const nextIdx = (order.indexOf(locale.value) + 1) % order.length;
+        setLanguage(order[nextIdx]);
+    };
+
+    const translateStatus = (statusStr) => {
+        if (!statusStr) return '';
+        const key = String(statusStr).trim().toUpperCase().replace(/\s+/g, '_');
+        const lang = locale.value || 'ES';
+        if (messages[lang] && messages[lang].status && messages[lang].status[key]) {
+            return messages[lang].status[key];
+        }
+        if (messages.EN && messages.EN.status && messages.EN.status[key]) {
+            return messages.EN.status[key];
+        }
+        return statusStr;
+    };
+
+    return {
+        locale,
+        availableLanguages,
+        currentLanguage,
+        showLangDropdown,
+        setLanguage,
+        toggleLanguage,
+        translateStatus
+    };
 }
 </script>

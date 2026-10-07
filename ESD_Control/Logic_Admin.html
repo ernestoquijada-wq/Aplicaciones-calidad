@@ -10,7 +10,8 @@ function useAdmin(globalConfig) {
     const { 
         runGAS, loadData, Swal, Toast, submitting, assets,
         catalogs, dbRules, statusDB, rolesDB, usersDB, 
-        aiSettings, emailConfig, generalSettings, FIELD_MAP, ICONS 
+        aiSettings, emailConfig, generalSettings, FIELD_MAP, ICONS, FrontendValidator,
+        persistLocalStore, quadrantDB
     } = globalConfig;
 
     // ==========================================
@@ -52,26 +53,100 @@ function useAdmin(globalConfig) {
         return [];
     });
 
+    const getCatalogKey = (cat) => {
+        const map = { 
+            'SECTOR': 'sectors', 'FACTORY': 'factories', 'PROJECT': 'projects', 
+            'AUDITOR': 'auditors', 'TEMPLATE': 'templates', 'TICKET_FIELD': 'ticketFields', 
+            'EMAIL_GROUP': 'emailGroups', 'AI_PROMPT': 'aiPrompts' 
+        };
+        return map[cat] || 'sectors';
+    };
+
     const saveCatalogItem = async () => { 
-        if(!newCatalog.value.id) return;
+        if (submitting.value) return;
+        
+        const catId = FrontendValidator.sanitize(newCatalog.value.id);
+        const catLabel = FrontendValidator.sanitize(newCatalog.value.label);
+        
+        if (FrontendValidator.isBlank(catId)) {
+            return Swal.fire("Campo Obligatorio", "El ID del elemento es obligatorio.", "warning");
+        }
+        if (FrontendValidator.isBlank(catLabel) && activeCatalogCategory.value !== 'EMAIL_GROUP') {
+            return Swal.fire("Campo Obligatorio", "La etiqueta/nombre del elemento es obligatoria.", "warning");
+        }
+        
+        newCatalog.value.id = catId;
+        newCatalog.value.label = catLabel;
+
         if (activeCatalogCategory.value === 'EMAIL_GROUP') {
-            const validEmails = adminEmailGroupList.value.filter(e => e.trim() !== '');
-            if (validEmails.length === 0) return Swal.fire("Error", "Debes ingresar al menos un correo para el grupo.", "warning");
-            newCatalog.value.label = validEmails.map(e => e.trim().toLowerCase().replace('@plexus.com', '') + '@plexus.com').join(', ');
+            const validEmails = adminEmailGroupList.value
+                .map(e => FrontendValidator.sanitize(e))
+                .filter(e => !FrontendValidator.isBlank(e));
+                
+            if (validEmails.length === 0) {
+                return Swal.fire("Error", "Debes ingresar al menos un correo para el grupo.", "warning");
+            }
+            for (const em of validEmails) {
+                const fullEm = em.toLowerCase().includes('@') ? em.toLowerCase() : `${em.toLowerCase()}@plexus.com`;
+                if (!FrontendValidator.isValidEmail(fullEm)) {
+                    return Swal.fire("Correo Inválido", `"${em}" no es una dirección de correo válida.`, "warning");
+                }
+            }
+            newCatalog.value.label = validEmails.map(e => {
+                const em = e.toLowerCase().replace('@plexus.com', '');
+                return `${em}@plexus.com`;
+            }).join(', ');
         }
 
-        submitting.value = true;
-        try { 
-            if(editingCatalog.value) {
-                await runGAS('adminUpdateCatalogItem', activeCatalogCategory.value, editingCatalogOriginalId.value, JSON.parse(JSON.stringify(newCatalog.value)));
-                Toast.fire({ icon: 'success', title: 'Elemento Actualizado' });
-            } else {
-                await runGAS('adminSaveConfigItem', JSON.parse(JSON.stringify(newCatalog.value)));
-                Toast.fire({ icon: 'success', title: 'Elemento Guardado' });
+        const catKey = getCatalogKey(activeCatalogCategory.value);
+        if (!catalogs.value[catKey]) catalogs.value[catKey] = [];
+        const prevSnapshot = JSON.parse(JSON.stringify(catalogs.value[catKey]));
+        const isEditing = editingCatalog.value;
+        const origId = editingCatalogOriginalId.value;
+        const itemToSave = JSON.parse(JSON.stringify(newCatalog.value));
+        if (activeCatalogCategory.value === 'SECTOR') {
+            itemToSave.hex = itemToSave.color || '#005565';
+        }
+
+        // 🚀 Renderizado Optimista (< 50ms): actualización inmediata de vista y caché
+        if (isEditing) {
+            const idx = catalogs.value[catKey].findIndex(x => String(x.id).toUpperCase() === String(origId).toUpperCase());
+            if (idx !== -1) {
+                catalogs.value[catKey][idx] = itemToSave;
             }
-            cancelCatalogEdit();
-            await loadData(); 
-        } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value = false; } 
+        } else {
+            const exists = catalogs.value[catKey].some(x => String(x.id).toUpperCase() === String(itemToSave.id).toUpperCase());
+            if (!exists) {
+                catalogs.value[catKey].push(itemToSave);
+            }
+        }
+
+        if (activeCatalogCategory.value === 'SECTOR') {
+            quadrantDB.value = catalogs.value.sectors;
+        }
+
+        cancelCatalogEdit();
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: isEditing ? 'Elemento Actualizado' : 'Elemento Guardado' });
+
+        // Persistencia asíncrona en segundo plano sin congelar la pantalla
+        (async () => {
+            try { 
+                if(isEditing) {
+                    const r = await runGAS('adminUpdateCatalogItem', activeCatalogCategory.value, origId, itemToSave);
+                    if (r && r.success === false) throw new Error(r.error || 'Error al actualizar');
+                } else {
+                    const r = await runGAS('adminSaveConfigItem', itemToSave);
+                    if (r && r.success === false) throw new Error(r.error || 'Error al guardar');
+                }
+            } catch(e) { 
+                console.error("Rollback en catálogo:", e);
+                catalogs.value[catKey] = prevSnapshot;
+                if (activeCatalogCategory.value === 'SECTOR') quadrantDB.value = catalogs.value.sectors;
+                if (persistLocalStore) persistLocalStore();
+                Swal.fire("Error de Sincronización", e.message || 'No se pudo guardar en el servidor', "error"); 
+            }
+        })();
     };
 
     const editCatalog = (item) => {
@@ -150,9 +225,26 @@ function useAdmin(globalConfig) {
             showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar'
         }).then(async (result) => {
             if (result.isConfirmed) {
-                submitting.value=true; 
-                try { await runGAS('adminDeleteConfigItem', cat, id); await loadData(); Toast.fire({ icon: 'success', title: 'Elemento Eliminado' }); } 
-                catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; }
+                const catKey = getCatalogKey(cat);
+                if (!catalogs.value[catKey]) return;
+                const prevSnapshot = JSON.parse(JSON.stringify(catalogs.value[catKey]));
+
+                // 🚀 Renderizado Optimista (< 50ms)
+                catalogs.value[catKey] = catalogs.value[catKey].filter(x => String(x.id).toUpperCase() !== String(id).toUpperCase());
+                if (cat === 'SECTOR') quadrantDB.value = catalogs.value.sectors;
+                if (persistLocalStore) persistLocalStore();
+                Toast.fire({ icon: 'success', title: 'Elemento Eliminado' });
+
+                try {
+                    const r = await runGAS('adminDeleteConfigItem', cat, id);
+                    if (r && r.success === false) throw new Error(r.error || 'Error al eliminar');
+                } catch(e) {
+                    console.error("Rollback en eliminar catálogo:", e);
+                    catalogs.value[catKey] = prevSnapshot;
+                    if (cat === 'SECTOR') quadrantDB.value = catalogs.value.sectors;
+                    if (persistLocalStore) persistLocalStore();
+                    Swal.fire("Error de Sincronización", e.message || 'Error al eliminar en el servidor', "error");
+                }
             }
         });
     };
@@ -161,23 +253,101 @@ function useAdmin(globalConfig) {
     // 3. LÓGICA DE ESTADOS Y MATRIZ
     // ==========================================
     const addStatus = async () => { 
-        if(!newStatus.value.name) return; submitting.value=true; 
-        try { await runGAS('adminAddMatrixOption', JSON.parse(JSON.stringify(newStatus.value))); newStatus.value={name:'', showCard:false, color:'#64748b', isAdmin: false}; await loadData(); Toast.fire({ icon: 'success', title: 'Estado Agregado' }); } 
-        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } 
+        if (submitting.value) return;
+        const statusName = FrontendValidator.sanitize(newStatus.value.name).toUpperCase();
+        if (FrontendValidator.isBlank(statusName)) {
+            return Swal.fire("Campo Requerido", "El nombre del estado es obligatorio.", "warning");
+        }
+        
+        // Verificar duplicados en la lista de estados
+        const exists = statusDB.value.some(s => s.name.toUpperCase().trim() === statusName);
+        if (exists) {
+            return Swal.fire("Estado Duplicado", `El estado "${statusName}" ya existe en el sistema.`, "warning");
+        }
+
+        const newObj = { name: statusName, showCard: !!newStatus.value.showCard, color: newStatus.value.color || '#64748b', isAdmin: !!newStatus.value.isAdmin };
+        if (!matrixDB.value.validationReasons) matrixDB.value.validationReasons = [];
+        const prevReasons = JSON.parse(JSON.stringify(matrixDB.value.validationReasons));
+
+        // 🚀 Renderizado Optimista (< 50ms)
+        matrixDB.value.validationReasons.push(newObj);
+        newStatus.value = { name: '', showCard: false, color: '#64748b', isAdmin: false };
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Estado Agregado' });
+
+        try { 
+            const r = await runGAS('adminAddMatrixOption', newObj); 
+            if (r && r.success === false) throw new Error(r.error || 'Error al agregar estado');
+        } catch(e) { 
+            console.error("Rollback en agregar estado:", e);
+            matrixDB.value.validationReasons = prevReasons;
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error"); 
+        }
     };
 
     const deleteStatus = (idx) => { 
         Swal.fire({ title: '¿Eliminar estado?', text: "Esta acción es irreversible", icon: 'warning', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'Sí, eliminar' }).then(async (result) => {
-            if(result.isConfirmed) { submitting.value=true; try { await runGAS('adminDeleteMatrixOption', statusDB.value[idx].name); await loadData(); Toast.fire({ icon: 'success', title: 'Estado Eliminado' }); } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } }
+            if(result.isConfirmed) {
+                const targetName = statusDB.value[idx]?.name;
+                if (!targetName) return;
+                const prevReasons = JSON.parse(JSON.stringify(matrixDB.value.validationReasons || []));
+
+                // 🚀 Renderizado Optimista (< 50ms)
+                matrixDB.value.validationReasons = matrixDB.value.validationReasons.filter(s => {
+                    const sName = typeof s === 'string' ? s : s.name;
+                    return String(sName).toUpperCase() !== String(targetName).toUpperCase();
+                });
+                if (persistLocalStore) persistLocalStore();
+                Toast.fire({ icon: 'success', title: 'Estado Eliminado' });
+
+                try { 
+                    const r = await runGAS('adminDeleteMatrixOption', targetName); 
+                    if (r && r.success === false) throw new Error(r.error || 'Error al eliminar');
+                } catch(e) { 
+                    console.error("Rollback en eliminar estado:", e);
+                    matrixDB.value.validationReasons = prevReasons;
+                    if (persistLocalStore) persistLocalStore();
+                    Swal.fire("Error de Sincronización", e.message, "error"); 
+                }
+            }
         });
     };
 
     const openEditStateModal = (sObj) => { editModal.value = { open: true, oldValue: sObj.name, newValue: JSON.parse(JSON.stringify(sObj)) }; };
 
     const confirmStateUpdate = async () => { 
-        if(!editModal.value.newValue.name) return; submitting.value=true; 
-        try { await runGAS('adminUpdateMatrixOption', editModal.value.oldValue, JSON.parse(JSON.stringify(editModal.value.newValue))); editModal.value.open=false; await loadData(); Toast.fire({ icon: 'success', title: 'Estado Actualizado' }); } 
-        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } 
+        if (submitting.value) return;
+        const newName = FrontendValidator.sanitize(editModal.value.newValue.name).toUpperCase();
+        if (FrontendValidator.isBlank(newName)) {
+            return Swal.fire("Campo Requerido", "El nombre del estado no puede estar vacío.", "warning");
+        }
+        editModal.value.newValue.name = newName;
+        const oldName = editModal.value.oldValue;
+        const updatedObj = JSON.parse(JSON.stringify(editModal.value.newValue));
+        const prevReasons = JSON.parse(JSON.stringify(matrixDB.value.validationReasons || []));
+
+        // 🚀 Renderizado Optimista (< 50ms)
+        const idx = matrixDB.value.validationReasons.findIndex(s => {
+            const sName = typeof s === 'string' ? s : s.name;
+            return String(sName).toUpperCase() === String(oldName).toUpperCase();
+        });
+        if (idx !== -1) {
+            matrixDB.value.validationReasons[idx] = updatedObj;
+        }
+        editModal.value.open = false;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Estado Actualizado' });
+
+        try { 
+            const r = await runGAS('adminUpdateMatrixOption', oldName, updatedObj); 
+            if (r && r.success === false) throw new Error(r.error || 'Error al actualizar estado');
+        } catch(e) { 
+            console.error("Rollback en actualizar estado:", e);
+            matrixDB.value.validationReasons = prevReasons;
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error"); 
+        }
     };
 
     // ==========================================
@@ -208,21 +378,75 @@ function useAdmin(globalConfig) {
     const deleteRule = (ruleId) => {
          Swal.fire({ title: '¿Eliminar Regla?', text: "Esto afectará la creación de nuevos activos de este tipo.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'Sí, eliminar permanentemente' })
          .then(async (result) => {
-            if (result.isConfirmed) { submitting.value=true; try { await runGAS('adminDeleteRule', ruleId); await loadData(); Toast.fire({ icon: 'success', title: 'Regla Eliminada' }); } catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value=false; } }
+            if (result.isConfirmed) {
+                const prevRule = dbRules.value[ruleId] ? JSON.parse(JSON.stringify(dbRules.value[ruleId])) : null;
+
+                // 🚀 Renderizado Optimista (< 50ms)
+                delete dbRules.value[ruleId];
+                if (persistLocalStore) persistLocalStore();
+                Toast.fire({ icon: 'success', title: 'Regla Eliminada' });
+
+                try { 
+                    const r = await runGAS('adminDeleteRule', ruleId); 
+                    if (r && r.success === false) throw new Error(r.error || 'Error al eliminar regla');
+                } catch(e) { 
+                    console.error("Rollback en eliminar regla:", e);
+                    if (prevRule) dbRules.value[ruleId] = prevRule;
+                    if (persistLocalStore) persistLocalStore();
+                    Swal.fire("Error de Sincronización", e.message, "error"); 
+                }
+            }
         });
     };
 
     const saveRule = async () => { 
-        submitting.value=true; 
-        const p = { description: ruleModal.value.data.description, defaultIcon: ruleModal.value.data.defaultIcon, recommendation: ruleModal.value.data.recommendation, tolerance:ruleModal.value.data.tolerance, recs: ruleModal.value.data.recs || {} }; 
+        if (submitting.value) return;
+        const ruleDesc = FrontendValidator.sanitize(ruleModal.value.data.description).toUpperCase();
+        if (FrontendValidator.isBlank(ruleDesc)) {
+            return Swal.fire("Campo Requerido", "El tipo de activo es obligatorio.", "warning");
+        }
+        ruleModal.value.data.description = ruleDesc;
+        ruleModal.value.data.recommendation = FrontendValidator.sanitize(ruleModal.value.data.recommendation);
+
+        const p = { 
+            description: ruleDesc, 
+            defaultIcon: ruleModal.value.data.defaultIcon || 'fa-box', 
+            recommendation: ruleModal.value.data.recommendation || '', 
+            tolerance: ruleModal.value.data.tolerance ?? 0.8, 
+            recs: ruleModal.value.data.recs || {} 
+        }; 
         for(const k in FIELD_MAP) { 
             if(ruleModal.value.tempActive[k]) { 
-                if(FIELD_MAP[k].type === 'scientific') { const m = ruleModal.value.data[k + '_m'] || '1.0'; const e = ruleModal.value.data[k + '_e'] || '9'; p[k] = `< ${m}E${e}`; } 
-                else { p[k] = ruleModal.value.data[k]; } 
-            } else { p[k] = ""; } 
-        } 
-        try { await runGAS('adminSaveRule', p); ruleModal.value.open=false; await loadData(); Toast.fire({ icon: 'success', title: 'Regla Guardada' }); } 
-        catch(e) { Swal.fire('Error', e.message, 'error'); } submitting.value=false; 
+                if(FIELD_MAP[k].type === 'scientific') { 
+                    const m = ruleModal.value.data[k + '_m'] || '1.0'; 
+                    const e = ruleModal.value.data[k + '_e'] || '9'; 
+                    p[k] = `< ${m}E${e}`; 
+                } else { 
+                    p[k] = ruleModal.value.data[k] || ''; 
+                } 
+            } else { 
+                p[k] = ""; 
+            } 
+        }
+
+        const prevRule = dbRules.value[ruleDesc] ? JSON.parse(JSON.stringify(dbRules.value[ruleDesc])) : null;
+
+        // 🚀 Renderizado Optimista (< 50ms)
+        dbRules.value[ruleDesc] = p;
+        ruleModal.value.open = false;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Regla Guardada' });
+
+        try { 
+            const r = await runGAS('adminSaveRule', p); 
+            if (r && r.success === false) throw new Error(r.error || 'Error al guardar regla');
+        } catch(e) { 
+            console.error("Rollback en guardar regla:", e);
+            if (prevRule) dbRules.value[ruleDesc] = prevRule;
+            else delete dbRules.value[ruleDesc];
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire('Error de Sincronización', e.message || 'Error en el servidor', 'error'); 
+        }
     };
 
     const getActiveMeasurements = (rule) => {
@@ -376,20 +600,53 @@ function useAdmin(globalConfig) {
     };
     const removeAdminEmailField = (idx) => adminEmailGroupList.value.splice(idx, 1);
 
-    const saveGeneralSettings = () => {
+    const saveGeneralSettings = async () => {
+        if (submitting.value) return;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Preferencia actualizada' });
         submitting.value = true;
-        runGAS('adminSaveGeneralSettings', JSON.parse(JSON.stringify(generalSettings.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Preferencia actualizada' }); });
+        try {
+            const r = await runGAS('adminSaveGeneralSettings', JSON.parse(JSON.stringify(generalSettings.value)));
+            if (!r || !r.success) {
+                throw new Error(r?.error || 'Error al guardar');
+            }
+        } catch(e) {
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        } finally {
+            submitting.value = false;
+        }
     };
 
-    const saveEmailConfig = () => {
+    const saveEmailConfig = async () => {
+        if (submitting.value) return;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Configuración guardada' });
         submitting.value = true;
-        runGAS('adminSaveEmailConfig', JSON.parse(JSON.stringify(emailConfig.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Configuración guardada' }); else Swal.fire("Error", r.error, "error"); });
+        try {
+            const r = await runGAS('adminSaveEmailConfig', JSON.parse(JSON.stringify(emailConfig.value)));
+            if (!r || !r.success) {
+                throw new Error(r?.error || 'Error al guardar');
+            }
+        } catch(e) {
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        } finally {
+            submitting.value = false;
+        }
     };
 
     const saveAiConfig = async () => {
+        if (submitting.value) return;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Cerebro IA Actualizado' });
         submitting.value = true;
-        try { const r = await runGAS('adminSaveAiConfig', JSON.parse(JSON.stringify(aiSettings.value))); if(r.success) Toast.fire({ icon: 'success', title: 'Cerebro IA Actualizado' }); else throw new Error(r.error); } 
-        catch(e) { Swal.fire("Error", e.message, "error"); } finally { submitting.value = false; }
+        try { 
+            const r = await runGAS('adminSaveAiConfig', JSON.parse(JSON.stringify(aiSettings.value))); 
+            if (!r || !r.success) throw new Error(r?.error || 'Error al actualizar IA'); 
+        } catch(e) { 
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error"); 
+        } finally { 
+            submitting.value = false; 
+        }
     };
 
     const newUserEmail = ref('');
@@ -397,14 +654,65 @@ function useAdmin(globalConfig) {
 
     const addNewRole = async () => {
         const { value: name } = await Swal.fire({ title: 'Nuevo Rol', input: 'text', inputPlaceholder: 'Ej: GERENCIA' });
-        if (name) rolesDB.value[name.toUpperCase().replace(/\s/g, '_')] = { canView: true, canAudit: false, canConfig: false, canUsers: false, canUseCopilot: false };
+        const cleanName = FrontendValidator.sanitize(name).toUpperCase().replace(/\s+/g, '_');
+        if (!FrontendValidator.isBlank(cleanName)) {
+            if (rolesDB.value[cleanName]) {
+                return Swal.fire("Rol Existente", `El rol "${cleanName}" ya existe.`, "warning");
+            }
+            rolesDB.value[cleanName] = { canView: true, canAudit: false, canConfig: false, canUsers: false, canUseCopilot: false };
+            Toast.fire({ icon: 'info', title: 'Rol agregado (Guarda para aplicar)' });
+        }
     };
     const deleteRole = (role) => { delete rolesDB.value[role]; };
-    const saveRoles = () => { submitting.value = true; runGAS('adminSaveRoles', JSON.parse(JSON.stringify(rolesDB.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Roles guardados' }); }); };
+    
+    const saveRoles = async () => { 
+        if (submitting.value) return;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Roles guardados' });
+        submitting.value = true; 
+        try {
+            const r = await runGAS('adminSaveRoles', JSON.parse(JSON.stringify(rolesDB.value)));
+            if (!r || !r.success) {
+                throw new Error(r?.error || 'Error al guardar');
+            }
+        } catch(e) {
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        } finally {
+            submitting.value = false;
+        }
+    };
         
-    const addUser = () => { if(!newUserEmail.value || !newUserEmail.value.includes('@')) return; usersDB.value[newUserEmail.value.toLowerCase().trim()] = newUserRole.value; newUserEmail.value = ''; };
+    const addUser = () => { 
+        const email = FrontendValidator.sanitize(newUserEmail.value).toLowerCase();
+        if (FrontendValidator.isBlank(email)) {
+            return Swal.fire("Campo Requerido", "Ingresa una dirección de correo.", "warning");
+        }
+        if (!FrontendValidator.isValidEmail(email)) {
+            return Swal.fire("Correo Inválido", `"${email}" no es una dirección de correo válida.`, "warning");
+        }
+        usersDB.value[email] = newUserRole.value; 
+        newUserEmail.value = ''; 
+        Toast.fire({ icon: 'info', title: 'Usuario agregado a la lista (Guarda para aplicar)' });
+    };
+    
     const deleteUser = (email) => { delete usersDB.value[email]; };
-    const saveUsers = () => { submitting.value = true; runGAS('adminSaveUsers', JSON.parse(JSON.stringify(usersDB.value))).then(r => { submitting.value = false; if(r.success) Toast.fire({ icon: 'success', title: 'Usuarios guardados' }); }); };
+    
+    const saveUsers = async () => { 
+        if (submitting.value) return;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: 'Usuarios guardados' });
+        submitting.value = true; 
+        try {
+            const r = await runGAS('adminSaveUsers', JSON.parse(JSON.stringify(usersDB.value)));
+            if (!r || !r.success) {
+                throw new Error(r?.error || 'Error al guardar');
+            }
+        } catch(e) {
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        } finally {
+            submitting.value = false;
+        }
+    };
 
     // EXPORTAMOS TODO AL MAIN
     return {

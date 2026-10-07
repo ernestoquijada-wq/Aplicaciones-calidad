@@ -39,14 +39,14 @@
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
             <div><label class="lbl">{{ $t('dash.filters.type') }}</label><select v-model="filters.type" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="t in uniqueTypes" :value="t">{{t}}</option></select></div>
-            <div><label class="lbl">{{ $t('dash.filters.status') }}</label><select v-model="filters.status" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="s in statusDB" :value="s.name">{{ s.name }}</option></select></div>
+            <div><label class="lbl">{{ $t('dash.filters.status') }}</label><select v-model="filters.status" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.resp') }}</label><select v-model="filters.responsible" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{a.id}}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.factory') }}</label><select v-model="filters.factory" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="f in catalogs.factories" :value="f.id">{{f.id}}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.project') }}</label><select v-model="filters.project" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="p in catalogs.projects" :value="p.id">{{p.id}}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.quadrant') }}</label><select v-model="filters.quadrant" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="q in catalogs.sectors" :value="q.id">{{ q.label }}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.month') }}</label><input type="month" v-model="filters.month" class="input-std w-full cursor-pointer"></div>
             <div class="flex items-end gap-2 justify-end">
-                  <button @click="clearFilters" class="px-3 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-500 font-bold text-[10px] transition h-[36px] w-12 flex items-center justify-center" title="Limpiar"><i class="fas fa-undo"></i></button>
+                  <button @click="clearFilters" class="px-3 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-500 font-bold text-[10px] transition h-[36px] w-12 flex items-center justify-center" :title="$t('dash.filters.clear')"><i class="fas fa-undo"></i></button>
                   <button v-if="availableTemplates.length === 0" @click="exportToDrive(null)" class="flex-1 px-3 py-2 bg-slate-400 text-white rounded-lg hover:bg-slate-500 text-[10px] font-bold transition h-[36px] shadow-sm flex items-center justify-center gap-2">
                       <i class="fab fa-google-drive text-sm"></i> {{ $t('dash.filters.basic') }}
                   </button>
@@ -77,7 +77,7 @@
                      <i class="fas text-lg" :class="getIcon(asset.description)"></i>
                      <div class="absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white shadow-sm" :style="{backgroundColor: getStatusColor(asset.status)}"></div>
                  </div>
-                 <span class="badge bg-slate-100 text-slate-500 border border-slate-200 text-[9px]" title="Total Verificaciones"><i class="fas fa-history mr-1"></i> {{ asset.auditCount }}</span>
+                 <span class="badge bg-slate-100 text-slate-500 border border-slate-200 text-[9px]" :title="$t('dash.item.audits')"><i class="fas fa-history mr-1"></i> {{ asset.auditCount }}</span>
              </div>
              <div class="flex-1 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 content-center">
                  <div><span class="lbl">{{ $t('dash.item.id') }}</span><p class="font-mono font-black text-sm text-slate-700" v-html="highlightMatch(asset.controlNo)"></p></div>
@@ -85,7 +85,7 @@
                  <div>
                     <span class="lbl">{{ $t('dash.item.status') }}</span>
                     <div class="flex items-center gap-2">
-                        <p class="font-bold text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded inline-block uppercase border border-slate-200">{{ asset.status }}</p>
+                        <p class="font-bold text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded inline-block uppercase border border-slate-200">{{ translateStatus(asset.status) }}</p>
                     </div>
                  </div>
                  <div><span class="lbl">{{ $t('dash.item.resp') }}</span><p class="font-bold text-xs text-slate-600 truncate">{{ asset.responsible || 'N/A' }}</p></div>
@@ -103,7 +103,7 @@
                  <div v-if="asset.lastResult && !['CUMPLE', 'PASS', 'OK', 'PENDIENTE', ''].includes(asset.lastResult.toUpperCase())" class="col-span-2 md:col-span-4 mt-1 pt-3 border-t border-rose-100 flex flex-wrap items-center gap-2 w-full justify-start">
                     <div class="flex items-center gap-1.5 bg-rose-100 border border-rose-300 rounded px-2 py-1 shadow-sm animate-pulse">
                         <i class="fas fa-exclamation-circle text-rose-600 text-[10px]"></i>
-                        <span class="text-[9px] font-black text-rose-700 uppercase tracking-widest">{{ $t('dash.item.alert') }}: {{ asset.lastResult }}</span>
+                        <span class="text-[9px] font-black text-rose-700 uppercase tracking-widest">{{ $t('dash.item.alert') }}: {{ translateStatus(asset.lastResult) }}</span>
                     </div>
                     <span v-for="fail in getAssetFailures(asset)" :key="fail" class="text-[8.5px] bg-white text-rose-500 border border-rose-200 px-2 py-1 rounded shadow-sm font-bold uppercase flex items-center">
                         <i class="fas fa-times mr-1 text-rose-400"></i> {{ fail }}

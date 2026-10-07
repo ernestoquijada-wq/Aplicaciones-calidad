@@ -7,14 +7,14 @@
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
       <div class="bg-[#005565] p-6 text-white text-center relative overflow-hidden">
           <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          <h3 class="font-black text-xs uppercase tracking-widest text-emerald-300 relative z-10 mb-2">Historial de Verificación</h3>
+          <h3 class="font-black text-xs uppercase tracking-widest text-emerald-300 relative z-10 mb-2">{{ $t('modals.history.title') }}</h3>
           <div class="relative z-10 mb-1">
-              <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider block">ID ACTIVO</span>
+              <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider block">{{ $t('modals.history.assetId') }}</span>
               <p class="text-4xl font-black text-white leading-none tracking-tighter">{{ editAsset.controlNo }}</p>
           </div>
           <div class="inline-block mt-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/10 relative z-10">
               <p class="text-[10px] font-bold text-white uppercase tracking-wide">
-                  <span class="text-emerald-200 mr-1 opacity-80">TIPO:</span>{{ editAsset.description }}
+                  <span class="text-emerald-200 mr-1 opacity-80">{{ $t('modals.history.type') }}:</span>{{ editAsset.description }}
               </p>
           </div>
           <button @click="historyModal.open=false" class="absolute top-4 right-4 text-white/50 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
@@ -25,15 +25,15 @@
               <div class="flex justify-between items-start mb-3">
                   <div class="flex flex-col gap-1.5">
                        <div class="flex items-center gap-2">
-                          <span class="text-[9px] font-black text-[#005565] bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 uppercase tracking-wide w-14 text-center">Verif</span>
+                          <span class="text-[9px] font-black text-[#005565] bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 uppercase tracking-wide w-14 text-center">{{ $t('modals.history.verif') }}</span>
                           <span class="font-mono text-xs font-bold text-slate-700">{{ h.date.split(' ')[0] }}</span>
                        </div>
                        <div class="flex items-center gap-2">
-                          <span class="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-wide w-14 text-center">Vence</span>
+                          <span class="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-wide w-14 text-center">{{ $t('modals.history.expires') }}</span>
                           <span class="font-mono text-xs font-bold text-slate-500">{{ getHistoryExpiration(h.technicalData, h.date) }}</span>
                        </div>
                   </div>
-                  <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm" :class="h.result==='CUMPLE'?'bg-emerald-100 text-emerald-600 border border-emerald-200':'bg-rose-100 text-rose-600 border border-rose-200'">{{ h.result }}</span>
+                  <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm" :class="h.result==='CUMPLE'?'bg-emerald-100 text-emerald-600 border border-emerald-200':'bg-rose-100 text-rose-600 border border-rose-200'">{{ translateStatus(h.result) }}</span>
               </div>
               <div class="text-[10px] text-slate-500 mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono overflow-x-auto whitespace-pre-wrap">
                   <div v-for="(val, k) in parseHistoryData(h.technicalData)" :key="k" class="flex justify-between items-center text-[10px] border-b border-dashed border-slate-200 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
@@ -44,14 +44,14 @@
               <div v-if="getHistoryComments(h.technicalData)" class="mt-3 text-[10px] text-slate-600 bg-amber-50/50 p-3 rounded-xl border border-amber-100/50 flex flex-col gap-1">
                   <div class="flex items-center gap-1.5 mb-1">
                       <i class="fas fa-comment-alt text-amber-400 text-xs"></i>
-                      <span class="font-black text-[9px] text-amber-600/70 uppercase tracking-widest">OBSERVACIONES:</span>
+                      <span class="font-black text-[9px] text-amber-600/70 uppercase tracking-widest">{{ $t('modals.history.obs') }}:</span>
                   </div>
                   <p class="italic pl-1">"{{ getHistoryComments(h.technicalData) }}"</p>
               </div>
           </div>
       </div>
       <div class="p-4 bg-slate-100 text-center border-t border-slate-200">
-          <button @click="historyModal.open=false" class="text-xs font-bold text-slate-500 hover:text-slate-800 uppercase tracking-widest">Cerrar Ventana</button>
+          <button @click="historyModal.open=false" class="text-xs font-bold text-slate-500 hover:text-slate-800 uppercase tracking-widest">{{ $t('modals.history.close') }}</button>
       </div>
   </div>
 </div>
@@ -60,30 +60,30 @@
 <div v-if="helpModal" class="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
         <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 class="font-black text-slate-700 flex items-center gap-2"><i class="fas fa-question-circle text-[#005565]"></i> Centro de Ayuda</h3>
+            <h3 class="font-black text-slate-700 flex items-center gap-2"><i class="fas fa-question-circle text-[#005565]"></i> {{ $t('modals.help.title') }}</h3>
             <button @click="helpModal=false" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
         </div>
         <div class="overflow-y-auto flex-1 p-0">
             <div class="help-section">
-                <h4 class="help-title"><i class="fas fa-play-circle"></i> Flujo de Trabajo</h4>
-                <p class="help-text mb-2">1. <b>Registrar Activo:</b> Use el botón flotante (+) para dar de alta equipos nuevos. Es obligatorio llenar todos los datos.</p>
-                <p class="help-text">2. <b>Verificación:</b> Seleccione una tarjeta del Dashboard para auditar. Puede APROBAR (PASS) o RECHAZAR (FAIL).</p>
+                <h4 class="help-title"><i class="fas fa-play-circle"></i> {{ $t('modals.help.workflow') }}</h4>
+                <p class="help-text mb-2">{{ $t('modals.help.workflow_1') }}</p>
+                <p class="help-text">{{ $t('modals.help.workflow_2') }}</p>
             </div>
             <div class="help-section bg-slate-50">
-                <h4 class="help-title"><i class="fas fa-traffic-light"></i> Interpretación de Colores</h4>
+                <h4 class="help-title"><i class="fas fa-traffic-light"></i> {{ $t('modals.help.colors') }}</h4>
                 <ul class="help-text space-y-1">
-                    <li><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1"></span><b>Verde (OK):</b> Medición dentro del estándar.</li>
-                    <li><span class="w-2 h-2 rounded-full bg-amber-500 inline-block mr-1"></span><b>Ámbar (Riesgo):</b> Dentro del límite pero cercano a fallar (Tolerancia).</li>
-                    <li><span class="w-2 h-2 rounded-full bg-rose-500 inline-block mr-1"></span><b>Rojo (Falla):</b> Fuera del límite permitido. Requiere acción.</li>
+                    <li><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1"></span>{{ $t('modals.help.green') }}</li>
+                    <li><span class="w-2 h-2 rounded-full bg-amber-500 inline-block mr-1"></span>{{ $t('modals.help.amber') }}</li>
+                    <li><span class="w-2 h-2 rounded-full bg-rose-500 inline-block mr-1"></span>{{ $t('modals.help.red') }}</li>
                 </ul>
             </div>
             <div class="help-section">
-                <h4 class="help-title"><i class="fas fa-ban"></i> Botón N/A</h4>
-                <p class="help-text">Si una medición no aplica para el equipo actual, presione el botón <b>[N/A]</b> junto al campo numérico. Esto evita guardar ceros o espacios vacíos.</p>
+                <h4 class="help-title"><i class="fas fa-ban"></i> {{ $t('modals.help.na_title') }}</h4>
+                <p class="help-text">{{ $t('modals.help.na_desc') }}</p>
             </div>
             <div class="help-section bg-[#005565] text-white">
-                <h4 class="help-title text-white"><i class="fas fa-headset"></i> Soporte Técnico</h4>
-                <p class="text-xs opacity-80">Si encuentra un error o necesita un nuevo tipo de activo, contacte a Ingeniería de Calidad.</p>
+                <h4 class="help-title text-white"><i class="fas fa-headset"></i> {{ $t('modals.help.support_title') }}</h4>
+                <p class="text-xs opacity-80">{{ $t('modals.help.support_desc') }}</p>
             </div>
         </div>
     </div>
@@ -128,7 +128,12 @@
                 </div>
             </div>
         </div>
-        <div class="p-5 bg-slate-50 border-t flex justify-end gap-3"><button @click="ruleModal.open=false" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded">Cancelar</button><button @click="saveRule" class="px-6 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-lg">Guardar</button></div>
+        <div class="p-5 bg-slate-50 border-t flex justify-end gap-3">
+            <button @click="ruleModal.open=false" :disabled="submitting" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded disabled:opacity-50">{{ $t('common.cancel') }}</button>
+            <button @click="saveRule" :disabled="submitting" class="px-6 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-lg hover:bg-[#004455] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.loading') : $t('common.save') }}
+            </button>
+        </div>
     </div>
 </div>
 
@@ -142,7 +147,12 @@
             <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.isAdmin" id="chkEditAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer"><label for="chkEditAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">Movimiento Administrativo</label></div>
         </div>
         <div v-if="editModal.newValue.showCard" class="mb-6"><label class="lbl">Color de Tarjeta</label><div class="h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="editModal.newValue.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
-        <div class="flex justify-end gap-2"><button @click="editModal.open=false" class="px-4 py-2 text-xs font-bold text-slate-400">Cancelar</button><button @click="confirmStateUpdate" class="px-4 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-md">Actualizar</button></div>
+        <div class="flex justify-end gap-2">
+            <button @click="editModal.open=false" :disabled="submitting" class="px-4 py-2 text-xs font-bold text-slate-400 disabled:opacity-50">{{ $t('common.cancel') }}</button>
+            <button @click="confirmStateUpdate" :disabled="submitting" class="px-4 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-md hover:bg-[#004455] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('common.save') }}
+            </button>
+        </div>
     </div>
 </div>
 
@@ -184,14 +194,14 @@
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-rose-100">
         <div class="bg-gradient-to-r from-rose-600 to-rose-800 px-6 py-5 flex justify-between items-center shadow-md z-10 relative">
             <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-            <h3 class="font-black text-white flex items-center gap-2 relative"><i class="fas fa-tools"></i> Seguimiento de Falla (CAPA)</h3>
+            <h3 class="font-black text-white flex items-center gap-2 relative"><i class="fas fa-tools"></i> {{ $t('modals.ticket.title') }}</h3>
             <button @click="showTicketModal=false" :disabled="submitting" class="text-rose-200 transition relative" :class="submitting ? 'opacity-50 cursor-not-allowed' : 'hover:text-white'"><i class="fas fa-times text-xl"></i></button>
         </div>
         
         <div class="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50 relative">
             <div class="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-0.5">ID del Activo Afectado</p>
+                    <p class="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-0.5">{{ $t('modals.ticket.affected_asset') }}</p>
                     <p class="text-xl font-mono font-black text-rose-700">{{ editAsset.controlNo }}</p>
                 </div>
                 <i class="fas fa-clipboard-check text-3xl text-rose-100"></i>
@@ -217,7 +227,7 @@
                     <div class="flex items-center gap-3">
                         <label :for="'file_'+field.id" class="flex-1 flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-rose-50 hover:border-rose-400 transition-all text-slate-500 hover:text-rose-600">
                             <i class="fas" :class="ticketForm[field.id] ? 'fa-check-circle text-emerald-500' : 'fa-paperclip'"></i>
-                            <span class="text-[11px] font-bold">{{ ticketForm[field.id] ? 'Archivo cargado con éxito' : 'Subir Archivo' }}</span>
+                            <span class="text-[11px] font-bold">{{ ticketForm[field.id] ? $t('modals.ticket.file_uploaded') : $t('modals.ticket.upload_file') }}</span>
                         </label>
                         <input type="file" :id="'file_'+field.id" class="hidden" accept="image/*,application/pdf" @change="handleFileUpload($event, field.id)">
                     </div>
@@ -232,7 +242,7 @@
                         </button>
                     </div>
                     <div class="space-y-2 border-t border-slate-100 pt-4">
-                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Correos adicionales o externos:</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">{{ $t('modals.ticket.extra_emails') }}</p>
                         <div v-for="(email, idx) in ticketEmails" :key="idx" class="flex items-center gap-2 animate-fade">
                             <div class="relative flex-1">
                                 <input v-model="ticketEmails[idx]" @keyup.enter="addEmailField" class="email-input-field input-std pr-24 focus:!border-[#005565]" placeholder="nombre.apellido">
@@ -240,7 +250,7 @@
                             </div>
                             <button v-if="ticketEmails.length > 1" @click="removeEmailField(idx)" class="text-rose-300 hover:text-rose-500 transition"><i class="fas fa-times-circle"></i></button>
                         </div>
-                        <button @click="addEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1">+ AÑADIR OTRO DESTINATARIO</button>
+                        <button @click="addEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1">{{ $t('modals.ticket.add_recipient') }}</button>
                     </div>
                 </div>
 
@@ -252,7 +262,7 @@
                         </div>
                     </div>
                     <button @click="startCamera" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold text-xs hover:bg-rose-50 hover:border-rose-400 hover:text-rose-600 transition flex items-center justify-center gap-2">
-                        <i class="fas fa-camera text-lg"></i> {{ capturedPhotos.length > 0 ? 'TOMAR MÁS FOTOGRAFÍAS' : 'ABRIR CÁMARA Y TOMAR FOTO' }}
+                        <i class="fas fa-camera text-lg"></i> {{ capturedPhotos.length > 0 ? $t('modals.ticket.take_more') : $t('modals.ticket.take_photo') }}
                     </button>
                 </div>
             </div>
@@ -264,9 +274,9 @@
         
         <div class="p-5 bg-white border-t border-slate-100 flex justify-end gap-3 z-10 relative">
             <div v-if="submitting" class="absolute inset-0 z-20"></div>
-            <button @click="showTicketModal=false" :disabled="submitting" class="px-6 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition disabled:opacity-50">Cancelar</button>
+            <button @click="showTicketModal=false" :disabled="submitting" class="px-6 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition disabled:opacity-50">{{ $t('common.cancel') }}</button>
             <button @click="submitTicket" :disabled="submitting" class="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-200 transition flex items-center gap-2 disabled:opacity-80">
-                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? 'ENVIANDO EVIDENCIA...' : 'GUARDAR' }}
+                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('modals.ticket.submitting_btn') : $t('modals.ticket.submit_btn') }}
             </button>
         </div>
     </div>
@@ -275,7 +285,7 @@
 <!-- MODAL: CÁMARA WEB -->
 <div v-if="cameraActive" class="fixed inset-0 z-[120] bg-black flex flex-col animate-fade">
     <div class="p-4 flex justify-between items-center bg-zinc-900 text-white shadow-md">
-        <span class="font-bold text-sm flex items-center gap-2"><i class="fas fa-camera text-rose-500"></i> Evidencia Fotográfica</span>
+        <span class="font-bold text-sm flex items-center gap-2"><i class="fas fa-camera text-rose-500"></i> {{ $t('modals.camera.title') }}</span>
         <button @click="stopCamera" class="text-2xl hover:text-rose-500 transition"><i class="fas fa-times"></i></button>
     </div>
     <div class="flex-1 relative overflow-hidden flex items-center justify-center bg-black">
@@ -287,36 +297,44 @@
             <img :src="img.data" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">
             <button @click.stop="removePhoto(idx)" class="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-80 hover:opacity-100 transition shadow"><i class="fas fa-times"></i></button>
         </div>
-        <div v-if="capturedPhotos.length === 0" class="flex items-center justify-center w-full text-zinc-600 text-xs font-bold uppercase tracking-widest">Enfoque la falla y dispare (Usa la Barra Espaciadora)</div>
+        <div v-if="capturedPhotos.length === 0" class="flex items-center justify-center w-full text-zinc-600 text-xs font-bold uppercase tracking-widest">{{ $t('modals.camera.shoot_hint') }}</div>
     </div>
     
     <div v-if="previewImage !== null" class="fixed inset-0 z-[130] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade">
-        <button @click="previewImage = null" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-times"></i></button>
-        <button v-if="capturedPhotos.length > 1" @click.stop="prevImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-chevron-left"></i></button>
-        <img :src="capturedPhotos[previewImage].data" class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10">
-        <button v-if="capturedPhotos.length > 1" @click.stop="nextImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20"><i class="fas fa-chevron-right"></i></button>
+        <button @click="previewImage = null" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Cerrar (Esc)"><i class="fas fa-times"></i></button>
+        <button v-if="capturedPhotos.length > 1" @click.stop="prevImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Anterior (Flecha Izquierda)"><i class="fas fa-chevron-left"></i></button>
+        <img :src="capturedPhotos[previewImage].data" class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10 select-none">
+        <button v-if="capturedPhotos.length > 1" @click.stop="nextImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Siguiente (Flecha Derecha)"><i class="fas fa-chevron-right"></i></button>
         <div class="absolute bottom-6 flex flex-col items-center">
             <span class="text-white font-mono font-bold bg-zinc-800/80 px-4 py-1 rounded-full text-sm tracking-widest">{{ previewImage + 1 }} / {{ capturedPhotos.length }}</span>
-            <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-2">Usa las flechas para navegar</p>
+            <p class="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-1.5">
+                <span class="bg-zinc-800/90 px-1.5 py-0.5 rounded text-[9px] border border-zinc-700"><i class="fas fa-arrow-left"></i></span>
+                <span class="bg-zinc-800/90 px-1.5 py-0.5 rounded text-[9px] border border-zinc-700"><i class="fas fa-arrow-right"></i></span>
+                {{ $t('modals.camera.nav_hint') }}
+            </p>
         </div>
     </div>
 
     <div class="p-6 bg-zinc-950 flex justify-between items-center">
-        <div class="w-24 text-left text-white text-[10px] font-bold uppercase tracking-widest text-zinc-400">{{ capturedPhotos.length }} FOTOS</div>
+        <div class="w-24 text-left text-white text-[10px] font-bold uppercase tracking-widest text-zinc-400">{{ capturedPhotos.length }} {{ $t('modals.camera.photos_count') }}</div>
         <button @click="takePhoto" class="w-16 h-16 bg-white rounded-full border-4 border-zinc-400 flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-90 transition"><div class="w-12 h-12 border-2 border-zinc-900 rounded-full"></div></button>
-        <button @click="stopCamera" class="w-24 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition shadow-lg tracking-wider">LISTO</button>
+        <button @click="stopCamera" class="w-24 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition shadow-lg tracking-wider">{{ $t('modals.camera.done') }}</button>
     </div>
 </div>
 
 <!-- VISOR DE EVIDENCIAS -->
-<div v-if="viewingEvidenceIdx !== null && activeTicketEvidence" class="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade" @click="closeGallery">
-    <button @click.stop="closeGallery" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-times"></i></button>
-    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="prevGalleryImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-chevron-left"></i></button>
-    <img :src="activeTicketEvidence.fotos[viewingEvidenceIdx]" @click.stop class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10 cursor-default">
-    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="nextGalleryImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer"><i class="fas fa-chevron-right"></i></button>
+<div v-if="viewingEvidenceIdx !== null && activeTicketEvidence && activeTicketEvidence.fotos" class="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade" @click="closeGallery">
+    <button @click.stop="closeGallery" class="absolute top-6 right-6 text-white bg-zinc-800 hover:bg-rose-600 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Cerrar (Esc)"><i class="fas fa-times"></i></button>
+    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="prevGalleryImage" class="absolute left-4 md:left-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Anterior (Flecha Izquierda)"><i class="fas fa-chevron-left"></i></button>
+    <img :src="activeTicketEvidence.fotos[viewingEvidenceIdx]" @click.stop class="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl z-10 cursor-default select-none">
+    <button v-if="activeTicketEvidence.fotos.length > 1" @click.stop="nextGalleryImage" class="absolute right-4 md:right-10 text-white bg-zinc-800/50 hover:bg-zinc-700 rounded-full w-12 h-12 flex items-center justify-center transition shadow-2xl text-xl z-20 cursor-pointer" title="Siguiente (Flecha Derecha)"><i class="fas fa-chevron-right"></i></button>
     <div class="absolute bottom-6 flex flex-col items-center z-20" @click.stop>
         <span class="text-white font-mono font-bold bg-zinc-800/80 px-4 py-1 rounded-full text-sm tracking-widest">{{ viewingEvidenceIdx + 1 }} / {{ activeTicketEvidence.fotos.length }}</span>
-        <p class="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mt-2">Usa las flechas del teclado para navegar</p>
+        <p class="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-1.5">
+            <span class="bg-zinc-800/90 px-1.5 py-0.5 rounded text-[9px] border border-zinc-700"><i class="fas fa-arrow-left"></i></span>
+            <span class="bg-zinc-800/90 px-1.5 py-0.5 rounded text-[9px] border border-zinc-700"><i class="fas fa-arrow-right"></i></span>
+            {{ $t('modals.camera.nav_hint') }}
+        </p>
     </div>
 </div>
 
@@ -324,36 +342,38 @@
 <div v-if="showDataHubModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex justify-center items-center p-4 animate-fade">
   <div class="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
     <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-5 flex justify-between items-center text-white shadow-md">
-      <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> Data Hub - Importación Masiva</h3>
+      <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> {{ $t('modals.datahub.title') }}</h3>
       <button @click="showDataHubModal = false" class="text-slate-400 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
     </div>
     <div class="p-8 overflow-y-auto bg-slate-50">
       <div v-if="bulkDataPreview.length === 0" class="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center hover:bg-white transition bg-white shadow-sm">
         <i class="fas fa-file-csv text-6xl text-slate-300 mb-4"></i>
-        <h3 class="text-lg font-black text-slate-700">Sube tu plantilla .CSV</h3>
-        <p class="text-xs text-slate-500 mb-6 font-medium">El sistema analizará los datos y detectará duplicados antes de guardarlos.</p>
+        <h3 class="text-lg font-black text-slate-700">{{ $t('modals.datahub.upload_hint') }}</h3>
+        <p class="text-xs text-slate-500 mb-6 font-medium">{{ $t('modals.datahub.upload_desc') }}</p>
         <label class="cursor-pointer bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition inline-flex items-center gap-2">
-          <i class="fas fa-upload"></i> Seleccionar Archivo CSV
+          <i class="fas fa-upload"></i> {{ $t('modals.datahub.btn_select_csv') }}
           <input type="file" accept=".csv" class="hidden" @change="handleCSVUpload">
         </label>
       </div>
       <div v-else class="animate-fade space-y-6">
         <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div class="flex space-x-8 px-4">
-            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Leídos</p><p class="text-3xl font-black text-slate-800">{{ bulkStats.total }}</p></div>
-            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Nuevos</p><p class="text-3xl font-black text-emerald-500">{{ bulkStats.nuevos }}</p></div>
-            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Duplicados</p><p class="text-3xl font-black text-amber-500">{{ bulkStats.duplicados }}</p></div>
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{{ $t('modals.datahub.total_read') }}</p><p class="text-3xl font-black text-slate-800">{{ bulkStats.total }}</p></div>
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{{ $t('modals.datahub.new_records') }}</p><p class="text-3xl font-black text-emerald-500">{{ bulkStats.nuevos }}</p></div>
+            <div class="text-center"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{{ $t('modals.datahub.duplicate_records') }}</p><p class="text-3xl font-black text-amber-500">{{ bulkStats.duplicados }}</p></div>
           </div>
           <button @click="clearDataHub" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2">
-            <i class="fas fa-trash"></i> Descartar
+            <i class="fas fa-trash"></i> {{ $t('modals.datahub.discard') }}
           </button>
         </div>
         <div class="flex gap-4">
-          <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2">
-            <i class="fas fa-plus-circle"></i> Inyectar {{ bulkStats.nuevos }} Nuevos
+          <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" :disabled="submitting" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-plus-circle'"></i>
+            <span>{{ submitting ? $t('common.processing') : ($t('modals.datahub.inject_new') + ' (' + bulkStats.nuevos + ')') }}</span>
           </button>
-          <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2">
-            <i class="fas fa-bolt"></i> Actualizar {{ bulkStats.duplicados }} Existentes
+          <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" :disabled="submitting" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-bolt'"></i>
+            <span>{{ submitting ? $t('common.processing') : ($t('modals.datahub.update_existing') + ' (' + bulkStats.duplicados + ')') }}</span>
           </button>
         </div>
       </div>

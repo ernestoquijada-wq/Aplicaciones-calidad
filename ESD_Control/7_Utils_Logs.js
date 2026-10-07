@@ -34,6 +34,348 @@ const Utils = {
   }
 };
 
+/**
+ * Envolvente global de exclusión mutua para operaciones atómicas de escritura.
+ * Protege contra condiciones de carrera en entornos multi-usuario.
+ *
+ * @param {Function} actionFn Función a ejecutar dentro del bloqueo.
+ * @param {number} timeoutMs Tiempo de espera máximo (ms). Por defecto 10,000 ms.
+ * @param {string} opName Nombre descriptivo de la operación.
+ * @return {Object} Resultado retornado por actionFn o respuesta de error estandarizada.
+ */
+function withScriptLock(actionFn, timeoutMs = 10000, opName = "Operación") {
+  if (typeof LockService === 'undefined') {
+    return actionFn();
+  }
+  const lock = LockService.getScriptLock();
+  let acquired = false;
+  try {
+    acquired = lock.tryLock(timeoutMs);
+  } catch (lockErr) {
+    acquired = false;
+  }
+
+  if (!acquired) {
+    return Utils.buildResponse(false, `El servidor está ocupado procesando otra solicitud (${opName}). Por favor, intente nuevamente en unos segundos.`);
+  }
+
+  try {
+    return actionFn();
+  } catch (err) {
+    console.error(`Error en bloque con bloqueo [${opName}]:`, err);
+    return Utils.buildResponse(false, err);
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (releaseErr) {
+      // Ignorar si el lock ya expiró
+    }
+  }
+}
+
+/**
+ * Validador estricto de datos: previene valores nulos, blancos y duplicados.
+ */
+const Validator = {
+  isBlank: function(val) {
+    return val === null || val === undefined || String(val).trim() === "";
+  },
+  sanitize: function(val) {
+    return (val === null || val === undefined) ? "" : String(val).trim();
+  },
+  validateRequired: function(obj, requiredFields) {
+    if (!obj || typeof obj !== 'object') {
+      return { valid: false, message: "Objeto de datos no proporcionado o inválido." };
+    }
+    for (let i = 0; i < requiredFields.length; i++) {
+      const field = requiredFields[i];
+      if (this.isBlank(obj[field])) {
+        return { valid: false, field: field, message: `El campo '${field}' es obligatorio y no puede estar vacío.` };
+      }
+    }
+    return { valid: true };
+  },
+  isDuplicateId: function(sheet, colIndex, targetId, excludeRowIndex = -1) {
+    if (!sheet || this.isBlank(targetId)) return false;
+    const data = sheet.getDataRange().getValues();
+    const normTarget = String(targetId).trim().toUpperCase();
+    for (let i = 1; i < data.length; i++) {
+      if (excludeRowIndex > 0 && (i + 1) === excludeRowIndex) continue;
+      if (String(data[i][colIndex - 1]).trim().toUpperCase() === normTarget) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+/**
+ * Gestor centralizado de caché y estrategias de invalidación.
+ * Optimiza lecturas (< 3s) y purga datos inmediatamente tras escrituras.
+ */
+const CacheManager = {
+  KEYS: {
+    CATALOGS_AND_RULES: 'ESD_CACHE_CATALOGS_AND_RULES',
+    SETTINGS: 'ESD_CACHE_SETTINGS'
+  },
+  DEFAULT_TTL: 21600, // 6 horas en segundos (máximo de Apps Script)
+
+  get: function(key) {
+    if (typeof CacheService === 'undefined') return null;
+    try {
+      const cache = CacheService.getScriptCache();
+      const raw = cache.get(key);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.warn(`Error al leer de caché [${key}]:`, e);
+    }
+    return null;
+  },
+
+  put: function(key, data, ttlSeconds = 21600) {
+    if (typeof CacheService === 'undefined') return;
+    try {
+      const cache = CacheService.getScriptCache();
+      const serialized = JSON.stringify(data);
+      if (serialized.length < 100000) {
+        cache.put(key, serialized, ttlSeconds);
+      }
+    } catch (e) {
+      console.warn(`Error al guardar en caché [${key}]:`, e);
+    }
+  },
+
+  remove: function(keys) {
+    if (typeof CacheService === 'undefined') return;
+    try {
+      const cache = CacheService.getScriptCache();
+      if (Array.isArray(keys)) {
+        cache.removeAll(keys);
+      } else {
+        cache.remove(keys);
+      }
+    } catch (e) {
+      console.warn("Error al invalidar caché:", e);
+    }
+  },
+
+  invalidateCatalogs: function() {
+    this.remove([this.KEYS.CATALOGS_AND_RULES, this.KEYS.SETTINGS]);
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('CONFIG');
+  },
+
+  invalidateAll: function() {
+    this.invalidateCatalogs();
+    this.remove([this.KEYS.AUDIT_COUNTS]);
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
+  }
+};
+
+/**
+ * Gestor de Presencia y Control de Concurrencia para Mediciones en Tiempo Real.
+ * Usa CacheService.getScriptCache() para coordinar accesos simultáneos sin sobrecargar Sheets.
+ */
+const PresenceManager = {
+  PREFIX: 'ESD_LOCK_',
+  DEFAULT_TTL: 90, // 90 segundos de vigencia
+
+  acquire: function(payload) {
+    if (!payload || !payload.assetId) {
+      return { success: false, error: "ID de activo no proporcionado." };
+    }
+    if (typeof CacheService === 'undefined') {
+      return { success: true, status: 'ACQUIRED' };
+    }
+
+    try {
+      const cache = CacheService.getScriptCache();
+      const assetId = String(payload.assetId).trim().toUpperCase();
+      const key = this.PREFIX + assetId;
+      const now = Date.now();
+      const userEmail = String(payload.userEmail || (typeof Session !== 'undefined' ? Session.getActiveUser().getEmail() : '') || 'anonimo').toLowerCase().trim();
+      const userName = String(payload.userName || userEmail.split('@')[0]);
+
+      const raw = cache.get(key);
+      if (raw) {
+        try {
+          const current = JSON.parse(raw);
+          // Si el mismo usuario vuelve a pedir el lock o hace refresh
+          if (current.userEmail === userEmail) {
+            current.lastHeartbeat = now;
+            cache.put(key, JSON.stringify(current), this.DEFAULT_TTL);
+            return { success: true, status: 'ACQUIRED', holder: current };
+          }
+
+          // Si otro usuario tiene el lock y no se fuerza la adquisición
+          if (!payload.force) {
+            const elapsedSeconds = Math.max(0, Math.floor((now - (current.startedAt || now)) / 1000));
+            return {
+              success: true,
+              status: 'LOCKED',
+              holder: {
+                userEmail: current.userEmail,
+                userName: current.userName,
+                startedAt: current.startedAt,
+                elapsedSeconds: elapsedSeconds
+              }
+            };
+          }
+        } catch (e) {
+          console.warn("Error parseando presencia previa:", e);
+        }
+      }
+
+      // Adquisición nueva o forzada
+      const record = {
+        assetId: assetId,
+        userEmail: userEmail,
+        userName: userName,
+        startedAt: now,
+        lastHeartbeat: now
+      };
+      cache.put(key, JSON.stringify(record), this.DEFAULT_TTL);
+      return { success: true, status: payload.force ? 'OVERRIDDEN' : 'ACQUIRED', holder: record };
+    } catch (e) {
+      console.warn("Error en PresenceManager.acquire:", e);
+      return { success: true, status: 'ACQUIRED' };
+    }
+  },
+
+  renew: function(assetId, userEmail) {
+    if (!assetId || typeof CacheService === 'undefined') return { success: true, status: 'EXPIRED' };
+    try {
+      const cache = CacheService.getScriptCache();
+      const key = this.PREFIX + String(assetId).trim().toUpperCase();
+      const raw = cache.get(key);
+      if (raw) {
+        const current = JSON.parse(raw);
+        const normUser = String(userEmail || (typeof Session !== 'undefined' ? Session.getActiveUser().getEmail() : '') || '').toLowerCase().trim();
+        if (!normUser || current.userEmail === normUser) {
+          current.lastHeartbeat = Date.now();
+          cache.put(key, JSON.stringify(current), this.DEFAULT_TTL);
+          return { success: true, status: 'RENEWED' };
+        } else {
+          return { success: false, status: 'OVERRIDDEN', byUser: current.userName || current.userEmail };
+        }
+      }
+    } catch (e) {
+      console.warn("Error en PresenceManager.renew:", e);
+    }
+    return { success: true, status: 'EXPIRED' };
+  },
+
+  release: function(assetId, userEmail) {
+    if (!assetId || typeof CacheService === 'undefined') return { success: true };
+    try {
+      const cache = CacheService.getScriptCache();
+      const key = this.PREFIX + String(assetId).trim().toUpperCase();
+      const raw = cache.get(key);
+      if (raw) {
+        const current = JSON.parse(raw);
+        const normUser = String(userEmail || '').toLowerCase().trim();
+        // Solo libera si es el mismo usuario o no se especificó usuario
+        if (!normUser || current.userEmail === normUser) {
+          cache.remove(key);
+        }
+      }
+    } catch (e) {
+      console.warn("Error en PresenceManager.release:", e);
+    }
+    return { success: true };
+  },
+
+  check: function(assetId) {
+    if (!assetId || typeof CacheService === 'undefined') return null;
+    try {
+      const cache = CacheService.getScriptCache();
+      const key = this.PREFIX + String(assetId).trim().toUpperCase();
+      const raw = cache.get(key);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.warn("Error en PresenceManager.check:", e);
+    }
+    return null;
+  }
+};
+
+/**
+ * Gestor de Versión y Sincronización en Vivo (Polling Ligero).
+ * Permite verificar si existen cambios en el servidor en < 100ms sin tocar Sheets.
+ */
+const VersionManager = {
+  KEY_VERSION: 'ESD_SYS_VERSION',
+  KEY_TYPE: 'ESD_SYS_LAST_CHANGE_TYPE',
+  DEFAULT_TTL: 21600, // 6 horas
+
+  getVersion: function() {
+    if (typeof CacheService === 'undefined') return String(Date.now());
+    try {
+      const cache = CacheService.getScriptCache();
+      let v = cache.get(this.KEY_VERSION);
+      if (!v) {
+        const props = (typeof PropertiesService !== 'undefined') ? PropertiesService.getScriptProperties() : null;
+        v = props ? (props.getProperty(this.KEY_VERSION) || String(Date.now())) : String(Date.now());
+        cache.put(this.KEY_VERSION, v, this.DEFAULT_TTL);
+      }
+      return v;
+    } catch (e) {
+      return String(Date.now());
+    }
+  },
+
+  bumpVersion: function(changeType = 'GENERAL') {
+    const newVer = String(Date.now());
+    try {
+      if (typeof CacheService !== 'undefined') {
+        const cache = CacheService.getScriptCache();
+        cache.put(this.KEY_VERSION, newVer, this.DEFAULT_TTL);
+        cache.put(this.KEY_TYPE, changeType, this.DEFAULT_TTL);
+      }
+      if (typeof PropertiesService !== 'undefined') {
+        PropertiesService.getScriptProperties().setProperty(this.KEY_VERSION, newVer);
+      }
+    } catch (e) {
+      console.warn("Error en VersionManager.bumpVersion:", e);
+    }
+    return newVer;
+  },
+
+  checkSyncStatus: function(clientVersion) {
+    const serverVer = this.getVersion();
+    let changeType = 'NONE';
+    const hasChanges = String(clientVersion) !== String(serverVer);
+    if (hasChanges && typeof CacheService !== 'undefined') {
+      changeType = CacheService.getScriptCache().get(this.KEY_TYPE) || 'GENERAL';
+    }
+    return {
+      success: true,
+      hasChanges: hasChanges,
+      serverVersion: serverVer,
+      changeType: changeType
+    };
+  }
+};
+
+// ==========================================
+// 🌐 FUNCIONES EXPUESTAS PARA GOOGLE.SCRIPT.RUN
+// ==========================================
+function acquireAssetPresence(payload) {
+  return PresenceManager.acquire(payload);
+}
+
+function renewAssetPresence(assetId, userEmail) {
+  return PresenceManager.renew(assetId, userEmail);
+}
+
+function releaseAssetPresence(assetId, userEmail) {
+  return PresenceManager.release(assetId, userEmail);
+}
+
+function checkSyncStatus(clientVersion) {
+  return VersionManager.checkSyncStatus(clientVersion);
+}
+
+
 function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
   try {
     const props = PropertiesService.getScriptProperties();

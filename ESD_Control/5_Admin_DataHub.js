@@ -215,13 +215,26 @@ function adminFetchExternalData(url) {
 }
 
 function adminBulkProcess(target, data, isUpdate) {
-  try {
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return (typeof Utils !== 'undefined' && Utils.buildResponse) ? Utils.buildResponse(false, "No se proporcionaron datos para el procesamiento masivo.") : { success: false, error: "No se proporcionaron datos para el procesamiento masivo." };
+  }
+
+  const runner = () => {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
-    if (target === 'ASSETS') return bulkProcessAssets(ss, data, isUpdate);
-    if (target === 'USERS') return bulkProcessUsers(ss, data);
-    if (target === 'RULES') return bulkProcessRules(ss, data, isUpdate);
-    return { success: false, error: "Módulo no soporta carga masiva." };
-  } catch (e) { return { success: false, error: e.toString() }; }
+    let result;
+    if (target === 'ASSETS') result = bulkProcessAssets(ss, data, isUpdate);
+    else if (target === 'USERS') result = bulkProcessUsers(ss, data);
+    else if (target === 'RULES') result = bulkProcessRules(ss, data, isUpdate);
+    else return (typeof Utils !== 'undefined' && Utils.buildResponse) ? Utils.buildResponse(false, "Módulo no soporta carga masiva.") : { success: false, error: "Módulo no soporta carga masiva." };
+
+    if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+    return result;
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK, "Procesamiento Masivo");
+  }
+  return runner();
 }
 
 function bulkProcessAssets(ss, data, isUpdate) {

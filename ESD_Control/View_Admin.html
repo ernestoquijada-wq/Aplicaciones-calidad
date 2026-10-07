@@ -4,40 +4,40 @@
 <main v-if="view==='admin'" class="flex-1 overflow-y-auto p-6 bg-slate-50">
   <div class="card min-h-full flex flex-col">
     <div class="flex border-b border-slate-200 overflow-x-auto">
-        <button v-if="userPermissions.canConfig" @click="adminTab='catalogs'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='catalogs'}">Catálogos</button>
-        <button v-if="userPermissions.canConfig" @click="adminTab='rules'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='rules'}">Reglas</button>
-        <button v-if="userPermissions.canConfig" @click="adminTab='status'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='status'}">Estados</button>
-        <button v-if="userPermissions.canConfig" @click="adminTab='email'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='email'}"><i class="fas fa-envelope mr-2"></i> Correos</button>
-        <button v-if="userPermissions.canConfig" @click="adminTab='ai'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='ai'}"><i class="fas fa-robot mr-2"></i> Copiloto IA</button>
-        <button v-if="userPermissions.canUsers" @click="adminTab='security'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='security'}"><i class="fas fa-shield-alt mr-2"></i> Seguridad</button>
-        <button v-if="userPermissions.canConfig" @click="adminTab='datahub'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='datahub'}"><i class="fas fa-database mr-2"></i> Importación Masiva</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='catalogs'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='catalogs'}">{{ $t('admin.tabs.catalogs') }}</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='rules'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='rules'}">{{ $t('admin.tabs.rules') }}</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='status'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='status'}">{{ $t('admin.tabs.status') }}</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='email'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='email'}"><i class="fas fa-envelope mr-2"></i> {{ $t('admin.tabs.email') }}</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='ai'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='ai'}"><i class="fas fa-robot mr-2"></i> {{ $t('admin.tabs.ai') }}</button>
+        <button v-if="userPermissions.canUsers" @click="adminTab='security'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='security'}"><i class="fas fa-shield-alt mr-2"></i> {{ $t('admin.tabs.security') }}</button>
+        <button v-if="userPermissions.canConfig" @click="adminTab='datahub'" class="tab-btn whitespace-nowrap" :class="{'active': adminTab==='datahub'}"><i class="fas fa-database mr-2"></i> {{ $t('admin.tabs.datahub') }}</button>
     </div>
 
     <div class="p-8 flex-1 overflow-y-auto">
        <!-- PESTAÑA: CATÁLOGOS -->
        <div v-if="adminTab==='catalogs'">
            <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
-               <button @click="activeCatalogCategory = 'SECTOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'SECTOR'}"><i class="fas fa-th-large mr-2"></i>Cuadrantes</button>
-               <button @click="activeCatalogCategory = 'FACTORY'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'FACTORY'}"><i class="fas fa-industry mr-2"></i>Fábricas</button>
-               <button @click="activeCatalogCategory = 'PROJECT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'PROJECT'}"><i class="fas fa-folder mr-2"></i>Proyectos</button>
-               <button @click="activeCatalogCategory = 'AUDITOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AUDITOR'}"><i class="fas fa-user-check mr-2"></i>Responsables</button>
-               <button @click="activeCatalogCategory = 'TEMPLATE'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TEMPLATE'}"><i class="fas fa-file-excel mr-2"></i>Plantillas</button>
-               <button @click="activeCatalogCategory = 'TICKET_FIELD'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TICKET_FIELD'}"><i class="fas fa-list-check mr-2"></i>Campos de Ticket</button>
-               <button @click="activeCatalogCategory = 'EMAIL_GROUP'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'EMAIL_GROUP'}"><i class="fas fa-users mr-2"></i>Grupos de Correo</button>
-               <button @click="activeCatalogCategory = 'AI_PROMPT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AI_PROMPT'}"><i class="fas fa-comment-medical mr-2"></i>Personalidades IA</button>
+               <button @click="activeCatalogCategory = 'SECTOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'SECTOR'}"><i class="fas fa-th-large mr-2"></i>{{ $t('admin.catalogs.quadrants') }}</button>
+               <button @click="activeCatalogCategory = 'FACTORY'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'FACTORY'}"><i class="fas fa-industry mr-2"></i>{{ $t('admin.catalogs.factories') }}</button>
+               <button @click="activeCatalogCategory = 'PROJECT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'PROJECT'}"><i class="fas fa-folder mr-2"></i>{{ $t('admin.catalogs.projects') }}</button>
+               <button @click="activeCatalogCategory = 'AUDITOR'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AUDITOR'}"><i class="fas fa-user-check mr-2"></i>{{ $t('admin.catalogs.auditors') }}</button>
+               <button @click="activeCatalogCategory = 'TEMPLATE'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TEMPLATE'}"><i class="fas fa-file-excel mr-2"></i>{{ $t('admin.catalogs.templates') }}</button>
+               <button @click="activeCatalogCategory = 'TICKET_FIELD'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'TICKET_FIELD'}"><i class="fas fa-list-check mr-2"></i>{{ $t('admin.catalogs.ticketFields') }}</button>
+               <button @click="activeCatalogCategory = 'EMAIL_GROUP'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'EMAIL_GROUP'}"><i class="fas fa-users mr-2"></i>{{ $t('admin.catalogs.emailGroups') }}</button>
+               <button @click="activeCatalogCategory = 'AI_PROMPT'" class="sub-tab-btn" :class="{'active': activeCatalogCategory === 'AI_PROMPT'}"><i class="fas fa-comment-medical mr-2"></i>{{ $t('admin.catalogs.aiPersonalities') }}</button>
            </div>
 
             <div class="mb-8 p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                <div>
-                   <h4 class="font-black text-slate-700 text-sm">Ayuda Visual en Verificación</h4>
-                   <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Mostrar evidencia del ticket abierto al intentar reparar</p>
+                   <h4 class="font-black text-slate-700 text-sm">{{ $t('admin.visual_help_title') }}</h4>
+                   <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{{ $t('admin.visual_help_desc') }}</p>
                </div>
                <div class="flex items-center gap-4">
                    <label class="relative inline-flex items-center cursor-pointer">
                        <input type="checkbox" v-model="generalSettings.showPreviousEvidence" @change="saveGeneralSettings" class="sr-only peer">
                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                    </label>
-                   <span class="text-[10px] font-black" :class="generalSettings.showPreviousEvidence ? 'text-emerald-600' : 'text-slate-400'">{{ generalSettings.showPreviousEvidence ? 'ACTIVADO' : 'DESACTIVADO' }}</span>
+                   <span class="text-[10px] font-black" :class="generalSettings.showPreviousEvidence ? 'text-emerald-600' : 'text-slate-400'">{{ generalSettings.showPreviousEvidence ? $t('admin.active') : $t('admin.inactive') }}</span>
                </div>
            </div>
 
@@ -46,9 +46,9 @@
                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 h-fit sticky top-0 shadow-sm" :class="editingCatalog ? 'border-amber-400 ring-2 ring-amber-100' : ''">
                        <h4 class="font-black text-sm text-slate-700 mb-4 flex items-center gap-2">
                            <i class="fas" :class="editingCatalog ? 'fa-edit text-amber-500' : 'fa-plus-circle text-[#005565]'"></i> 
-                           {{ editingCatalog ? 'Editar Elemento' : 'Nuevo Elemento' }}
+                           {{ editingCatalog ? $t('admin.edit_element') : $t('admin.new_element') }}
                        </h4>
-                       <div class="mb-4"><label class="lbl">Categoría Activa</label><div class="input-std bg-slate-100 text-slate-500 font-bold border-slate-200">{{ activeCatalogLabel }}</div></div>
+                       <div class="mb-4"><label class="lbl">{{ $t('admin.active_cat') }}</label><div class="input-std bg-slate-100 text-slate-500 font-bold border-slate-200">{{ activeCatalogLabel }}</div></div>
                        
                        <div v-if="activeCatalogCategory !== 'TICKET_FIELD'">
                            <label class="lbl">{{ activeCatalogCategory === 'TEMPLATE' ? 'Nombre del Reporte (Menú)' : (activeCatalogCategory === 'EMAIL_GROUP' ? 'Nombre del Grupo' : (activeCatalogCategory === 'AI_PROMPT' ? 'Nombre de la Personalidad' : 'Valor (ID)')) }}</label>
@@ -249,7 +249,7 @@
                            </div>
                        </div>
                        
-                       <button @click="saveCatalogItem" class="w-full text-white py-3 rounded-xl text-xs font-bold shadow-lg transition mt-6 flex justify-center items-center gap-2" :class="editingCatalog ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'"><i class="fas" :class="editingCatalog ? 'fa-sync' : 'fa-save'"></i> {{ editingCatalog ? 'ACTUALIZAR' : 'GUARDAR' }}</button>
+                       <button @click="saveCatalogItem" :disabled="submitting" class="w-full text-white py-3 rounded-xl text-xs font-bold shadow-lg transition mt-6 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" :class="editingCatalog ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (editingCatalog ? 'fa-sync' : 'fa-save')"></i> {{ submitting ? 'GUARDANDO...' : (editingCatalog ? 'ACTUALIZAR' : 'GUARDAR') }}</button>
                        <button v-if="editingCatalog" @click="cancelCatalogEdit" class="w-full bg-slate-200 text-slate-500 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-slate-300">CANCELAR EDICIÓN</button>
                    </div>
                </div>
@@ -293,7 +293,7 @@
                            </div>
                        </div>
                        <div v-if="newStatus.showCard"><label class="lbl">Color</label><div class="h-9 w-12 rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newStatus.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
-                       <button @click="addStatus" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs"><i class="fas fa-save mr-1"></i> GUARDAR</button>
+                       <button @click="addStatus" :disabled="submitting" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? 'GUARDANDO...' : 'GUARDAR' }}</button>
                    </div>
                </div>
                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -440,7 +440,7 @@
                             </div>
                         </div>
                         <button @click="addNewRole" class="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-xs hover:bg-slate-50 transition">+ CREAR NUEVO ROL</button>
-                        <button @click="saveRoles" class="w-full bg-[#005565] text-white py-3 rounded-xl font-bold text-xs mt-4 shadow-lg hover:bg-[#004455] transition">GUARDAR MATRIZ DE ROLES</button>
+                        <button @click="saveRoles" :disabled="submitting" class="w-full bg-[#005565] text-white py-3 rounded-xl font-bold text-xs mt-4 shadow-lg hover:bg-[#004455] transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? 'GUARDANDO...' : 'GUARDAR MATRIZ DE ROLES' }}</button>
                     </div>
                 </div>
                 <div class="card p-8 bg-white shadow-sm">
@@ -463,7 +463,7 @@
                             </div>
                         </div>
                     </div>
-                    <button @click="saveUsers" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs mt-6 shadow-lg hover:bg-black transition uppercase tracking-widest">Sincronizar Usuarios</button>
+                    <button @click="saveUsers" :disabled="submitting" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs mt-6 shadow-lg hover:bg-black transition uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-users'"></i> {{ submitting ? 'SINCRONIZANDO...' : 'Sincronizar Usuarios' }}</button>
                 </div>
             </div>
         </div>
@@ -573,11 +573,11 @@
                   </div>
                   
                   <div class="flex gap-4">
-                    <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2">
-                      <i class="fas fa-plus-circle"></i> Inyectar {{ bulkStats.nuevos }} Nuevos
+                    <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" :disabled="submitting" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-plus-circle'"></i> {{ submitting ? 'Procesando...' : `Inyectar ${bulkStats.nuevos} Nuevos` }}
                     </button>
-                    <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2">
-                      <i class="fas fa-bolt"></i> Actualizar {{ bulkStats.duplicados }} Existentes
+                    <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" :disabled="submitting" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-bolt'"></i> {{ submitting ? 'Procesando...' : `Actualizar ${bulkStats.duplicados} Existentes` }}
                     </button>
                   </div>
                 </div>
