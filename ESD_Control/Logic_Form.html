@@ -8,7 +8,7 @@ function useAssetForm(globalConfig) {
     // Extraemos las dependencias globales que le pasaremos desde el Main
     const { 
         view, submitting, dbRules, catalogs, statusDB, currentThemeColor, 
-        loadData, openTicketModal, isAssetFailed, runGAS, Swal, Toast, FIELD_MAP 
+        loadData, openTicketModal, runGAS, Swal, Toast, FIELD_MAP 
     } = globalConfig;
 
     // 1. ESTADO LOCAL DEL FORMULARIO
@@ -33,6 +33,23 @@ function useAssetForm(globalConfig) {
         const st = statusDB.value.find(s => s.name === editAsset.value.status);
         return st ? st.isAdmin : false;
     });
+
+    const isAssetFailed = computed(() => {
+        const lr = (editAsset.value?.lastResult || '').toUpperCase();
+        const st = (editAsset.value?.status || '').toUpperCase();
+        const res = (form.value?.result || '').toUpperCase();
+        return lr === 'FALLA' || lr === 'NO CUMPLE' || st === 'FALLA' || res === 'FALLA' || res === 'NO CUMPLE' || !!activeTicketEvidence.value;
+    });
+
+    const formatLimit = (field) => {
+        if (!field) return 'N/A';
+        if (field.specText) return field.specText;
+        if (field.type === 'scientific' && field.limit?.m && field.limit?.e) {
+            return `< ${field.limit.m}E${field.limit.e}`;
+        }
+        if (field.limit) return `< ${field.limit}`;
+        return 'N/A';
+    };
 
     // 🟢 MAGIA MATEMÁTICA: Genera los campos dinámicos según el Activo
     const activeFields = computed(() => {
@@ -356,7 +373,7 @@ function useAssetForm(globalConfig) {
     // 5. EXPORTAR TODO AL MAIN
     return {
         editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
-        sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields,
+        sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields, isAssetFailed, formatLimit,
         isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, submit, performSave
     };
 }

@@ -34,7 +34,7 @@
           <div class="p-6">
               <p class="text-xs text-slate-600 italic mb-4 font-medium border-l-4 border-rose-400 pl-3 bg-rose-50 p-2 rounded-r">"{{ activeTicketEvidence.comentarios }}"</p>
               <div class="flex gap-4 overflow-x-auto pb-4">
-                  <div v-for="(url, idx) in activeTicketEvidence.fotos" :key="idx" @click="openSweetGallery(idx)" class="relative flex-none w-32 h-32 sm:w-40 sm:h-40 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-[#005565] hover:shadow-md transition shadow-sm group">
+                  <div v-for="(url, idx) in activeTicketEvidence.fotos" :key="idx" @click="openGallery(idx)" class="relative flex-none w-32 h-32 sm:w-40 sm:h-40 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-[#005565] hover:shadow-md transition shadow-sm group">
                       <img :src="url" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">
                       <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                           <i class="fas fa-search-plus text-white text-3xl drop-shadow-lg"></i>

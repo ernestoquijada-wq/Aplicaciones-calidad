@@ -145,9 +145,16 @@ function getData() {
     const userPermissions = rolesDB[userRoleName] || rolesDB["INVITADO"];
     const showPrevEv = props.getProperty('SETTING_SHOW_PREV_EVIDENCE') === 'true';
 
+    // Sanitizar aiConfig: solo enviar llaves privadas a roles con permiso canConfig
+    const clientAiSettings = {
+      enabled: !!aiSettings.enabled,
+      activePromptId: aiSettings.activePromptId || '',
+      apiKeys: (userPermissions && userPermissions.canConfig) ? (aiSettings.apiKeys || ['']) : ['']
+    };
+
     return { 
       success: true, assets, rules: rulesDB, catalogs, matrix: matrixDB, 
-      email: emailSettings, aiConfig: aiSettings, rolesDB: rolesDB, usersDB: usersDB,
+      email: emailSettings, aiConfig: clientAiSettings, rolesDB: rolesDB, usersDB: usersDB,
       userRoleName: userRoleName, userPermissions: userPermissions, showPrevEvidence: showPrevEv,
       user: userEmail, serverTime: new Date().toISOString() 
     };

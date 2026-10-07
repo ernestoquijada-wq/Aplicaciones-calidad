@@ -107,6 +107,43 @@ function useAdmin(globalConfig) {
         newCatalog.value={category:activeCatalogCategory.value, id:'', label:'', color:'#000000', config: { startRow: 8, columns: [], required: true, showOnOpen: true, showOnClose: false }};
     };
 
+    const moveColUp = (i) => {
+        if (i <= 0 || !newCatalog.value?.config?.columns) return;
+        const cols = newCatalog.value.config.columns;
+        const temp = cols[i];
+        cols[i] = cols[i - 1];
+        cols[i - 1] = temp;
+    };
+
+    const moveColDown = (i) => {
+        if (!newCatalog.value?.config?.columns || i >= newCatalog.value.config.columns.length - 1) return;
+        const cols = newCatalog.value.config.columns;
+        const temp = cols[i];
+        cols[i] = cols[i + 1];
+        cols[i + 1] = temp;
+    };
+
+    const previewTemplate = async () => {
+        if (!newCatalog.value.config?.columns || newCatalog.value.config.columns.length === 0) {
+            return Swal.fire("Sin columnas", "Agrega al menos una columna para generar la vista previa.", "warning");
+        }
+        submitting.value = true;
+        try {
+            Toast.fire({ icon: 'info', title: 'Generando vista previa...' });
+            const r = await runGAS('adminGenerateFullReport', [], JSON.parse(JSON.stringify(newCatalog.value)), true);
+            if (r.success) {
+                window.open(r.url, '_blank');
+                Toast.fire({ icon: 'success', title: 'Vista previa abierta' });
+            } else {
+                throw new Error(r.error);
+            }
+        } catch (e) {
+            Swal.fire("Error", e.message, "error");
+        } finally {
+            submitting.value = false;
+        }
+    };
+
     const deleteCatalogItem = (cat, id) => { 
         Swal.fire({
             title: '¿Estás seguro?', text: "No podrás revertir esto", icon: 'warning',
@@ -186,6 +223,17 @@ function useAdmin(globalConfig) {
         } 
         try { await runGAS('adminSaveRule', p); ruleModal.value.open=false; await loadData(); Toast.fire({ icon: 'success', title: 'Regla Guardada' }); } 
         catch(e) { Swal.fire('Error', e.message, 'error'); } submitting.value=false; 
+    };
+
+    const getActiveMeasurements = (rule) => {
+        if (!rule) return [];
+        const list = [];
+        for (const k in FIELD_MAP) {
+            if (rule[k] && rule[k] !== 'N/A') {
+                list.push(FIELD_MAP[k]?.label || k);
+            }
+        }
+        return list;
     };
 
     // ==========================================
@@ -365,9 +413,9 @@ function useAdmin(globalConfig) {
         showDataHubModal, bulkDataPreview, bulkStats, isProcessingBulk, importTarget, importMethod, googleSheetUrl,
         activeEmailType, newUserEmail, newUserRole,
         
-        saveCatalogItem, editCatalog, cancelCatalogEdit, deleteCatalogItem,
+        saveCatalogItem, editCatalog, cancelCatalogEdit, deleteCatalogItem, moveColUp, moveColDown, previewTemplate,
         addStatus, deleteStatus, openEditStateModal, confirmStateUpdate,
-        openRuleModal, deleteRule, saveRule,
+        openRuleModal, deleteRule, saveRule, getActiveMeasurements,
         
         downloadTemplate, createGoogleSheetTemplate, loadFromGoogleSheets, handleCSVUpload, executeBulkAction, clearDataHub,
         addAdminEmailField, removeAdminEmailField, saveGeneralSettings, saveEmailConfig, saveAiConfig,

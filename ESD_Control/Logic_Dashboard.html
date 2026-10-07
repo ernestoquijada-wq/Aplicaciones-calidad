@@ -3,8 +3,17 @@
  * 🟢 COMPOSABLE: LÓGICA DEL DASHBOARD
  * Maneja filtros, paginación, métricas y formato de tarjetas.
  */
-function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP) {
+function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, utils = {}) {
     const { ref, computed, watch } = Vue;
+    const runGAS = utils.runGAS || ((fn, ...args) => new Promise((resolve, reject) => {
+        if (window.google?.script?.run) {
+            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+        } else {
+            reject(new Error("Google Script no disponible"));
+        }
+    }));
+    const Toast = utils.Toast || (window.Swal ? window.Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 }) : null);
+    const Swal = utils.Swal || window.Swal;
 
     // 1. ESTADO LOCAL DEL DASHBOARD
     const currentFilter = ref('all');
@@ -163,6 +172,26 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         return failures;
     };
 
+    const exportToDrive = async (templateObj = null) => {
+        try {
+            const ids = filteredAssets.value.map(a => a.controlNo);
+            if (ids.length === 0) {
+                if (Swal) Swal.fire("Sin datos", "No hay activos en el filtro actual.", "info");
+                return;
+            }
+            if (Toast) Toast.fire({ icon: 'info', title: 'Generando reporte en Drive...' });
+            const r = await runGAS('adminGenerateFullReport', ids, templateObj, false);
+            if (r.success) {
+                window.open(r.url, '_blank');
+                if (Toast) Toast.fire({ icon: 'success', title: 'Reporte generado' });
+            } else {
+                throw new Error(r.error);
+            }
+        } catch(e) {
+            if (Swal) Swal.fire("Error", e.message, "error");
+        }
+    };
+
     // 4. WATCHERS
     watch(searchQuery, (v) => { if(v) showList.value = true; });
     watch(filters, (v) => { 
@@ -173,7 +202,7 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
     return {
         currentFilter, filters, searchQuery, itemsPerPage, page, showList,
         dynamicCards, filteredAssets, paginatedAssets, totalPages, metrics, uniqueTypes, availableTemplates,
-        nextPage, prevPage, activateFilter, clearFilters,
+        nextPage, prevPage, activateFilter, clearFilters, exportToDrive,
         isExpired, formatDate, getQuadrantColor, getStatusColor, getIcon, highlightMatch, getAssetFailures
     };
 }

@@ -51,13 +51,12 @@
           currentThemeColor, FIELD_MAP, ICONS,
           runGAS, Swal, Toast, 
           loadData: () => loadData(), 
-          openTicketModal: (mode) => modalsLogic.openTicketModal(mode),
-          isAssetFailed: computed(() => formLogic.isAssetFailed.value)
+          openTicketModal: (mode) => modalsLogic.openTicketModal(mode)
       };
 
       // 3. INYECCIÓN DE COMPOSABLES MODULARES
       const headerLogic = useHeader();
-      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP);
+      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal });
       const formLogic   = useAssetForm(globalConfig);
       const adminLogic  = useAdmin(globalConfig);
       const modalsLogic = useModals(globalConfig);
@@ -70,7 +69,8 @@
             if(r?.success){
                 assets.value = r.assets || []; dbRules.value = r.rules || {}; 
                 if(r.catalogs) catalogs.value = r.catalogs; 
-                if(r.sectors) quadrantDB.value = r.sectors; 
+                if(r.catalogs?.sectors) quadrantDB.value = r.catalogs.sectors;
+                else if(r.sectors) quadrantDB.value = r.sectors; 
                 if(r.matrix) matrixDB.value = r.matrix; 
                 if(r.email) emailConfig.value = r.email; 
                 if(r.aiConfig) aiSettings.value = r.aiConfig;

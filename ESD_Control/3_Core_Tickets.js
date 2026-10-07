@@ -15,6 +15,25 @@ function getFolderRecursive(pathArray) {
   return folder;
 }
 
+function uploadTicketFile(fileObj, controlNo, project, description) {
+  try {
+    const date = new Date();
+    const monthYear = Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM");
+    const safeProject = project ? String(project).trim() : "GENERAL";
+    const path = ["EVIDENCIA_ESD_PLEXUS", safeProject, monthYear];
+    const folder = getFolderRecursive(path);
+    const contentType = fileObj.data.substring(5, fileObj.data.indexOf(';')) || 'image/jpeg';
+    const bytes = Utilities.base64Decode(fileObj.data.split(',')[1]);
+    const blob = Utilities.newBlob(bytes, contentType);
+    const safeDesc = String(description || 'ACTIVO').replace(/[^a-zA-Z0-9]/g, '_');
+    const safeId = String(controlNo || 'ID').replace(/[^a-zA-Z0-9]/g, '_');
+    blob.setName(`${safeId}_${safeDesc}_${Date.now()}.jpg`);
+    const file = folder.createFile(blob);
+    try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e) {}
+    return { success: true, url: file.getUrl() };
+  } catch (e) { return { success: false, error: e.toString() }; }
+}
+
 function uploadTicketFiles(files, ticketId, assetData) {
   try {
     const date = new Date();
