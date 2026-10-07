@@ -23,7 +23,7 @@
      </div>
      
      <div v-for="dc in dynamicCards" :key="dc.name" @click="activateFilter(dc.name)" class="card p-4 cursor-pointer border-l-[5px] transition-all" :style="{ borderLeftColor: (currentFilter===dc.name && showList) ? dc.color : 'transparent' }" :class="(currentFilter===dc.name && showList)?'bg-slate-50 shadow-lg scale-[1.02]':'opacity-80 hover:opacity-100 hover:border-slate-300'">
-         <p class="text-[9px] font-extrabold uppercase tracking-widest mb-1" :style="{ color: dc.color }">{{ dc.name }}</p>
+         <p class="text-[9px] font-extrabold uppercase tracking-widest mb-1" :style="{ color: dc.color }">{{ translateStatus(dc.name) }}</p>
          <p class="text-3xl font-black tracking-tight text-slate-800">{{ metrics.dynamic[dc.name] || 0 }}</p>
      </div>
   </div>
@@ -38,7 +38,7 @@
             </div>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
-            <div><label class="lbl">{{ $t('dash.filters.type') }}</label><select v-model="filters.type" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="t in uniqueTypes" :value="t">{{t}}</option></select></div>
+            <div><label class="lbl">{{ $t('dash.filters.type') }}</label><select v-model="filters.type" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="t in uniqueTypes" :value="t">{{ translateDynamic(t, 'types') }}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.status') }}</label><select v-model="filters.status" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.resp') }}</label><select v-model="filters.responsible" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{a.id}}</option></select></div>
             <div><label class="lbl">{{ $t('dash.filters.factory') }}</label><select v-model="filters.factory" class="input-std w-full"><option value="">{{ $t('dash.filters.all') }}</option><option v-for="f in catalogs.factories" :value="f.id">{{f.id}}</option></select></div>
@@ -81,7 +81,7 @@
              </div>
              <div class="flex-1 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 content-center">
                  <div><span class="lbl">{{ $t('dash.item.id') }}</span><p class="font-mono font-black text-sm text-slate-700" v-html="highlightMatch(asset.controlNo)"></p></div>
-                 <div><span class="lbl">{{ $t('dash.item.type') }}</span><p class="font-bold text-xs text-[#005565] uppercase truncate">{{ asset.description }}</p></div>
+                 <div><span class="lbl">{{ $t('dash.item.type') }}</span><p class="font-bold text-xs text-[#005565] uppercase truncate">{{ translateDynamic(asset.description, 'types') }}</p></div>
                  <div>
                     <span class="lbl">{{ $t('dash.item.status') }}</span>
                     <div class="flex items-center gap-2">
@@ -106,7 +106,7 @@
                         <span class="text-[9px] font-black text-rose-700 uppercase tracking-widest">{{ $t('dash.item.alert') }}: {{ translateStatus(asset.lastResult) }}</span>
                     </div>
                     <span v-for="fail in getAssetFailures(asset)" :key="fail" class="text-[8.5px] bg-white text-rose-500 border border-rose-200 px-2 py-1 rounded shadow-sm font-bold uppercase flex items-center">
-                        <i class="fas fa-times mr-1 text-rose-400"></i> {{ fail }}
+                        <i class="fas fa-times mr-1 text-rose-400"></i> {{ translateDynamic(fail, 'measurements') }}
                     </span>
                  </div>
              </div>

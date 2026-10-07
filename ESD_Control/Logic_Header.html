@@ -1,8 +1,25 @@
 <script>
 /**
- * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO
- * Maneja el cambio de 4 idiomas (ES, EN, ZH, TH), persistencia y traducciones de estados.
+ * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO Y TRADUCCIÓN DINÁMICA
+ * Maneja el cambio de 4 idiomas (ES, EN, ZH, TH), persistencia,
+ * traducciones de estados, mapeo de catálogos y fallback con LanguageApp / CacheService.
  */
+
+// Caché reactivo global en cliente para traducciones dinámicas
+const dynamicTranslationsCache = Vue.reactive({});
+const pendingTranslations = new Set();
+
+// Pre-cargar desde sessionStorage si existe
+try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith('trans_')) {
+            const cacheKey = k.substring(6);
+            dynamicTranslationsCache[cacheKey] = sessionStorage.getItem(k);
+        }
+    }
+} catch (e) {}
+
 function useHeader() {
     // Hook de Vue-i18n en ámbito global
     const { locale } = VueI18n.useI18n({ useScope: 'global' });
@@ -37,17 +54,72 @@ function useHeader() {
         setLanguage(order[nextIdx]);
     };
 
-    const translateStatus = (statusStr) => {
-        if (!statusStr) return '';
-        const key = String(statusStr).trim().toUpperCase().replace(/\s+/g, '_');
+    /**
+     * Traduce valores dinámicos (tipos, mediciones, catálogos, estados o texto libre).
+     * 1. Consulta el diccionario local i18n según clave normalizada.
+     * 2. Si no existe en el diccionario y el idioma != 'ES', consulta la caché dinámica reactiva.
+     * 3. Si no está en caché, dispara llamada asíncrona a translateText en servidor (LanguageApp + CacheService).
+     */
+    const translateDynamic = (val, category = '') => {
+        if (val === null || val === undefined || val === '') return '';
+        const strVal = String(val).trim();
+        if (!strVal) return '';
+
         const lang = locale.value || 'ES';
-        if (messages[lang] && messages[lang].status && messages[lang].status[key]) {
-            return messages[lang].status[key];
+        const key = strVal.toUpperCase().replace(/[\s\.\-]+/g, '_');
+
+        // 1. Verificación en diccionario local maestro
+        if (typeof messages !== 'undefined' && messages && messages[lang]) {
+            const langDict = messages[lang];
+            if (category && langDict.db && langDict.db[category] && langDict.db[category][key]) {
+                return langDict.db[category][key];
+            }
+            if (category && langDict[category] && langDict[category][key]) {
+                return langDict[category][key];
+            }
+            if (langDict.db?.types?.[key]) return langDict.db.types[key];
+            if (langDict.db?.measurements?.[key]) return langDict.db.measurements[key];
+            if (langDict.db?.catalogs?.[key]) return langDict.db.catalogs[key];
+            if (langDict.status?.[key]) return langDict.status[key];
         }
-        if (messages.EN && messages.EN.status && messages.EN.status[key]) {
-            return messages.EN.status[key];
+
+        // Si el idioma es Español y no requirió traducción de diccionario, devolvemos el valor original
+        if (lang === 'ES') return strVal;
+
+        // 2. Verificación en caché reactiva en cliente
+        const cacheKey = lang + ':' + strVal;
+        if (dynamicTranslationsCache[cacheKey]) {
+            return dynamicTranslationsCache[cacheKey];
         }
-        return statusStr;
+
+        // 3. Fallback asíncrono con LanguageApp en servidor
+        if (!pendingTranslations.has(cacheKey)) {
+            pendingTranslations.add(cacheKey);
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run
+                    .withSuccessHandler((res) => {
+                        pendingTranslations.delete(cacheKey);
+                        const translated = (res && typeof res === 'object' && res.translated) ? res.translated : (typeof res === 'string' ? res : null);
+                        if (translated && typeof translated === 'string') {
+                            dynamicTranslationsCache[cacheKey] = translated;
+                            try {
+                                sessionStorage.setItem('trans_' + cacheKey, translated);
+                            } catch (e) {}
+                        }
+                    })
+                    .withFailureHandler((err) => {
+                        pendingTranslations.delete(cacheKey);
+                        console.warn('Error al traducir texto libre "' + strVal + '":', err);
+                    })
+                    .translateText(strVal, lang.toLowerCase(), 'es');
+            }
+        }
+
+        return strVal;
+    };
+
+    const translateStatus = (statusStr) => {
+        return translateDynamic(statusStr, 'status');
     };
 
     return {
@@ -55,8 +127,10 @@ function useHeader() {
         availableLanguages,
         currentLanguage,
         showLangDropdown,
+        dynamicTranslationsCache,
         setLanguage,
         toggleLanguage,
+        translateDynamic,
         translateStatus
     };
 }

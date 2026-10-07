@@ -63,7 +63,7 @@
                  <div class="flex-1"><label class="lbl">{{ $t('form.quadrant_auto') }}</label><input :value="sectorLabel" readonly class="input-std bg-slate-50 text-slate-500 text-xs font-bold"></div>
              </div>
              
-             <div class="md:col-span-2"><label class="lbl">{{ $t('form.asset_type') }}</label><select v-model="editAsset.description" class="input-std uppercase font-bold bg-yellow-50 border-yellow-200 text-yellow-800" :disabled="!isNewAsset"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="(r,k) in dbRules" :value="k">{{k}}</option></select></div>
+             <div class="md:col-span-2"><label class="lbl">{{ $t('form.asset_type') }}</label><select v-model="editAsset.description" class="input-std uppercase font-bold bg-yellow-50 border-yellow-200 text-yellow-800" :disabled="!isNewAsset"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="(r,k) in dbRules" :value="k">{{ translateDynamic(k, 'types') }}</option></select></div>
           </div>
       </div>
 
@@ -81,7 +81,7 @@
             <div v-for="field in activeFields" :key="field.key" class="transition-all duration-300">
                <div class="mb-2 px-1">
                   <div class="flex justify-between items-center">
-                      <span class="font-bold text-sm text-slate-700">{{ field.label }}</span>
+                      <span class="font-bold text-sm text-slate-700">{{ translateDynamic(field.label, 'measurements') }}</span>
                       <span v-if="getAlert(field).message" class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse" :class="getAlert(field).class">{{ getAlert(field).message }}</span>
                   </div>
                   <p class="text-xs font-black text-[#005565] mt-1 tracking-wide">{{ $t('form.limit') }}: {{ formatLimit(field) }}</p>

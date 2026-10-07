@@ -543,3 +543,130 @@ function setupDatabase() {
     return `¡Éxito! Se crearon/verificaron ${creadas} pestañas de la base de datos. Tu sistema está listo para operar.`;
   } catch (error) { return "Error al instalar la base de datos: " + error.message; }
 }
+
+// ==========================================
+// 🌐 SERVICIO DE TRADUCCIÓN HÍBRIDA (LanguageApp + CacheService)
+// ==========================================
+
+/**
+ * Traduce un texto libre utilizando LanguageApp con caché en servidor.
+ * 
+ * @param {string} text Texto a traducir.
+ * @param {string} targetLang Idioma destino ('en', 'es', 'zh', 'th').
+ * @param {string} sourceLang Idioma origen (opcional, por defecto autodetectado).
+ * @return {Object} Respuesta con el texto traducido.
+ */
+function translateText(text, targetLang = 'en', sourceLang = '') {
+  if (!text || String(text).trim() === '') {
+    return (typeof Utils !== 'undefined' && Utils.buildResponse) 
+      ? Utils.buildResponse(true, { text: '', translated: '' }) 
+      : { success: true, text: '', translated: '' };
+  }
+
+  const cleanText = String(text).trim();
+  const rawTarget = String(targetLang || 'en').toLowerCase().trim();
+  let targetCode = rawTarget;
+  if (rawTarget === 'zh' || rawTarget === 'zh-cn' || rawTarget === 'cn') targetCode = 'zh-CN';
+  else if (rawTarget === 'es' || rawTarget === 'mx') targetCode = 'es';
+  else if (rawTarget === 'en' || rawTarget === 'us') targetCode = 'en';
+  else if (rawTarget === 'th') targetCode = 'th';
+
+  if (sourceLang && sourceLang.toLowerCase() === targetCode.toLowerCase()) {
+    return Utils.buildResponse(true, { text: cleanText, translated: cleanText, fromCache: true });
+  }
+
+  const hashKey = 'TR_' + targetCode + '_' + Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, cleanText.toLowerCase())).replace(/[\/=+\s]/g, '_');
+
+  if (typeof CacheService !== 'undefined') {
+    try {
+      const cache = CacheService.getScriptCache();
+      const cached = cache.get(hashKey);
+      if (cached) {
+        return Utils.buildResponse(true, { text: cleanText, translated: cached, fromCache: true });
+      }
+    } catch (e) {
+      console.warn('Error leyendo caché de traducción:', e);
+    }
+  }
+
+  try {
+    if (typeof LanguageApp !== 'undefined') {
+      const translated = LanguageApp.translate(cleanText, sourceLang || '', targetCode);
+      if (translated) {
+        if (typeof CacheService !== 'undefined') {
+          try {
+            CacheService.getScriptCache().put(hashKey, translated, 21600);
+          } catch (cacheErr) {}
+        }
+        return Utils.buildResponse(true, { text: cleanText, translated: translated, fromCache: false });
+      }
+    }
+    return Utils.buildResponse(true, { text: cleanText, translated: cleanText, fallback: true });
+  } catch (err) {
+    console.warn(`Error en LanguageApp.translate para '${cleanText}':`, err);
+    return Utils.buildResponse(true, { text: cleanText, translated: cleanText, fallback: true });
+  }
+}
+
+/**
+ * Traduce una lista de textos en lote para optimizar viajes de red.
+ * 
+ * @param {Array<string>} texts Lista de textos a traducir.
+ * @param {string} targetLang Idioma destino.
+ * @param {string} sourceLang Idioma origen (opcional).
+ * @return {Object} Mapa de { originalText: translatedText }.
+ */
+function translateBatch(texts, targetLang = 'en', sourceLang = '') {
+  if (!Array.isArray(texts) || texts.length === 0) {
+    return Utils.buildResponse(true, { results: {} });
+  }
+
+  const results = {};
+  const pending = [];
+
+  const rawTarget = String(targetLang || 'en').toLowerCase().trim();
+  let targetCode = rawTarget;
+  if (rawTarget === 'zh' || rawTarget === 'zh-cn' || rawTarget === 'cn') targetCode = 'zh-CN';
+  else if (rawTarget === 'es' || rawTarget === 'mx') targetCode = 'es';
+  else if (rawTarget === 'en' || rawTarget === 'us') targetCode = 'en';
+  else if (rawTarget === 'th') targetCode = 'th';
+
+  const cache = (typeof CacheService !== 'undefined') ? CacheService.getScriptCache() : null;
+
+  texts.forEach(t => {
+    if (!t || String(t).trim() === '') return;
+    const cleanT = String(t).trim();
+    const hashKey = 'TR_' + targetCode + '_' + Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, cleanT.toLowerCase())).replace(/[\/=+\s]/g, '_');
+    
+    let hit = null;
+    if (cache) {
+      try { hit = cache.get(hashKey); } catch (e) {}
+    }
+    if (hit) {
+      results[cleanT] = hit;
+    } else {
+      pending.push({ text: cleanT, key: hashKey });
+    }
+  });
+
+  if (pending.length > 0 && typeof LanguageApp !== 'undefined') {
+    const toCache = {};
+    pending.forEach(item => {
+      try {
+        const translated = LanguageApp.translate(item.text, sourceLang || '', targetCode);
+        results[item.text] = translated || item.text;
+        if (translated) toCache[item.key] = translated;
+      } catch (err) {
+        results[item.text] = item.text;
+      }
+    });
+
+    if (cache && Object.keys(toCache).length > 0) {
+      try {
+        cache.putAll(toCache, 21600);
+      } catch (e) {}
+    }
+  }
+
+  return Utils.buildResponse(true, { results: results });
+}

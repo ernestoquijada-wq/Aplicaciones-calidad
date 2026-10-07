@@ -107,6 +107,24 @@
           emailGroups: "Grupos de Correo",
           aiPersonalities: "Personalidades IA"
         },
+        rules_matrix: {
+          title: "Matriz",
+          new_rule: "NUEVA REGLA",
+          col_id: "ID",
+          col_icon: "Icono",
+          col_measurements: "Mediciones",
+          col_action: "Acción"
+        },
+        status_sec: {
+          new_title: "Nuevo Estado",
+          name_lbl: "Nombre del Estado",
+          card_chk: "¿Crear Tarjeta en Dashboard?",
+          admin_chk: "Movimiento Administrativo (Omitir Mediciones)",
+          color_lbl: "Color",
+          registered_title: "Estados Registrados",
+          card_active: "Tarjeta Activa",
+          no_card: "Sin Tarjeta"
+        },
         visual_help_title: "Ayuda Visual en Verificación",
         visual_help_desc: "Mostrar evidencia del ticket abierto al intentar reparar",
         active: "ACTIVADO",
@@ -169,10 +187,27 @@
           discard: "Descartar",
           inject_new: "Inyectar Nuevos",
           update_existing: "Actualizar Existentes"
+        },
+        rule: {
+          title: "Configuración Regla",
+          type: "Tipo",
+          icon: "Icono",
+          general_rec: "Recomendación General",
+          risk_tol: "Tolerancia Riesgo (0.1 - 1.0)",
+          limits_title: "Límites y Recomendaciones Específicas",
+          spec_rec_ph: "Rec. Específica..."
+        },
+        edit_status: {
+          title: "Editar Estado",
+          name: "Nombre",
+          show_card: "¿Crear Tarjeta en Dashboard?",
+          admin_move: "Movimiento Administrativo",
+          card_color: "Color de Tarjeta"
         }
       },
       status: {
         ACTIVO: "Activo",
+        INACTIVO: "Inactivo",
         FALLA: "Falla",
         VENCIDO: "Vencido",
         POR_VENCER: "Por Vencer",
@@ -192,6 +227,50 @@
         processing: "Procesando...",
         success: "Operación Exitosa",
         error: "Error"
+      },
+      db: {
+        types: {
+          ESTACION: "Estación",
+          RACK: "Rack",
+          ROBOT: "Robot",
+          PRUEBA_ROBOT: "Prueba Robot",
+          SILLA: "Silla",
+          EQ_FUNCIONAL: "Eq. Funcional",
+          EQUIPO_FUNCIONAL: "Equipo Funcional",
+          AUTOMATICA: "Automática",
+          MAQUINA: "Máquina",
+          CARRO: "Carro",
+          MAQ_CONVEYOR: "Maq. Conveyor",
+          CONVEYOR: "Conveyor",
+          MESA: "Mesa de Trabajo",
+          PISO: "Piso Conductor",
+          TAPETE: "Tapete ESD",
+          IONIZADOR: "Ionizador",
+          TALONERA: "Talonera",
+          PULSERA: "Pulsera ESD"
+        },
+        measurements: {
+          SURFACE_RESISTANCE: "Resistencia Superficial",
+          RESISTENCIA_SUPERFICIAL: "Resistencia Superficial",
+          FLOOR_MAT_RESISTANCE: "Resistencia Tapete Piso",
+          RESISTENCIA_TAPETE_PISO: "Resistencia Tapete Piso",
+          ELECTRICAL_RESISTANCE: "Resistencia Eléctrica",
+          RESISTENCIA_ELECTRICA: "Resistencia Eléctrica",
+          RESISTANCE_TO_GROUND: "Resistencia a Tierra",
+          RESISTENCIA_A_TIERRA: "Resistencia a Tierra",
+          IMPEDANCE: "Impedancia",
+          VOLTAGE: "Voltaje",
+          JACK: "Jack"
+        },
+        catalogs: {
+          CAFE: "Café",
+          ROJO: "Rojo",
+          AZUL: "Azul",
+          VERDE: "Verde",
+          AMARILLO: "Amarillo",
+          GRIS: "Gris",
+          CUADRADO_GRIS: "Cuadrado Gris"
+        }
       }
     },
     EN: {
@@ -297,6 +376,24 @@
           emailGroups: "Email Groups",
           aiPersonalities: "AI Personalities"
         },
+        rules_matrix: {
+          title: "Matrix",
+          new_rule: "NEW RULE",
+          col_id: "ID",
+          col_icon: "Icon",
+          col_measurements: "Measurements",
+          col_action: "Action"
+        },
+        status_sec: {
+          new_title: "New Status",
+          name_lbl: "Status Name",
+          card_chk: "Create Card in Dashboard?",
+          admin_chk: "Administrative Movement (Skip Measurements)",
+          color_lbl: "Color",
+          registered_title: "Registered Statuses",
+          card_active: "Active Card",
+          no_card: "No Card"
+        },
         visual_help_title: "Visual Verification Aid",
         visual_help_desc: "Show open ticket evidence during repair evaluation",
         active: "ACTIVE",
@@ -359,10 +456,27 @@
           discard: "Discard",
           inject_new: "Inject New",
           update_existing: "Update Existing"
+        },
+        rule: {
+          title: "Rule Configuration",
+          type: "Type",
+          icon: "Icon",
+          general_rec: "General Recommendation",
+          risk_tol: "Risk Tolerance (0.1 - 1.0)",
+          limits_title: "Limits and Specific Recommendations",
+          spec_rec_ph: "Specific Rec..."
+        },
+        edit_status: {
+          title: "Edit Status",
+          name: "Name",
+          show_card: "Create Card on Dashboard?",
+          admin_move: "Administrative Movement",
+          card_color: "Card Color"
         }
       },
       status: {
         ACTIVO: "Active",
+        INACTIVO: "Inactive",
         FALLA: "Failed",
         VENCIDO: "Expired",
         POR_VENCER: "Expiring Soon",
@@ -382,6 +496,50 @@
         processing: "Processing...",
         success: "Success",
         error: "Error"
+      },
+      db: {
+        types: {
+          ESTACION: "Station",
+          RACK: "Rack",
+          ROBOT: "Robot",
+          PRUEBA_ROBOT: "Robot Test",
+          SILLA: "Chair",
+          EQ_FUNCIONAL: "Functional Eq.",
+          EQUIPO_FUNCIONAL: "Functional Equipment",
+          AUTOMATICA: "Automatic",
+          MAQUINA: "Machine",
+          CARRO: "Cart",
+          MAQ_CONVEYOR: "Conveyor Machine",
+          CONVEYOR: "Conveyor",
+          MESA: "Workstation Table",
+          PISO: "Conductive Floor",
+          TAPETE: "ESD Mat",
+          IONIZADOR: "Ionizer",
+          TALONERA: "Heel Grounder",
+          PULSERA: "ESD Wrist Strap"
+        },
+        measurements: {
+          SURFACE_RESISTANCE: "Surface Resistance",
+          RESISTENCIA_SUPERFICIAL: "Surface Resistance",
+          FLOOR_MAT_RESISTANCE: "Floor Mat Resistance",
+          RESISTENCIA_TAPETE_PISO: "Floor Mat Resistance",
+          ELECTRICAL_RESISTANCE: "Electrical Resistance",
+          RESISTENCIA_ELECTRICA: "Electrical Resistance",
+          RESISTANCE_TO_GROUND: "Resistance to Ground",
+          RESISTENCIA_A_TIERRA: "Resistance to Ground",
+          IMPEDANCE: "Impedance",
+          VOLTAGE: "Voltage",
+          JACK: "Jack"
+        },
+        catalogs: {
+          CAFE: "Brown",
+          ROJO: "Red",
+          AZUL: "Blue",
+          VERDE: "Green",
+          AMARILLO: "Yellow",
+          GRIS: "Gray",
+          CUADRADO_GRIS: "Gray Square"
+        }
       }
     },
     ZH: {
@@ -487,6 +645,24 @@
           emailGroups: "邮件群组",
           aiPersonalities: "AI 人设配置"
         },
+        rules_matrix: {
+          title: "规范矩阵",
+          new_rule: "新增规则",
+          col_id: "编号",
+          col_icon: "图标",
+          col_measurements: "测量项目",
+          col_action: "操作"
+        },
+        status_sec: {
+          new_title: "新增状态",
+          name_lbl: "状态名称",
+          card_chk: "是否在控制面板创建卡片？",
+          admin_chk: "管理性变动 (跳过测量值)",
+          color_lbl: "显示颜色",
+          registered_title: "已登记状态列表",
+          card_active: "显示卡片",
+          no_card: "无卡片"
+        },
         visual_help_title: "复检视觉辅助支持",
         visual_help_desc: "在复核维修效果时，显示故障工单的历史照片与凭据",
         active: "已开启",
@@ -549,10 +725,27 @@
           discard: "放弃重置",
           inject_new: "确认录入新增数据",
           update_existing: "覆盖更新已有数据"
+        },
+        rule: {
+          title: "规则配置",
+          type: "类型",
+          icon: "图标",
+          general_rec: "常规建议",
+          risk_tol: "风险容差 (0.1 - 1.0)",
+          limits_title: "特定限制与建议",
+          spec_rec_ph: "特定建议..."
+        },
+        edit_status: {
+          title: "编辑状态",
+          name: "名称",
+          show_card: "在仪表板创建卡片？",
+          admin_move: "管理流转",
+          card_color: "卡片颜色"
         }
       },
       status: {
         ACTIVO: "正常运行",
+        INACTIVO: "停用 / 未激活",
         FALLA: "故障 / 不合格",
         VENCIDO: "已过期",
         POR_VENCER: "即将过期",
@@ -572,6 +765,50 @@
         processing: "正在处理...",
         success: "操作成功",
         error: "系统错误"
+      },
+      db: {
+        types: {
+          ESTACION: "工作站",
+          RACK: "料架",
+          ROBOT: "机器人",
+          PRUEBA_ROBOT: "机器人测试",
+          SILLA: "防静电椅",
+          EQ_FUNCIONAL: "功能设备",
+          EQUIPO_FUNCIONAL: "功能设备",
+          AUTOMATICA: "自动化设备",
+          MAQUINA: "机台",
+          CARRO: "推车",
+          MAQ_CONVEYOR: "传送带机台",
+          CONVEYOR: "传送带",
+          MESA: "工作台",
+          PISO: "防静电地板",
+          TAPETE: "防静电台垫",
+          IONIZADOR: "离子风机",
+          TALONERA: "防静电脚筋带",
+          PULSERA: "防静电手环"
+        },
+        measurements: {
+          SURFACE_RESISTANCE: "表面电阻",
+          RESISTENCIA_SUPERFICIAL: "表面电阻",
+          FLOOR_MAT_RESISTANCE: "地垫电阻",
+          RESISTENCIA_TAPETE_PISO: "地垫电阻",
+          ELECTRICAL_RESISTANCE: "电气电阻",
+          RESISTENCIA_ELECTRICA: "电气电阻",
+          RESISTANCE_TO_GROUND: "对地电阻",
+          RESISTENCIA_A_TIERRA: "对地电阻",
+          IMPEDANCE: "对地阻抗",
+          VOLTAGE: "静电电压",
+          JACK: "接地插孔"
+        },
+        catalogs: {
+          CAFE: "棕色",
+          ROJO: "红色",
+          AZUL: "蓝色",
+          VERDE: "绿色",
+          AMARILLO: "黄色",
+          GRIS: "灰色",
+          CUADRADO_GRIS: "灰色方形"
+        }
       }
     },
     TH: {
@@ -677,6 +914,24 @@
           emailGroups: "กลุ่มอีเมล",
           aiPersonalities: "บุคลิกภาพ AI"
         },
+        rules_matrix: {
+          title: "เมทริกซ์กฎเกณฑ์",
+          new_rule: "สร้างกฎใหม่",
+          col_id: "รหัส",
+          col_icon: "ไอคอน",
+          col_measurements: "รายการวัดค่า",
+          col_action: "การกระทำ"
+        },
+        status_sec: {
+          new_title: "เพิ่มสถานะใหม่",
+          name_lbl: "ชื่อสถานะ",
+          card_chk: "สร้างการ์ดในแดชบอร์ดหรือไม่?",
+          admin_chk: "การเคลื่อนย้ายทางธุรการ (ข้ามการวัดค่า)",
+          color_lbl: "สีที่แสดง",
+          registered_title: "สถานะที่ลงทะเบียนแล้ว",
+          card_active: "เปิดการ์ด",
+          no_card: "ไม่มีการ์ด"
+        },
         visual_help_title: "ตัวช่วยแสดงผลในการตรวจสอบ",
         visual_help_desc: "แสดงหลักฐานและรูปถ่ายจากทิคเก็ตระหว่างการประเมินการซ่อมแซม",
         active: "เปิดใช้งาน",
@@ -739,10 +994,27 @@
           discard: "ยกเลิกข้อมูล",
           inject_new: "ยืนยันนำเข้ารายการใหม่",
           update_existing: "อัปเดตรายการเดิมที่มีอยู่"
+        },
+        rule: {
+          title: "การกำหนดค่ากฎ",
+          type: "ประเภท",
+          icon: "ไอคอน",
+          general_rec: "คำแนะนำทั่วไป",
+          risk_tol: "ความทนทานต่อความเสี่ยง (0.1 - 1.0)",
+          limits_title: "ขีดจำกัดและคำแนะนำเฉพาะ",
+          spec_rec_ph: "คำแนะนำเฉพาะ..."
+        },
+        edit_status: {
+          title: "แก้ไขสถานะ",
+          name: "ชื่อ",
+          show_card: "สร้างการ์ดบนแดชบอร์ด?",
+          admin_move: "การเคลื่อนย้ายทางธุรการ",
+          card_color: "สีการ์ด"
         }
       },
       status: {
         ACTIVO: "ใช้งานปกติ",
+        INACTIVO: "ไม่ได้ใช้งาน",
         FALLA: "ไม่ผ่านเกณฑ์ / ขัดข้อง",
         VENCIDO: "หมดอายุ",
         POR_VENCER: "ใกล้หมดอายุ",
@@ -762,6 +1034,50 @@
         processing: "กำลังดำเนินการ...",
         success: "ดำเนินการสำเร็จ",
         error: "ข้อผิดพลาด"
+      },
+      db: {
+        types: {
+          ESTACION: "สถานีงาน",
+          RACK: "ชั้นวาง",
+          ROBOT: "หุ่นยนต์",
+          PRUEBA_ROBOT: "ทดสอบหุ่นยนต์",
+          SILLA: "เก้าอี้ ESD",
+          EQ_FUNCIONAL: "อุปกรณ์ฟังก์ชัน",
+          EQUIPO_FUNCIONAL: "อุปกรณ์ฟังก์ชัน",
+          AUTOMATICA: "เครื่องจักรอัตโนมัติ",
+          MAQUINA: "เครื่องจักร",
+          CARRO: "รถเข็น",
+          MAQ_CONVEYOR: "เครื่องสายพานลำเลียง",
+          CONVEYOR: "สายพานลำเลียง",
+          MESA: "โต๊ะทำงาน",
+          PISO: "พื้นนำไฟฟ้า",
+          TAPETE: "แผ่นยาง ESD",
+          IONIZADOR: "เครื่องสลายประจุ (Ionizer)",
+          TALONERA: "สายรัดส้นเท้า ESD",
+          PULSERA: "สายรัดข้อมือ ESD"
+        },
+        measurements: {
+          SURFACE_RESISTANCE: "ความต้านทานพื้นผิว",
+          RESISTENCIA_SUPERFICIAL: "ความต้านทานพื้นผิว",
+          FLOOR_MAT_RESISTANCE: "ความต้านทานแผ่นปูพื้น",
+          RESISTENCIA_TAPETE_PISO: "ความต้านทานแผ่นปูพื้น",
+          ELECTRICAL_RESISTANCE: "ความต้านทานไฟฟ้า",
+          RESISTENCIA_ELECTRICA: "ความต้านทานไฟฟ้า",
+          RESISTANCE_TO_GROUND: "ความต้านทานลงกราวด์",
+          RESISTENCIA_A_TIERRA: "ความต้านทานลงกราวด์",
+          IMPEDANCE: "อิมพีแดนซ์",
+          VOLTAGE: "แรงดันไฟฟ้าสถิต",
+          JACK: "แจ็คกราวด์"
+        },
+        catalogs: {
+          CAFE: "สีน้ำตาล",
+          ROJO: "สีแดง",
+          AZUL: "สีน้ำเงิน",
+          VERDE: "สีเขียว",
+          AMARILLO: "สีเหลือง",
+          GRIS: "สีเทา",
+          CUADRADO_GRIS: "สี่เหลี่ยมสีเทา"
+        }
       }
     }
   };
