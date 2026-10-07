@@ -116,8 +116,7 @@ function saveTicketRecord(payload) {
                 fecha: dateStr, ticketData: payload.formData, mediciones: payload.measurements,
                 dictamen: payload.passed ? "CUMPLE (CERRADO)" : "NO CUMPLE (SIGUE ABIERTO)"
             });
-            sh.getRange(i + 1, 4).setValue(payload.passed ? "CERRADO" : "ABIERTO"); 
-            sh.getRange(i + 1, 5).setValue(JSON.stringify(oldData));
+            sh.getRange(i + 1, 4, 1, 2).setValues([[payload.passed ? "CERRADO" : "ABIERTO", JSON.stringify(oldData)]]);
             isUpdated = true;
             if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
             break;

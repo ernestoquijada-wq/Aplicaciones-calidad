@@ -212,21 +212,30 @@ function processAudit(payload) {
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
     const { formData, asset } = payload;
     const r = asset.rowIndex;
+    const numCols = Math.max(sh.getLastColumn(), 20);
+    const rowValues = sh.getRange(r, 1, 1, numCols).getValues()[0];
+    const headers = sh.getRange(1, 1, 1, numCols).getValues()[0];
 
-    sh.getRange(r, 2).setValue(asset.quadrant);
-    sh.getRange(r, 3).setValue(asset.colorCode);
-    sh.getRange(r, 7).setValue(asset.status);
-    sh.getRange(r, 19).setValue(asset.responsible);
+    rowValues[1] = asset.quadrant;
+    rowValues[2] = asset.colorCode;
+    rowValues[6] = asset.status;
+    rowValues[18] = asset.responsible;
 
-    if(formData.isAudit) {
-      const m = formData.measurements;
+    let vDateStr = "";
+    let nDateStr = "";
+    const m = (formData && formData.measurements) || {};
+
+    if (formData && formData.isAudit) {
       const chk = (val) => (val === null || val === undefined || val === "") ? "N/A" : val;
-      const techRow = [[
-        chk(m.surfaceRes?.mantissa), chk(m.surfaceRes?.exponent), chk(m.floorMat?.mantissa), chk(m.floorMat?.exponent),
-        chk(m.elecRes), chk(m.impedance), chk(m.voltage), chk(m.jack), formData.result
-      ]];
-      
-      sh.getRange(r, 8, 1, 9).setValues(techRow);
+      rowValues[7] = chk(m.surfaceRes?.mantissa);
+      rowValues[8] = chk(m.surfaceRes?.exponent);
+      rowValues[9] = chk(m.floorMat?.mantissa);
+      rowValues[10] = chk(m.floorMat?.exponent);
+      rowValues[11] = chk(m.elecRes);
+      rowValues[12] = chk(m.impedance);
+      rowValues[13] = chk(m.voltage);
+      rowValues[14] = chk(m.jack);
+      rowValues[15] = formData.result || "";
 
       const vDateUser = new Date(formData.validationDate);
       const vDateFixed = new Date(vDateUser.getTime() + vDateUser.getTimezoneOffset()*60000);
@@ -234,14 +243,23 @@ function processAudit(payload) {
       nDate.setFullYear(nDate.getFullYear() + 1);
       nDate.setMonth(nDate.getMonth() + 1, 0);
 
-      const vDateStr = Utilities.formatDate(vDateFixed, Session.getScriptTimeZone(), "dd-MMM-yy");
-      const nDateStr = Utilities.formatDate(nDate, Session.getScriptTimeZone(), "dd-MMM-yy");
+      vDateStr = Utilities.formatDate(vDateFixed, Session.getScriptTimeZone(), "dd-MMM-yy");
+      nDateStr = Utilities.formatDate(nDate, Session.getScriptTimeZone(), "dd-MMM-yy");
 
-      sh.getRange(r, 17).setValue(vDateStr);
-      sh.getRange(r, 18).setValue(nDateStr);
-      sh.getRange(r, 20).setValue(formData.comments||"");
-      stampLastModified(sh, r);
-      
+      rowValues[16] = vDateStr;
+      rowValues[17] = nDateStr;
+      rowValues[19] = formData.comments || "";
+
+      const modColIndex = headers.indexOf('LastModified');
+      if (modColIndex !== -1 && modColIndex < rowValues.length) {
+        rowValues[modColIndex] = new Date().toISOString();
+      }
+    }
+
+    // Escritura única por lote para toda la fila
+    sh.getRange(r, 1, 1, rowValues.length).setValues([rowValues]);
+
+    if (formData && formData.isAudit) {
       logAudit(ss, asset.controlNo, formData.result, { ...m, comments: formData.comments, nextDate: nDateStr, validationDate: vDateStr });
       
       if (formData.requiresSecondRevision) {

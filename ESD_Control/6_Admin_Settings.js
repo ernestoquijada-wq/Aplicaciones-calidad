@@ -8,9 +8,7 @@ function adminSaveConfigItem(item) {
   const data = sh.getDataRange().getValues();
   for(let i=1; i<data.length; i++) {
      if(String(data[i][0]) === String(item.category) && String(data[i][1]) === String(item.id)) {
-         sh.getRange(i+1, 3).setValue(item.label);
-         sh.getRange(i+1, 4).setValue(item.color);
-         sh.getRange(i+1, 5).setValue(JSON.stringify(item.config || {}));
+         sh.getRange(i + 1, 3, 1, 3).setValues([[item.label, item.color, JSON.stringify(item.config || {})]]);
          return { success: true };
      }
   }

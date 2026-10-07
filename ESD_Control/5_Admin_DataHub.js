@@ -103,12 +103,23 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
       
       const folio = isDryRun ? "PREV-0000" : getNextFolio(templateObj.id);
       const tplData = tempSheet.getDataRange().getValues();
-      for (let r = 0; r < Math.min(tplData.length, 20); r++) {
+      const maxTplRows = Math.min(tplData.length, 20);
+      let tplChanged = false;
+      const formattedDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yyyy");
+      for (let r = 0; r < maxTplRows; r++) {
         for (let c = 0; c < tplData[r].length; c++) {
           let cellVal = String(tplData[r][c]);
-          if (cellVal.includes('{{FOLIO}}')) tempSheet.getRange(r + 1, c + 1).setValue(cellVal.replace('{{FOLIO}}', folio));
-          if (cellVal.includes('{{FECHA}}')) tempSheet.getRange(r + 1, c + 1).setValue(cellVal.replace('{{FECHA}}', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yyyy")));
+          let newVal = cellVal;
+          if (newVal.includes('{{FOLIO}}')) newVal = newVal.replace(/\{\{FOLIO\}\}/g, folio);
+          if (newVal.includes('{{FECHA}}')) newVal = newVal.replace(/\{\{FECHA\}\}/g, formattedDate);
+          if (newVal !== cellVal) {
+            tplData[r][c] = newVal;
+            tplChanged = true;
+          }
         }
+      }
+      if (tplChanged && maxTplRows > 0) {
+        tempSheet.getRange(1, 1, maxTplRows, tplData[0].length).setValues(tplData.slice(0, maxTplRows));
       }
 
       const config = templateObj.config || { startRow: 8, columns: [] };
@@ -218,22 +229,35 @@ function bulkProcessAssets(ss, data, isUpdate) {
   const estadoRegCol = headers.indexOf("Estado_Registro") + 1;
 
   if (isUpdate) {
+    // Optimización O(1) con Map y actualización en memoria por lotes (Batch I/O)
+    const idMap = new Map();
+    for (let i = 1; i < dbData.length; i++) {
+      const id = String(dbData[i][0]).trim().toUpperCase();
+      if (id) idMap.set(id, i);
+    }
+
+    let modified = false;
     data.forEach(row => {
-      const id = String(row.CONTROL_NO || row.ID).trim();
-      for (let i = 1; i < dbData.length; i++) {
-        if (String(dbData[i][0]).trim() === id) {
-          if (row.CUADRANTE) sh.getRange(i + 1, 2).setValue(row.CUADRANTE);
-          if (row.COLOR_CODE) sh.getRange(i + 1, 3).setValue(row.COLOR_CODE);
-          if (row.DESCRIPCION) sh.getRange(i + 1, 4).setValue(row.DESCRIPCION);
-          if (row.PROYECTO) sh.getRange(i + 1, 5).setValue(row.PROYECTO);
-          if (row.FABRICA) sh.getRange(i + 1, 6).setValue(row.FABRICA);
-          if (row.ESTADO_ACTUAL) sh.getRange(i + 1, 7).setValue(row.ESTADO_ACTUAL);
-          if (row.RESPONSABLE) sh.getRange(i + 1, 19).setValue(row.RESPONSABLE);
-          if (row.COMENTARIOS) sh.getRange(i + 1, 20).setValue(row.COMENTARIOS);
-          break;
-        }
-      }
+      const id = String(row.CONTROL_NO || row.ID || "").trim().toUpperCase();
+      if (!id || !idMap.has(id)) return;
+      const i = idMap.get(id);
+
+      // Asegurar que la fila en memoria tenga longitud suficiente
+      while (dbData[i].length < headers.length) dbData[i].push("");
+
+      if (row.CUADRANTE !== undefined && row.CUADRANTE !== "") { dbData[i][1] = row.CUADRANTE; modified = true; }
+      if (row.COLOR_CODE !== undefined && row.COLOR_CODE !== "") { dbData[i][2] = row.COLOR_CODE; modified = true; }
+      if (row.DESCRIPCION !== undefined && row.DESCRIPCION !== "") { dbData[i][3] = row.DESCRIPCION; modified = true; }
+      if (row.PROYECTO !== undefined && row.PROYECTO !== "") { dbData[i][4] = row.PROYECTO; modified = true; }
+      if (row.FABRICA !== undefined && row.FABRICA !== "") { dbData[i][5] = row.FABRICA; modified = true; }
+      if (row.ESTADO_ACTUAL !== undefined && row.ESTADO_ACTUAL !== "") { dbData[i][6] = row.ESTADO_ACTUAL; modified = true; }
+      if (row.RESPONSABLE !== undefined && row.RESPONSABLE !== "") { dbData[i][18] = row.RESPONSABLE; modified = true; }
+      if (row.COMENTARIOS !== undefined && row.COMENTARIOS !== "") { dbData[i][19] = row.COMENTARIOS; modified = true; }
     });
+
+    if (modified && dbData.length > 1) {
+      sh.getRange(2, 1, dbData.length - 1, headers.length).setValues(dbData.slice(1));
+    }
   } else {
     const rowsToInject = data.map(r => {
       let newRow = new Array(headers.length).fill("");
@@ -251,8 +275,20 @@ function bulkProcessAssets(ss, data, isUpdate) {
 function bulkProcessRules(ss, data, isUpdate) {
   const sh = ss.getSheetByName(CONF.SHEET_RULES);
   const dbData = sh.getDataRange().getValues();
+  const numCols = Math.max(dbData[0] ? dbData[0].length : 0, 16);
+
+  // Mapear reglas existentes por ID para búsqueda O(1)
+  const ruleMap = new Map();
+  for (let i = 1; i < dbData.length; i++) {
+    const id = String(dbData[i][0]).trim().toUpperCase();
+    if (id) ruleMap.set(id, i);
+  }
+
+  const rowsToAppend = [];
+  let updatedInMemory = false;
+
   data.forEach(row => {
-     const id = String(row.TIPO_ACTIVO_ID).trim().toUpperCase();
+     const id = String(row.TIPO_ACTIVO_ID || "").trim().toUpperCase();
      if(!id) return;
      const newRow = [
        id,
@@ -263,17 +299,36 @@ function bulkProcessRules(ss, data, isUpdate) {
        "", "", "", "", "", "" 
      ];
 
-     let found = false;
      if (isUpdate) {
-        for(let i=1; i<dbData.length; i++) {
-           if(String(dbData[i][0]).toUpperCase() === id) {
-              sh.getRange(i+1, 1, 1, newRow.length).setValues([newRow]);
-              found = true; break;
-           }
-        }
+       if (ruleMap.has(id)) {
+         const idx = ruleMap.get(id);
+         dbData[idx] = newRow;
+         updatedInMemory = true;
+       }
+     } else {
+       if (!ruleMap.has(id)) {
+         rowsToAppend.push(newRow);
+         ruleMap.set(id, dbData.length + rowsToAppend.length - 1);
+       }
      }
-     if (!found && !isUpdate) sh.appendRow(newRow);
   });
+
+  if (isUpdate && updatedInMemory && dbData.length > 1) {
+    // Un solo guardado masivo en memoria para todas las reglas actualizadas
+    const normalizedData = dbData.slice(1).map(row => {
+      while (row.length < numCols) row.push("");
+      return row.slice(0, numCols);
+    });
+    sh.getRange(2, 1, normalizedData.length, numCols).setValues(normalizedData);
+  } else if (!isUpdate && rowsToAppend.length > 0) {
+    // Un solo append por lote para todas las nuevas reglas
+    const normalizedRows = rowsToAppend.map(row => {
+      while (row.length < numCols) row.push("");
+      return row.slice(0, numCols);
+    });
+    sh.getRange(sh.getLastRow() + 1, 1, normalizedRows.length, numCols).setValues(normalizedRows);
+  }
+
   return { success: true };
 }
 
