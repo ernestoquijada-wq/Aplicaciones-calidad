@@ -68,7 +68,7 @@ function adminGenerateFullReport(targetIds, templateObj = null, isDryRun = false
           let assetData = {
             controlNo: id, quadrant: row[1], quadrantLabel: sectorLabels[String(row[1]).toUpperCase()] || "N/A", 
             description: row[3], project: row[4], factory: row[5], status: row[6],
-            lastResult: row[15], lastDate: safeDate(row[16]), nextDate: safeDate(row[17]),
+            lastResult: (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(row[15]) : row[15], lastDate: safeDate(row[16]), nextDate: safeDate(row[17]),
             responsible: row[18], comments: row[19],
             meas_surfaceRes: fmtMeas(row[7], row[8]), meas_floorMat: fmtMeas(row[9], row[10]),
             meas_surfaceRes_m: row[7] || "N/A", meas_surfaceRes_e: row[8] || "N/A",

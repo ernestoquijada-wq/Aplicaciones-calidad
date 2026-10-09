@@ -12,6 +12,7 @@ const CONF = {
   SHEET_TICKETS: 'DB_Tickets',
   SHEET_ROLES: 'Seguridad_Roles',
   SHEET_USERS: 'Seguridad_Usuarios',
+  SHEET_ALERTS: 'DB_Alerts',
   DEFAULT_COLOR: '#005565',
   TIMEOUTS: {
     LOCK: 15000,

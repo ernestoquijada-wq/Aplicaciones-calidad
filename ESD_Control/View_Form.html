@@ -6,7 +6,10 @@
         <span class="w-2 h-8 rounded-full bg-gradient-to-b from-[#005565] to-teal-600"></span>
         <div>
           <h2 class="font-black text-xl text-slate-800 flex items-center gap-2 tracking-tight">{{ isNewAsset ? $t('form.title_new') : $t('form.title_verify') }}</h2>
-          <p class="text-[10px] font-mono font-bold text-slate-400 tracking-wider mt-0.5">{{ $t('form.id') }} {{ editAsset.controlNo || 'AUTO' }}</p>
+          <p class="text-sm font-mono font-semibold text-[#1e293b] tracking-wider mt-0.5 flex items-center gap-1.5">
+            <span class="text-xs uppercase font-extrabold text-[#005565] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{{ $t('form.id') }}</span>
+            <span class="text-slate-900 font-bold text-sm">{{ editAsset.controlNo || 'AUTO' }}</span>
+          </p>
         </div>
       </div>
     </div>
@@ -32,7 +35,7 @@
               <span class="text-[9px] font-mono bg-slate-200 px-2 py-0.5 rounded text-slate-600">{{ activeTicketEvidence.folio }}</span>
           </div>
           <div class="p-6">
-              <p class="text-xs text-slate-600 italic mb-4 font-medium border-l-4 border-rose-400 pl-3 bg-rose-50 p-2 rounded-r">"{{ activeTicketEvidence.comentarios }}"</p>
+              <p class="text-xs text-slate-600 italic mb-4 font-medium border-l-4 border-rose-400 pl-3 bg-rose-50 p-2 rounded-r">"{{ translateDynamic(activeTicketEvidence.comentarios) }}"</p>
               <div class="flex gap-4 overflow-x-auto pb-4">
                   <div v-for="(url, idx) in activeTicketEvidence.fotos" :key="idx" @click="openGallery(idx)" class="relative flex-none w-32 h-32 sm:w-40 sm:h-40 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-[#005565] hover:shadow-md transition shadow-sm group">
                       <img :src="url" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">
@@ -49,14 +52,14 @@
           <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i class="fas fa-info-circle"></i> {{ $t('form.info_gen') }}</h3>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
              <div><label class="lbl">{{ $t('form.status') }}</label><select v-model="editAsset.status" class="input-std font-bold"><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
-             <div class="md:col-span-1"><label class="lbl">{{ $t('form.resp') }}</label><select v-model="editAsset.responsible" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{a.id}}</option></select></div>
-             <div><label class="lbl">{{ $t('form.factory') }}</label><select v-model="editAsset.factory" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="f in catalogs.factories" :value="f.id">{{f.id}}</option></select></div>
-             <div><label class="lbl">{{ $t('form.project') }}</label><select v-model="editAsset.project" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="p in catalogs.projects" :value="p.id">{{p.id}}</option></select></div>
+             <div class="md:col-span-1"><label class="lbl">{{ $t('form.resp') }}</label><select v-model="editAsset.responsible" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{ a.label ? translateDynamic(a.label, 'auditors') : a.id }}</option></select></div>
+             <div><label class="lbl">{{ $t('form.factory') }}</label><select v-model="editAsset.factory" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="f in catalogs.factories" :value="f.id">{{ f.label ? translateDynamic(f.label, 'factories') : translateDynamic(f.id, 'factories') }}</option></select></div>
+             <div><label class="lbl">{{ $t('form.project') }}</label><select v-model="editAsset.project" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="p in catalogs.projects" :value="p.id">{{ p.label ? translateDynamic(p.label, 'projects') : translateDynamic(p.id, 'projects') }}</option></select></div>
              
              <div>
                  <label class="lbl">{{ $t('form.quadrant') }}</label>
                  <input list="sectorList" v-model="editAsset.quadrant" class="input-std font-bold text-[#005565] text-center uppercase" placeholder="EJ: B4">
-                 <datalist id="sectorList"><option v-for="s in catalogs.sectors" :value="s.id">{{ s.label }}</option></datalist>
+                 <datalist id="sectorList"><option v-for="s in catalogs.sectors" :value="s.id">{{ translateDynamic(s.label, 'catalogs') }}</option></datalist>
              </div>
              <div class="flex items-center gap-2">
                  <div class="w-10 h-10 rounded border shadow-sm flex-none transition-colors duration-200" :style="{backgroundColor: sectorColor}"></div>

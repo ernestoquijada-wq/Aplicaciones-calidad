@@ -66,21 +66,49 @@ function useHeader() {
         if (!strVal) return '';
 
         const lang = locale.value || 'ES';
-        const key = strVal.toUpperCase().replace(/[\s\.\-]+/g, '_');
+        const rawKey = strVal.toUpperCase().replace(/[\s\.\-]+/g, '_');
+        const normKey = rawKey.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-        // 1. Verificación en diccionario local maestro
+        // 1. Verificación en diccionario local maestro (con tildes o normalizada)
         if (typeof messages !== 'undefined' && messages && messages[lang]) {
             const langDict = messages[lang];
-            if (category && langDict.db && langDict.db[category] && langDict.db[category][key]) {
-                return langDict.db[category][key];
+            const checkDict = (dict) => {
+                if (!dict) return null;
+                return dict[rawKey] || dict[normKey] || null;
+            };
+
+            if (category && langDict.db && langDict.db[category]) {
+                const found = checkDict(langDict.db[category]);
+                if (found) return found;
             }
-            if (category && langDict[category] && langDict[category][key]) {
-                return langDict[category][key];
+            if (category && langDict[category]) {
+                const found = checkDict(langDict[category]);
+                if (found) return found;
             }
-            if (langDict.db?.types?.[key]) return langDict.db.types[key];
-            if (langDict.db?.measurements?.[key]) return langDict.db.measurements[key];
-            if (langDict.db?.catalogs?.[key]) return langDict.db.catalogs[key];
-            if (langDict.status?.[key]) return langDict.status[key];
+            if (category === 'roles' && langDict.security_sec?.roles) {
+                const found = checkDict(langDict.security_sec.roles);
+                if (found) return found;
+            }
+            if (langDict.db?.types) {
+                const found = checkDict(langDict.db.types);
+                if (found) return found;
+            }
+            if (langDict.db?.measurements) {
+                const found = checkDict(langDict.db.measurements);
+                if (found) return found;
+            }
+            if (langDict.db?.catalogs) {
+                const found = checkDict(langDict.db.catalogs);
+                if (found) return found;
+            }
+            if (langDict.db?.roles) {
+                const found = checkDict(langDict.db.roles);
+                if (found) return found;
+            }
+            if (langDict.status) {
+                const found = checkDict(langDict.status);
+                if (found) return found;
+            }
         }
 
         // Si el idioma es Español y no requirió traducción de diccionario, devolvemos el valor original
@@ -111,15 +139,27 @@ function useHeader() {
                         pendingTranslations.delete(cacheKey);
                         console.warn('Error al traducir texto libre "' + strVal + '":', err);
                     })
-                    .translateText(strVal, lang.toLowerCase(), 'es');
+                    .translateText(strVal, lang.toLowerCase(), '');
             }
         }
 
         return strVal;
     };
 
+    const normalizeResult = (val) => {
+        if (!val) return "";
+        let s = String(val).trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        if (s === "CIMPLE" || s === "PASS" || s === "PASSED" || s === "OK" || s === "P") return "CUMPLE";
+        if (s === "F" || s === "FAIL" || s === "FAILED" || s === "NO CUMPLE") return "FALLA";
+        return String(val).trim();
+    };
+
     const translateStatus = (statusStr) => {
-        return translateDynamic(statusStr, 'status');
+        return translateDynamic(normalizeResult(statusStr), 'status');
+    };
+
+    const translateRole = (roleStr) => {
+        return translateDynamic(roleStr, 'roles');
     };
 
     return {
@@ -131,7 +171,9 @@ function useHeader() {
         setLanguage,
         toggleLanguage,
         translateDynamic,
-        translateStatus
+        translateStatus,
+        translateRole,
+        normalizeResult
     };
 }
 </script>

@@ -46,7 +46,7 @@
                       <i class="fas fa-comment-alt text-amber-400 text-xs"></i>
                       <span class="font-black text-[9px] text-amber-600/70 uppercase tracking-widest">{{ $t('modals.history.obs') }}:</span>
                   </div>
-                  <p class="italic pl-1">"{{ getHistoryComments(h.technicalData) }}"</p>
+                  <p class="italic pl-1">"{{ translateDynamic(getHistoryComments(h.technicalData)) }}"</p>
               </div>
           </div>
       </div>
@@ -99,8 +99,8 @@
                 <div>
                     <label class="lbl">{{ $t('modals.rule.icon') }}</label>
                     <button @click="iconSelectorOpen=!iconSelectorOpen" class="w-full input-std text-left flex justify-between"><i class="fas" :class="ruleModal.data.defaultIcon"></i><i class="fas fa-chevron-down"></i></button>
-                    <div v-if="iconSelectorOpen" class="absolute z-10 bg-white border p-2 grid grid-cols-6 gap-2 shadow-xl rounded-xl mt-1">
-                        <button v-for="icon in iconsList" :key="icon" @click="ruleModal.data.defaultIcon=icon;iconSelectorOpen=false" class="w-8 h-8 hover:bg-slate-100 rounded"><i class="fas" :class="icon"></i></button>
+                    <div v-if="iconSelectorOpen" class="absolute z-20 bg-white border border-slate-200 p-2 grid grid-cols-6 gap-2 shadow-xl rounded-xl mt-1 max-h-56 overflow-y-auto w-64 ring-1 ring-black/5">
+                        <button v-for="icon in iconsList" :key="icon" @click="ruleModal.data.defaultIcon=icon;iconSelectorOpen=false" class="w-8 h-8 hover:bg-slate-100 rounded flex items-center justify-center text-slate-600 hover:text-[#005565] transition" :title="icon"><i class="fas" :class="icon"></i></button>
                     </div>
                 </div>
                 <div class="col-span-1"><label class="lbl">{{ $t('modals.rule.general_rec') }}</label><input v-model="ruleModal.data.recommendation" class="input-std"></div>
@@ -165,8 +165,8 @@
                 <div class="w-8 h-8 rounded-lg bg-cyan-500 flex items-center justify-center shadow-lg shadow-cyan-500/50 animate-bounce"><i class="fas fa-bolt text-white text-xs"></i></div>
                 <div class="flex-1 mr-4">
                     <select v-model="selectedAiPersonality" class="bg-slate-800 text-white text-[10px] font-black border-none rounded-lg p-1.5 focus:ring-1 ring-cyan-500 w-full outline-none cursor-pointer">
-                        <option value="" disabled>¿Con quién quieres hablar?</option>
-                        <option v-for="p in myPersonalities" :key="p.id" :value="p.id">🤖 {{ p.id }}</option>
+                        <option value="" disabled>{{ $t('admin.copilot.select_prompt') }}</option>
+                        <option v-for="p in myPersonalities" :key="p.id" :value="p.id">🤖 {{ translateDynamic(p.id, 'aiPersonalities') }}</option>
                     </select>
                 </div>
             </div>
@@ -181,7 +181,7 @@
         </div>
         <div class="p-4 bg-white border-t border-slate-100">
             <div class="relative flex items-center gap-2">
-                <input v-model="userMessage" @keyup.enter="sendToAi" placeholder="Pregúntame algo..." class="input-std !rounded-full pr-12 !py-3 border-slate-200 focus:!border-cyan-500" :disabled="isAiTyping">
+                <input v-model="userMessage" @keyup.enter="sendToAi" :placeholder="locale === 'ES' ? 'Pregúntame algo...' : (locale === 'EN' ? 'Ask me anything...' : (locale === 'ZH' ? '问我任何问题...' : 'ถามอะไรฉันก็ได้...'))" class="input-std !rounded-full pr-12 !py-3 border-slate-200 focus:!border-cyan-500" :disabled="isAiTyping">
                 <button @click="sendToAi" :disabled="isAiTyping || !userMessage.trim()" class="absolute right-1.5 w-9 h-9 rounded-full bg-cyan-600 text-white flex items-center justify-center hover:bg-slate-900 transition disabled:opacity-30"><i class="fas fa-paper-plane text-xs"></i></button>
             </div>
             <p class="text-[8px] text-center text-slate-400 mt-2 font-bold uppercase tracking-tighter">Powered by Quality Solutions</p>
@@ -215,12 +215,12 @@
                 </label>
                 
                 <input v-if="field.label === 'TEXT'" type="text" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100" :placeholder="'Ingrese ' + field.id">
-                <textarea v-else-if="field.label === 'TEXTAREA'" v-model="ticketForm[field.id]" class="input-std h-24 resize-y focus:!border-rose-500 focus:!ring-rose-100" :placeholder="'Detalles de ' + field.id"></textarea>
+                <textarea v-else-if="field.label === 'TEXTAREA'" v-model="ticketForm[field.id]" class="input-std h-24 resize-y focus:!border-rose-500 focus:!ring-rose-100" :placeholder="translateDynamic(field.id, 'ticket_fields')"></textarea>
                 <input v-else-if="field.label === 'DATE'" type="date" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100 cursor-pointer">
                 
                 <select v-else-if="field.label === 'SELECT'" v-model="ticketForm[field.id]" class="input-std focus:!border-rose-500 focus:!ring-rose-100 cursor-pointer">
-                    <option value="" disabled>Seleccione una opción...</option>
-                    <option v-for="opt in (field.color || '').split(',')" :value="opt.trim()">{{ opt.trim() }}</option>
+                    <option value="" disabled>{{ $t('form.select') }}</option>
+                    <option v-for="opt in (field.color || '').split(',')" :value="opt.trim()">{{ translateDynamic(opt.trim(), 'catalogs') }}</option>
                 </select>
 
                 <div v-else-if="field.label === 'FILE'" class="space-y-2">

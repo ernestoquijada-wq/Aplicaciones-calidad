@@ -3,7 +3,18 @@
 
   // CONSTANTES MAESTRAS
   const FIELD_MAP = { surfaceRes: { label: 'Surface Resistance', type: 'scientific' }, floorMat: { label: 'Floor Mat Resistance', type: 'scientific' }, elecRes: { label: 'Electrical Resistance', type: 'numeric' }, impedance: { label: 'Impedance', type: 'numeric' }, voltage: { label: 'Voltage', type: 'numeric' }, jack: { label: 'Jack', type: 'numeric' } };
-  const ICONS = ['fa-microscope','fa-tools','fa-robot','fa-bolt','fa-plug','fa-server','fa-desktop','fa-print','fa-box','fa-pallet','fa-industry','fa-hard-hat','fa-wrench','fa-hammer','fa-broadcast-tower','fa-wifi','fa-car-battery','fa-charging-station', 'fa-chair', 'fa-dolly', 'fa-network-wired'];
+  const ICONS = [
+    // SMT y Ensamble Electrónico
+    'fa-microchip', 'fa-memory', 'fa-robot', 'fa-fire-burner', 'fa-temperature-high', 'fa-fire',
+    // Inspección, Pruebas y Metrología (AOI, ICT, Rayos X, Gauges)
+    'fa-microscope', 'fa-eye', 'fa-crosshairs', 'fa-x-ray', 'fa-radiation', 'fa-gauge-high', 'fa-wave-square', 'fa-barcode', 'fa-qrcode',
+    // Maquinaria, Tooling y Depaneling (Router, Prensa, Feeders)
+    'fa-compact-disc', 'fa-scissors', 'fa-compress', 'fa-arrows-down-to-line', 'fa-layer-group', 'fa-arrows-rotate', 'fa-arrow-right-arrow-left', 'fa-industry', 'fa-gears',
+    // Mobiliario, Estaciones y Control ESD
+    'fa-table', 'fa-chair', 'fa-cart-flatbed', 'fa-dolly', 'fa-boxes-stacked', 'fa-box-archive', 'fa-door-closed', 'fa-box', 'fa-pallet',
+    // Eléctrico, Puesta a Tierra y Conectividad
+    'fa-bolt', 'fa-plug', 'fa-car-battery', 'fa-charging-station', 'fa-server', 'fa-desktop', 'fa-network-wired', 'fa-tools', 'fa-wrench', 'fa-hard-hat'
+  ];
   
   // GESTIÓN DE VALIDACIÓN Y COMUNICACIÓN ASÍNCRONA
   const FrontendValidator = {
@@ -19,6 +30,71 @@
       if (!clean.includes('@')) return false;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       return emailRegex.test(clean);
+    }
+  };
+
+  // MOTOR MATEMÁTICO DE EVALUACIÓN ESD (Límites, Exponentes y Tolerancias)
+  const ESDMath = {
+    parseLimit(ruleText) {
+      if (!ruleText) return { operator: '<', value: 0, raw: '' };
+      let s = String(ruleText).trim();
+      let op = '<';
+      if (s.startsWith('<=') || s.startsWith('=<')) { op = '<='; s = s.substring(2); }
+      else if (s.startsWith('>=') || s.startsWith('=>')) { op = '>='; s = s.substring(2); }
+      else if (s.startsWith('<')) { op = '<'; s = s.substring(1); }
+      else if (s.startsWith('>')) { op = '>'; s = s.substring(1); }
+      
+      s = s.trim();
+      s = s.replace(/(\d+(\.\d+)?)\s*[xX*]\s*10(\^|E|\s*e)?([+-]?\d+)/i, (m, p1, p2, p3, p4) => p1 + 'E' + p4);
+      s = s.replace(/[^0-9.eE+-]/g, '');
+      const num = parseFloat(s);
+      return {
+        operator: op,
+        value: isNaN(num) ? 0 : num,
+        raw: ruleText
+      };
+    },
+
+    evaluate(num, limitInfo, tolerance = 0.8) {
+      const { operator, value: limit } = limitInfo;
+      if (!limit || isNaN(limit)) {
+        return { isFail: false, isRisk: false, message: 'OK', class: 'bg-emerald-100 text-emerald-600', borderClass: 'border-emerald-300 bg-emerald-50/20', showRec: false };
+      }
+      
+      let isFail = false;
+      let isRisk = false;
+      const tol = (typeof tolerance === 'number' && !isNaN(tolerance) && tolerance > 0) ? tolerance : 0.8;
+      
+      switch (operator) {
+        case '<':
+          // Estricto menor que: si num >= limit, RECHAZADO / FUERA DE RANGO
+          if (num >= limit) isFail = true;
+          else if (num >= (limit * tol)) isRisk = true;
+          break;
+        case '<=':
+          if (num > limit) isFail = true;
+          else if (num >= (limit * tol)) isRisk = true;
+          break;
+        case '>':
+          if (num <= limit) isFail = true;
+          else if (tol < 1 && num <= (limit / tol)) isRisk = true;
+          break;
+        case '>=':
+          if (num < limit) isFail = true;
+          else if (tol < 1 && num <= (limit / tol)) isRisk = true;
+          break;
+        default:
+          if (num >= limit) isFail = true;
+          else if (num >= (limit * tol)) isRisk = true;
+      }
+      
+      if (isFail) {
+        return { isFail: true, isRisk: false, message: 'FUERA DE RANGO', class: 'bg-rose-100 text-rose-600', borderClass: 'border-rose-300 bg-rose-50/30', showRec: true };
+      }
+      if (isRisk) {
+        return { isFail: false, isRisk: true, message: 'RIESGO', class: 'bg-amber-100 text-amber-600', borderClass: 'border-amber-300 bg-amber-50/30', showRec: true };
+      }
+      return { isFail: false, isRisk: false, message: 'OK', class: 'bg-emerald-100 text-emerald-600', borderClass: 'border-emerald-300 bg-emerald-50/20', showRec: false };
     }
   };
 
@@ -67,6 +143,7 @@
       const catalogs = ref({ sectors:[], factories:[], projects:[], auditors:[], templates:[], ticketFields:[], emailGroups: [], aiPrompts: [] });
       const quadrantDB = ref([]);
       const matrixDB = ref({ validationReasons: [] });
+      const alertsDB = ref([]);
       const emailConfig = ref({});
       const aiSettings = ref({ enabled: false, apiKeys: [''], activePromptId: '' });
       const generalSettings = ref({ showPreviousEvidence: false });
@@ -97,6 +174,7 @@
               if (c.catalogs?.sectors) quadrantDB.value = c.catalogs.sectors;
               else if (c.sectors) quadrantDB.value = c.sectors;
               if (c.matrix) matrixDB.value = c.matrix;
+              if (c.alerts) alertsDB.value = c.alerts;
               if (c.email) emailConfig.value = c.email;
               if (c.aiConfig) aiSettings.value = c.aiConfig;
               if (c.showPreviousEvidence !== undefined) generalSettings.value.showPreviousEvidence = c.showPreviousEvidence;
@@ -124,6 +202,7 @@
             catalogs: catalogs.value,
             sectors: quadrantDB.value,
             matrix: matrixDB.value,
+            alerts: alertsDB.value,
             email: emailConfig.value,
             aiConfig: aiSettings.value,
             showPreviousEvidence: generalSettings.value.showPreviousEvidence,
@@ -146,12 +225,42 @@
           return matrixDB.value.validationReasons.map(item => typeof item === 'string' ? { name: item, showCard: false, color: '#64748b', isAdmin: false } : item);
       });
 
+      // Estado y acción de sincronización manual rápida
+      const syncing = ref(false);
+      const triggerManualSync = async () => {
+        if (syncing.value) return;
+        syncing.value = true;
+        try {
+          const res = await runGAS('forceSyncData');
+          if (res?.success) {
+            assets.value = res.assets || [];
+            dbRules.value = res.rules || {};
+            if (res.catalogs) catalogs.value = res.catalogs;
+            if (res.catalogs?.sectors) quadrantDB.value = res.catalogs.sectors;
+            else if (res.sectors) quadrantDB.value = res.sectors;
+            if (res.matrix) matrixDB.value = res.matrix;
+            if (res.alerts) alertsDB.value = res.alerts;
+            if (res.email) emailConfig.value = res.email;
+            if (res.aiConfig) aiSettings.value = res.aiConfig;
+            if (res.serverVersion) clientVersion.value = res.serverVersion;
+            persistLocalStore();
+            Toast.fire({ icon: 'success', title: i18n.global.t('header.synced_success') || 'Sincronizado' });
+          } else {
+            loadData(false);
+          }
+        } catch (e) {
+          loadData(false);
+        } finally {
+          setTimeout(() => { syncing.value = false; }, 800);
+        }
+      };
+
       // 2. CONFIGURACIÓN COMPARTIDA PARA LOS COMPOSABLES
       const globalConfig = {
-          view, submitting, assets, dbRules, catalogs, quadrantDB, statusDB,
+          view, submitting, assets, dbRules, catalogs, quadrantDB, statusDB, matrixDB, alertsDB,
           rolesDB, usersDB, aiSettings, emailConfig, generalSettings, userRoleName, userPermissions,
           currentUser, clientVersion, persistLocalStore,
-          currentThemeColor, FIELD_MAP, ICONS,
+          currentThemeColor, FIELD_MAP, ICONS, ESDMath,
           runGAS, Swal, Toast, FrontendValidator,
           loadData: (isSilent) => loadData(isSilent), 
           openTicketModal: (mode) => modalsLogic.openTicketModal(mode)
@@ -159,7 +268,7 @@
 
       // 3. INYECCIÓN DE COMPOSABLES MODULARES
       const headerLogic = useHeader();
-      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal });
+      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal, ESDMath }, alertsDB);
       const formLogic   = useAssetForm(globalConfig);
       const adminLogic  = useAdmin(globalConfig);
       const modalsLogic = useModals({ ...globalConfig, ...formLogic });
@@ -177,9 +286,10 @@
                 if(r.catalogs?.sectors) quadrantDB.value = r.catalogs.sectors;
                 else if(r.sectors) quadrantDB.value = r.sectors; 
                 if(r.matrix) matrixDB.value = r.matrix; 
+                if(r.alerts) alertsDB.value = r.alerts;
                 if(r.email) emailConfig.value = r.email; 
                 if(r.aiConfig) aiSettings.value = r.aiConfig;
-                if(r.showPrevEvidence !== undefined) generalSettings.value.showPreviousEvidence = r.showPrevEvidence;
+                if(r.showPrevEvidence !== undefined) generalSettings.value.showPrevEvidence = r.showPrevEvidence;
                 
                 userRoleName.value = r.userRoleName; userPermissions.value = r.userPermissions;
                 rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
@@ -222,7 +332,7 @@
 
       // 5. EXPORTACIÓN A LA VISTA HTML
       return {
-         loading, submitting, view, assets, dbRules, quadrantDB, statusDB, catalogs,
+         loading, submitting, syncing, triggerManualSync, view, assets, dbRules, quadrantDB, statusDB, matrixDB, alertsDB, catalogs,
          userRoleName, userPermissions, rolesDB, usersDB, aiSettings, emailConfig, generalSettings,
          currentUser, clientVersion,
          

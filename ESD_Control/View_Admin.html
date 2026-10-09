@@ -51,36 +51,42 @@
                        <div class="mb-4"><label class="lbl">{{ $t('admin.active_cat') }}</label><div class="input-std bg-slate-100 text-slate-500 font-bold border-slate-200">{{ activeCatalogLabel }}</div></div>
                        
                        <div v-if="activeCatalogCategory !== 'TICKET_FIELD'">
-                           <label class="lbl">{{ activeCatalogCategory === 'TEMPLATE' ? 'Nombre del Reporte (Menú)' : (activeCatalogCategory === 'EMAIL_GROUP' ? 'Nombre del Grupo' : (activeCatalogCategory === 'AI_PROMPT' ? 'Nombre de la Personalidad' : 'Valor (ID)')) }}</label>
-                           <input v-model="newCatalog.id" class="input-std mb-4" :placeholder="activeCatalogCategory === 'TEMPLATE' ? 'Ej: Formato de Fallas Rev G.1' : (activeCatalogCategory === 'EMAIL_GROUP' ? 'Ej: INGENIERIA' : (activeCatalogCategory === 'AI_PROMPT' ? 'Ej: MODO_ESTRICTO' : 'Ej: A1, Planta 1...'))">
+                           <label class="lbl">{{ activeCatalogCategory === 'TEMPLATE' ? $t('admin.catalogs_form.report_name') : (activeCatalogCategory === 'EMAIL_GROUP' ? $t('admin.catalogs_form.group_name') : (activeCatalogCategory === 'AI_PROMPT' ? $t('admin.catalogs_form.personality_name') : $t('admin.catalogs_form.value_id'))) }}</label>
+                           <input v-model="newCatalog.id" class="input-std mb-4" :placeholder="activeCatalogCategory === 'TEMPLATE' ? $t('admin.catalogs_form.ph_report') : (activeCatalogCategory === 'EMAIL_GROUP' ? $t('admin.catalogs_form.ph_group') : (activeCatalogCategory === 'AI_PROMPT' ? $t('admin.catalogs_form.ph_personality') : $t('admin.catalogs_form.ph_id')))">
+                       </div>
+
+                       <!-- Campo de Etiqueta/Nombre Descriptivo para Fábricas, Proyectos y Responsables -->
+                       <div v-if="['FACTORY', 'PROJECT', 'AUDITOR'].includes(activeCatalogCategory)" class="animate-fade">
+                           <label class="lbl">{{ $t('admin.catalogs_form.optional_label') }}</label>
+                           <input v-model="newCatalog.label" class="input-std mb-4" :placeholder="activeCatalogCategory === 'FACTORY' ? $t('admin.catalogs_form.ph_factory') : (activeCatalogCategory === 'PROJECT' ? $t('admin.catalogs_form.ph_project') : $t('admin.catalogs_form.ph_auditor'))">
                        </div>
 
                        <div v-if="activeCatalogCategory === 'AI_PROMPT'" class="w-full animate-fade space-y-4 mb-4">
                            <div>
-                               <label class="lbl">Instrucciones Secretas (System Prompt)</label>
-                               <textarea v-model="newCatalog.label" class="input-std h-24 resize-y" placeholder="Ej: Eres un asistente técnico experto..."></textarea>
+                               <label class="lbl">{{ $t('admin.catalogs_form.system_prompt_title') }}</label>
+                               <textarea v-model="newCatalog.label" class="input-std h-24 resize-y" :placeholder="$t('admin.catalogs_form.system_prompt_ph')"></textarea>
                            </div>
 
                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                <div>
-                                   <label class="lbl">Módulos de Conocimiento a Inyectar</label>
+                                   <label class="lbl">{{ $t('admin.catalogs_form.modules_inject') }}</label>
                                    <div class="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 h-full content-start">
                                        <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition">
                                            <input type="checkbox" value="assets_basic" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-[#005565] w-3 h-3">
-                                           Resumen Estadístico (Cantidades y Totales)
+                                           {{ $t('admin.catalogs_form.mod_basic') }}
                                        </label>
                                        <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition" title="Permite análisis profundo y mapas de calor.">
                                            <input type="checkbox" value="assets_full" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-rose-600 w-3 h-3">
-                                           <span class="text-rose-700">Analítica Profunda (Base de Datos CSV)</span>
+                                           <span class="text-rose-700">{{ $t('admin.catalogs_form.mod_full') }}</span>
                                        </label>
                                        <label class="flex items-center gap-2 text-[10px] font-bold cursor-pointer hover:bg-white p-1 rounded transition">
                                            <input type="checkbox" value="rules_dict" v-model="newCatalog.config.modules" class="rounded border-slate-300 text-[#005565] w-3 h-3">
-                                           Catálogo de Reglas y Tolerancias ESD
+                                           {{ $t('admin.catalogs_form.mod_rules') }}
                                        </label>
                                    </div>
                                </div>
                                <div>
-                                   <label class="lbl">Roles Autorizados</label>
+                                   <label class="lbl">{{ $t('admin.catalogs_form.roles_authorized') }}</label>
                                    <div class="flex flex-wrap gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 h-full content-start">
                                        <label v-for="(val, roleName) in rolesDB" :key="roleName" class="flex items-center gap-1.5 text-[9px] font-bold cursor-pointer hover:bg-white p-1 rounded transition border border-transparent hover:border-slate-200">
                                            <input type="checkbox" :value="roleName" v-model="newCatalog.config.allowedRoles" class="rounded border-slate-300 text-[#005565] w-3 h-3 cursor-pointer">
@@ -92,7 +98,7 @@
                        </div>
                        
                        <div v-if="activeCatalogCategory === 'EMAIL_GROUP'" class="w-full animate-fade">
-                           <label class="lbl">Destinatarios del Grupo</label>
+                           <label class="lbl">{{ $t('admin.catalogs_form.group_recipients') }}</label>
                            <div class="space-y-2 mb-4 border border-slate-200 p-4 rounded-xl bg-slate-50">
                                <div v-for="(email, idx) in adminEmailGroupList" :key="'admin_email_'+idx" class="flex items-center gap-2 animate-fade">
                                    <div class="relative flex-1">
@@ -101,32 +107,32 @@
                                    </div>
                                    <button v-if="adminEmailGroupList.length > 1" @click="removeAdminEmailField(idx)" class="text-rose-300 hover:text-rose-500 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-rose-50"><i class="fas fa-times-circle"></i></button>
                                </div>
-                               <button @click="addAdminEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1 mt-2 flex items-center gap-1"><i class="fas fa-plus"></i> AGREGAR OTRO CORREO</button>
+                               <button @click="addAdminEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1 mt-2 flex items-center gap-1"><i class="fas fa-plus"></i> {{ $t('admin.catalogs_form.btn_add_email') }}</button>
                            </div>
                        </div>
                        
-                       <div v-if="activeCatalogCategory==='SECTOR'"><label class="lbl">Nombre del Color (Etiqueta)</label><input v-model="newCatalog.label" class="input-std mb-4" placeholder="Ej: Café, Rojo, Cuadrado Gris"><label class="lbl">Color Identificador</label><div class="flex gap-2 h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newCatalog.color" class="absolute -top-2 -left-2 w-[120%] h-[200%] cursor-pointer p-0 m-0"></div></div>
+                       <div v-if="activeCatalogCategory==='SECTOR'"><label class="lbl">{{ $t('admin.catalogs_form.color_name') }}</label><input v-model="newCatalog.label" class="input-std mb-4" :placeholder="$t('admin.catalogs_form.color_name_ph')"><label class="lbl">{{ $t('admin.catalogs_form.color_picker') }}</label><div class="flex gap-2 h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newCatalog.color" class="absolute -top-2 -left-2 w-[120%] h-[200%] cursor-pointer p-0 m-0"></div></div>
                        
                        <div v-if="activeCatalogCategory==='TEMPLATE'" class="w-full">
-                           <label class="lbl">Nombre Pestaña Excel Mapeada</label>
+                           <label class="lbl">{{ $t('admin.catalogs_form.sheet_name') }}</label>
                            <input v-model="newCatalog.label" class="input-std mb-4" placeholder="Ej: 7293_Fallas">
-                           <label class="lbl">¿En qué tarjeta aparecerá este reporte?</label>
+                           <label class="lbl">{{ $t('admin.catalogs_form.sheet_target_card') }}</label>
                            <select v-model="newCatalog.color" class="input-std mb-4">
-                               <option value="all">Total Activos (General)</option>
-                               <option value="compliant">Cumplimiento</option>
-                               <option value="expired">Vencidos</option>
-                               <option value="warning">Por Vencer</option>
-                               <option value="noncompliant">Fallas</option>
-                               <option v-for="dc in dynamicCards" :key="dc.name" :value="dc.name">Tarjeta: {{ dc.name }}</option>
+                               <option value="all">{{ $t('admin.catalogs_form.card_all') }}</option>
+                               <option value="compliant">{{ $t('admin.catalogs_form.card_compliant') }}</option>
+                               <option value="expired">{{ $t('admin.catalogs_form.card_expired') }}</option>
+                               <option value="warning">{{ $t('admin.catalogs_form.card_warning') }}</option>
+                               <option value="noncompliant">{{ $t('admin.catalogs_form.card_failed') }}</option>
+                               <option v-for="dc in dynamicCards" :key="dc.name" :value="dc.name">{{ $t('admin.catalogs_form.card_prefix') }}: {{ dc.name }}</option>
                            </select>
 
                            <div class="mt-6 border-t border-slate-200 pt-6">
-                              <h5 class="font-black text-xs text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-columns text-[#005565]"></i> Constructor de Columnas</h5>
+                              <h5 class="font-black text-xs text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-columns text-[#005565]"></i> {{ $t('admin.catalogs_form.col_builder') }}</h5>
                               
                               <div class="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                  <label class="text-[10px] font-bold text-slate-600 uppercase w-32">Fila de Inicio:</label>
+                                  <label class="text-[10px] font-bold text-slate-600 uppercase w-32">{{ $t('admin.catalogs_form.start_row') }}</label>
                                   <input type="number" v-model="newCatalog.config.startRow" class="input-std w-20 text-center" title="Fila donde se dibujarán los encabezados">
-                                  <span class="text-[9px] text-slate-400">Las filas anteriores se respetarán intactas (Para logos/títulos).</span>
+                                  <span class="text-[9px] text-slate-400">{{ $t('admin.catalogs_form.start_row_hint') }}</span>
                               </div>
                               
                               <div class="space-y-2 mb-4">
@@ -138,9 +144,9 @@
                                       </div>
                                       
                                       <div class="flex-1 pl-2">
-                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Dato Interno a Extraer</label>
+                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">{{ $t('admin.catalogs_form.internal_data') }}</label>
                                           <select v-model="col.field" class="input-std h-8 text-xs py-0 text-[#005565] font-bold bg-slate-50">
-                                              <optgroup label="Datos Generales">
+                                              <optgroup :label="$t('admin.catalogs_form.group_gen')">
                                                   <option value="controlNo">ID / Control Number</option>
                                                   <option value="quadrant">Cuadrante (Solo ID)</option>
                                                   <option value="quadrantLabel">Nombre del Color (Cuadrante)</option>
@@ -151,13 +157,13 @@
                                                   <option value="responsible">Auditor Responsable</option>
                                                   <option value="systemUser">Persona que realizó la operación (Usuario)</option>
                                               </optgroup>
-                                              <optgroup label="Fechas y Resultados">
+                                              <optgroup :label="$t('admin.catalogs_form.group_dates')">
                                                   <option value="lastDate">Fecha Verificación (Exacta)</option>
                                                   <option value="nextDate">Fecha de Vencimiento</option>
                                                   <option value="lastResult">Último Dictamen (PASS/FAIL)</option>
                                                   <option value="comments">Comentarios Generales</option>
                                               </optgroup>
-                                              <optgroup label="Mediciones Técnicas">
+                                              <optgroup :label="$t('admin.catalogs_form.group_tech')">
                                               <option value="meas_surfaceRes">Surface Resistance (Fusionado)</option>
                                               <option value="meas_floorMat">Floor Mat Resistance (Fusionado)</option>
                                               <option value="meas_surfaceRes_m">Surface Resistance - Mantisa (Número)</option>
@@ -169,7 +175,7 @@
                                               <option value="meas_voltage">Voltage</option>
                                               <option value="meas_jack">Jack</option>
                                           </optgroup>
-                                              <optgroup label="Datos del Ticket (CAPA)">
+                                              <optgroup :label="$t('admin.catalogs_form.group_capa')">
                                                   <option value="tkt_id_number"># Número de Ticket (Solo dígitos)</option>
                                                   <option value="tkt_open_date">Fecha de Falla (Apertura)</option>
                                                   <option value="tkt_status">Estado del Ticket</option>
@@ -181,91 +187,91 @@
                                       </div>
                                       
                                       <div class="flex-1">
-                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Título del Encabezado Impreso</label>
+                                          <label class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">{{ $t('admin.catalogs_form.header_title') }}</label>
                                           <input v-model="col.header" class="input-std h-8 text-xs py-0" placeholder="Ej: # Article">
                                       </div>
                                       
                                       <button @click="newCatalog.config.columns.splice(i, 1)" class="w-8 h-8 rounded-lg text-rose-300 hover:bg-rose-50 hover:text-rose-500 transition ml-2"><i class="fas fa-trash-alt"></i></button>
                                   </div>
                                   <div v-if="!newCatalog.config.columns || newCatalog.config.columns.length === 0" class="text-center py-6 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-xs font-bold">
-                                      No has agregado ninguna columna. El reporte saldrá vacío.
+                                      {{ $t('admin.catalogs_form.no_cols') }}
                                   </div>
                               </div>
                               
                               <div class="flex gap-2">
-                                  <button @click="newCatalog.config.columns.push({field:'controlNo', header:'Nuevo Encabezado'})" class="flex-1 py-2 rounded-lg text-[10px] font-black text-[#005565] bg-teal-50 hover:bg-teal-100 border border-teal-200 transition uppercase tracking-wider"><i class="fas fa-plus mr-1"></i> Añadir Columna</button>
-                                  <button @click="previewTemplate" class="flex-1 py-2 rounded-lg text-[10px] font-black text-white bg-slate-800 hover:bg-slate-900 shadow-md transition uppercase tracking-wider"><i class="fas fa-eye mr-1"></i> Generar Vista Previa</button>
+                                  <button @click="newCatalog.config.columns.push({field:'controlNo', header:'Nuevo Encabezado'})" class="flex-1 py-2 rounded-lg text-[10px] font-black text-[#005565] bg-teal-50 hover:bg-teal-100 border border-teal-200 transition uppercase tracking-wider"><i class="fas fa-plus mr-1"></i> {{ $t('admin.catalogs_form.btn_add_col') }}</button>
+                                  <button @click="previewTemplate" class="flex-1 py-2 rounded-lg text-[10px] font-black text-white bg-slate-800 hover:bg-slate-900 shadow-md transition uppercase tracking-wider"><i class="fas fa-eye mr-1"></i> {{ $t('admin.catalogs_form.btn_preview') }}</button>
                               </div>
                            </div>
                        </div>
 
                        <div v-if="activeCatalogCategory === 'TICKET_FIELD'" class="w-full">
-                           <label class="lbl">Nombre del Campo (Aparecerá en el formulario)</label>
+                           <label class="lbl">{{ $t('admin.catalogs_form.field_name') }}</label>
                            <input v-model="newCatalog.id" class="input-std mb-4" placeholder="Ej: Acción Correctiva Implementada">
                            
-                           <label class="lbl">Tipo de Entrada (Componente)</label>
+                           <label class="lbl">{{ $t('admin.catalogs_form.input_type') }}</label>
                            <select v-model="newCatalog.label" class="input-std mb-4">
-                               <option value="TEXT">Texto Corto (Ej: Nombre)</option>
-                               <option value="TEXTAREA">Párrafo (Ej: Detalles / Observaciones)</option>
-                               <option value="SELECT">Lista Desplegable (Opciones Cerradas)</option>
-                               <option value="DATE">Fecha</option>
-                               <option value="FILE">Archivo Simple (PDF/Doc)</option>
-                               <option value="CAMERA">Cámara Pro (Fotografías / Video)</option>
-                               <option value="EMAIL_LIST">Lista de Correos Automática (@plexus)</option>
+                               <option value="TEXT">{{ $t('admin.catalogs_form.types_text') }}</option>
+                               <option value="TEXTAREA">{{ $t('admin.catalogs_form.types_textarea') }}</option>
+                               <option value="SELECT">{{ $t('admin.catalogs_form.types_select') }}</option>
+                               <option value="DATE">{{ $t('admin.catalogs_form.types_date') }}</option>
+                               <option value="FILE">{{ $t('admin.catalogs_form.types_file') }}</option>
+                               <option value="CAMERA">{{ $t('admin.catalogs_form.types_camera') }}</option>
+                               <option value="EMAIL_LIST">{{ $t('admin.catalogs_form.types_email_list') }}</option>
                            </select>
 
                            <div v-if="newCatalog.label === 'SELECT'" class="bg-amber-50 border border-amber-200 p-3 rounded-lg mb-4">
-                               <label class="lbl text-amber-800"><i class="fas fa-info-circle"></i> Opciones de la Lista</label>
+                               <label class="lbl text-amber-800"><i class="fas fa-info-circle"></i> {{ $t('admin.catalogs_form.select_options') }}</label>
                                <input v-model="newCatalog.color" class="input-std border-amber-300" placeholder="Ej: Alta, Media, Baja (Separadas por coma)">
-                               <p class="text-[9px] font-bold text-amber-600 mt-1">Escribe las opciones separadas por una coma.</p>
+                               <p class="text-[9px] font-bold text-amber-600 mt-1">{{ $t('admin.catalogs_form.select_options_hint') }}</p>
                            </div>
 
                            <div class="bg-slate-50 border border-slate-200 p-5 rounded-xl mb-4 space-y-4">
-                               <h4 class="font-black text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2"><i class="fas fa-cogs text-[#005565]"></i> Comportamiento del Campo</h4>
+                               <h4 class="font-black text-[10px] text-slate-500 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2"><i class="fas fa-cogs text-[#005565]"></i> {{ $t('admin.catalogs_form.field_behavior') }}</h4>
                                
                                <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
                                    <div>
-                                       <label class="text-xs font-bold text-slate-700 block select-none">Campo Obligatorio</label>
-                                       <p class="text-[9px] text-slate-400 font-bold">No dejará guardar el ticket si está vacío.</p>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">{{ $t('admin.catalogs_form.required_label') }}</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">{{ $t('admin.catalogs_form.required_desc') }}</p>
                                    </div>
                                    <input type="checkbox" v-model="newCatalog.config.required" class="w-5 h-5 accent-rose-500 cursor-pointer">
                                </div>
 
                                <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
                                    <div>
-                                       <label class="text-xs font-bold text-slate-700 block select-none">Mostrar en Apertura (Momento de Falla)</label>
-                                       <p class="text-[9px] text-slate-400 font-bold">Se pide inmediatamente al rechazar el equipo.</p>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">{{ $t('admin.catalogs_form.show_on_open') }}</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">{{ $t('admin.catalogs_form.show_on_open_desc') }}</p>
                                    </div>
                                    <input type="checkbox" v-model="newCatalog.config.showOnOpen" class="w-5 h-5 accent-[#005565] cursor-pointer">
                                </div>
 
                                <div class="flex items-center justify-between gap-4 bg-white p-3 rounded border border-slate-100 shadow-sm hover:border-slate-300 transition">
                                    <div>
-                                       <label class="text-xs font-bold text-slate-700 block select-none">Mostrar en Cierre (Momento de Reparación)</label>
-                                       <p class="text-[9px] text-slate-400 font-bold">Se pide antes de volver a medir el equipo.</p>
+                                       <label class="text-xs font-bold text-slate-700 block select-none">{{ $t('admin.catalogs_form.show_on_close') }}</label>
+                                       <p class="text-[9px] text-slate-400 font-bold">{{ $t('admin.catalogs_form.show_on_close_desc') }}</p>
                                    </div>
                                    <input type="checkbox" v-model="newCatalog.config.showOnClose" class="w-5 h-5 accent-emerald-500 cursor-pointer">
                                </div>
                            </div>
                        </div>
                        
-                       <button @click="saveCatalogItem" :disabled="submitting" class="w-full text-white py-3 rounded-xl text-xs font-bold shadow-lg transition mt-6 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" :class="editingCatalog ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (editingCatalog ? 'fa-sync' : 'fa-save')"></i> {{ submitting ? 'GUARDANDO...' : (editingCatalog ? 'ACTUALIZAR' : 'GUARDAR') }}</button>
-                       <button v-if="editingCatalog" @click="cancelCatalogEdit" class="w-full bg-slate-200 text-slate-500 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-slate-300">CANCELAR EDICIÓN</button>
+                       <button @click="saveCatalogItem" :disabled="submitting" class="w-full text-white py-3 rounded-xl text-xs font-bold shadow-lg transition mt-6 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" :class="editingCatalog ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (editingCatalog ? 'fa-sync' : 'fa-save')"></i> {{ submitting ? $t('admin.btn_saving') : (editingCatalog ? $t('admin.btn_update') : $t('admin.btn_save')) }}</button>
+                       <button v-if="editingCatalog" @click="cancelCatalogEdit" class="w-full bg-slate-200 text-slate-500 py-2 rounded-xl text-xs font-bold mt-2 hover:bg-slate-300">{{ $t('admin.btn_cancel_edit') }}</button>
                    </div>
                </div>
                <div class="lg:col-span-2">
                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                       <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><span class="font-black text-xs text-slate-600 uppercase tracking-wide">Lista de {{ activeCatalogLabel }}</span><span class="badge bg-[#005565] text-white px-3 py-1">{{ activeList.length }}</span></div>
+                       <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><span class="font-black text-xs text-slate-600 uppercase tracking-wide">{{ $t('admin.list_title', { name: activeCatalogLabel }) }}</span><span class="badge bg-[#005565] text-white px-3 py-1">{{ activeList.length }}</span></div>
                        <div class="max-h-[500px] overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                            <div v-for="item in activeList" :key="item.id" class="flex justify-between items-center p-4 rounded-xl border border-slate-100 hover:border-slate-300 hover:shadow-md transition bg-white group cursor-pointer" @click="editCatalog(item)">
                                <div class="flex items-center gap-3">
                                    <div v-if="activeCatalogCategory==='SECTOR'" class="w-8 h-8 rounded-lg shadow-sm flex-none border border-slate-100" :style="{backgroundColor: item.hex}"></div>
                                    <div v-else class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">{{ item.id.substring(0,2).toUpperCase() }}</div>
-                                   <div><p class="font-bold text-xs text-slate-700">{{ item.id }}</p><p v-if="item.label && item.label !== item.id" class="text-[9px] text-slate-400 font-bold uppercase">{{ item.label }}</p></div>
+                                   <div><p class="font-bold text-xs text-slate-700">{{ translateDynamic(item.id, 'catalogs') }}</p><p v-if="item.label && item.label !== item.id" class="text-[9px] text-slate-400 font-bold uppercase">{{ translateDynamic(item.label, 'catalogs') }}</p></div>
                                </div>
                                <div class="flex gap-2"><button class="text-slate-300 group-hover:text-amber-500 transition"><i class="fas fa-edit"></i></button><button @click.stop="deleteCatalogItem(activeCatalogCategory, item.id)" class="text-slate-300 group-hover:text-rose-500 transition"><i class="fas fa-trash-alt"></i></button></div>
                            </div>
-                           <div v-if="activeList.length === 0" class="col-span-full py-10 text-center text-slate-300 font-bold text-xs uppercase">No hay elementos registrados</div>
+                           <div v-if="activeList.length === 0" class="col-span-full py-10 text-center text-slate-300 font-bold text-xs uppercase">{{ $t('admin.empty_list') }}</div>
                        </div>
                    </div>
                </div>
@@ -275,92 +281,392 @@
        <!-- PESTAÑA: REGLAS -->
        <div v-if="adminTab==='rules'"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-slate-700">{{ $t('admin.rules_matrix.title') }}</h3><button @click="openRuleModal()" class="px-4 py-2 bg-[#005565] text-white rounded-lg text-xs font-bold shadow">{{ $t('admin.rules_matrix.new_rule') }}</button></div><table class="w-full text-left text-sm border-collapse"><thead class="bg-slate-50 text-xs text-slate-500 uppercase"><tr><th class="p-3 border-b">{{ $t('admin.rules_matrix.col_id') }}</th><th class="p-3 border-b text-center">{{ $t('admin.rules_matrix.col_icon') }}</th><th class="p-3 border-b">{{ $t('admin.rules_matrix.col_measurements') }}</th><th class="p-3 border-b text-right">{{ $t('admin.rules_matrix.col_action') }}</th></tr></thead><tbody><tr v-for="(r, k) in dbRules" :key="k" class="hover:bg-slate-50 transition"><td class="p-3 border-b font-bold text-slate-700">{{ translateDynamic(k, 'types') }}</td><td class="p-3 border-b text-center"><i class="fas text-slate-400" :class="r.defaultIcon"></i></td><td class="p-3 border-b"><div class="flex gap-1 flex-wrap"><span v-for="m in getActiveMeasurements(r)" class="text-[9px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded font-bold uppercase">{{ translateDynamic(m, 'measurements') }}</span></div></td><td class="p-3 border-b text-right"><div class="flex justify-end gap-2"><button @click="openRuleModal(k, r)" class="text-blue-500 hover:bg-blue-50 p-2 rounded"><i class="fas fa-edit"></i></button><button @click="deleteRule(k)" class="text-rose-400 hover:bg-rose-50 p-2 rounded"><i class="fas fa-trash"></i></button></div></td></tr></tbody></table></div>
        
-       <!-- PESTAÑA: ESTADOS -->
-       <div v-if="adminTab==='status'">
-           <div class="max-w-3xl mx-auto space-y-6">
-               <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                   <h4 class="font-black text-slate-700 mb-4 text-sm flex items-center gap-2"><i class="fas fa-plus-circle text-[#005565]"></i> {{ $t('admin.status_sec.new_title') }}</h4>
-                   <div class="flex flex-col md:flex-row gap-4 items-end">
-                       <div class="flex-1"><label class="lbl">{{ $t('admin.status_sec.name_lbl') }}</label><input v-model="newStatus.name" placeholder="Ej: BAJA, CUARENTENA..." class="input-std uppercase"></div>
-                       <div class="flex flex-col gap-2 mb-2">
-                           <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
-                               <input type="checkbox" v-model="newStatus.showCard" id="chkCard" class="w-4 h-4 accent-[#005565] cursor-pointer">
-                               <label for="chkCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('admin.status_sec.card_chk') }}</label>
-                           </div>
-                           <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
-                               <input type="checkbox" v-model="newStatus.isAdmin" id="chkAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer">
-                               <label for="chkAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('admin.status_sec.admin_chk') }}</label>
-                           </div>
-                       </div>
-                       <div v-if="newStatus.showCard"><label class="lbl">{{ $t('admin.status_sec.color_lbl') }}</label><div class="h-9 w-12 rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newStatus.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
-                       <button @click="addStatus" :disabled="submitting" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('common.save') }}</button>
-                   </div>
-               </div>
-               <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                   <div class="bg-slate-50 px-6 py-3 border-b border-slate-100"><span class="font-black text-xs text-slate-600 uppercase">{{ $t('admin.status_sec.registered_title') }}</span></div>
-                   <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                       <div v-for="(s, idx) in statusDB" :key="idx" class="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:shadow-md transition group bg-white">
-                           <div>
-                               <span class="font-bold text-xs uppercase text-slate-700 block mb-1">{{ translateStatus(s.name) }}</span>
-                               <span v-if="s.showCard" class="text-[9px] font-bold px-2 py-0.5 rounded text-white shadow-sm flex inline-flex items-center gap-1" :style="{backgroundColor: s.color}"><i class="fas fa-chart-pie text-[8px]"></i> {{ $t('admin.status_sec.card_active') }}</span>
-                               <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">{{ $t('admin.status_sec.no_card') }}</span>
-                           </div>
-                           <div class="flex gap-2"><button @click="openEditStateModal(s)" class="text-slate-300 hover:text-blue-500 transition w-8 h-8 rounded-full hover:bg-blue-50"><i class="fas fa-edit"></i></button><button @click="deleteStatus(idx)" class="text-slate-300 hover:text-rose-500 transition w-8 h-8 rounded-full hover:bg-rose-50"><i class="fas fa-trash"></i></button></div>
-                       </div>
-                   </div>
-               </div>
-           </div>
-       </div>
-       
-       <!-- PESTAÑA: EMAIL -->
-       <transition name="fade" mode="out-in">
-         <div v-if="adminTab === 'email'" class="max-w-5xl mx-auto space-y-6">
-             <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                 <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2 text-lg"><i class="fas fa-envelope-open-text text-[#005565]"></i> Centro de Notificaciones Automáticas</h3>
-                 
-                 <div class="flex gap-2 mb-8 bg-slate-100 p-1 rounded-xl">
-                     <button v-for="type in ['OPEN', 'CLOSE', 'FORCED']" :key="type" 
-                             @click="activeEmailType = type"
-                             :class="activeEmailType === type ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:bg-white/50'"
-                             class="flex-1 py-2 rounded-lg text-[10px] font-black transition-all">
-                         <i class="fas mr-1" :class="{'fa-exclamation-circle text-rose-500': type==='OPEN', 'fa-check-circle text-emerald-500': type==='CLOSE', 'fa-shield-alt text-amber-500': type==='FORCED'}"></i>
-                         {{ type === 'OPEN' ? 'FALLA (APERTURA)' : (type === 'CLOSE' ? 'SOLUCIÓN (CIERRE)' : 'ALERTA CALIDAD') }}
-                     </button>
-                 </div>
+       `        <!-- PESTAÑA: ESTADOS Y ALERTAS -->
+        <div v-if="adminTab==='status'">
+            <!-- Sub-tabs: Estados vs Alertas -->
+            <div class="flex gap-2 mb-6 max-w-4xl mx-auto bg-slate-100 p-1 rounded-xl">
+                <button @click="statusSubTab = 'statuses'" 
+                        :class="statusSubTab === 'statuses' ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:bg-white/50'"
+                        class="flex-1 py-2.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-tags"></i> {{ $t('admin.status_sec.subtab_statuses') }}
+                </button>
+                <button @click="statusSubTab = 'alerts'" 
+                        :class="statusSubTab === 'alerts' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'"
+                        class="flex-1 py-2.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-bell"></i> {{ $t('admin.status_sec.subtab_alerts') }}
+                    <span v-if="alertsDB && alertsDB.length" class="badge bg-rose-500 text-white text-[9px] px-1.5 py-0.2 rounded-full">{{ alertsDB.length }}</span>
+                </button>
+            </div>
 
-                 <div v-if="emailConfig[activeEmailType]" class="space-y-5 animate-fade">
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div class="col-span-2 md:col-span-1">
-                             <label class="lbl">Destinatarios Fijos (Separados por coma)</label>
-                             <input v-model="emailConfig[activeEmailType].to" class="input-std" placeholder="mantenimiento@plexus.com, calidad@plexus.com">
-                         </div>
-                         <div class="col-span-2 md:col-span-1">
-                             <label class="lbl">Asunto del Correo</label>
-                             <input v-model="emailConfig[activeEmailType].subject" class="input-std" placeholder="⚠️ Reporte de Falla">
-                         </div>
-                     </div>
-                     <div>
-                         <label class="lbl">Cuerpo del Mensaje (Instrucciones)</label>
-                         <textarea v-model="emailConfig[activeEmailType].body" class="input-std h-24 resize-y" placeholder="Escriba el mensaje que recibirá el personal..."></textarea>
-                     </div>
-                     
-                     <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-[10px] text-blue-700 flex items-start gap-3">
-                         <i class="fas fa-info-circle mt-0.5 text-blue-500"></i>
-                         <div class="flex-1">
-                             <p v-if="activeEmailType === 'OPEN'"><b>Lógica de Apertura:</b> Este correo se enviará cuando un equipo sea rechazado. Incluirá automáticamente el link a las fotos y los datos del responsable.</p>
-                             <p v-if="activeEmailType === 'CLOSE'"><b>Lógica de Cierre:</b> Se enviará cuando un ticket abierto vuelva a CUMPLIR. Ideal para avisar que el equipo está listo para producción.</p>
-                             <p v-if="activeEmailType === 'FORCED'"><b>Lógica de Calidad:</b> Se dispara cuando un auditor aprueba/rechaza un equipo saltándose el cálculo de las matemáticas de la plataforma.</p>
-                         </div>
-                     </div>
-                 </div>
-
-                 <div class="pt-6 mt-6 border-t border-slate-100 flex justify-end">
-                     <button @click="saveEmailConfig" :disabled="submitting" class="bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition flex items-center gap-2">
-                         <i class="fas fa-save"></i> GUARDAR CONFIGURACIÓN
-                     </button>
+            <!-- SUB-PESTAÑA 1: ESTADOS DE ACTIVOS -->
+            <div v-if="statusSubTab === 'statuses'" class="max-w-3xl mx-auto space-y-6 animate-fade">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h4 class="font-black text-slate-700 mb-4 text-sm flex items-center gap-2"><i class="fas fa-plus-circle text-[#005565]"></i> {{ $t('admin.status_sec.new_title') }}</h4>
+                    <div class="flex flex-col md:flex-row gap-4 items-end">
+                        <div class="flex-1"><label class="lbl">{{ $t('admin.status_sec.name_lbl') }}</label><input v-model="newStatus.name" placeholder="Ej: BAJA, CUARENTENA..." class="input-std uppercase"></div>
+                        <div class="flex flex-col gap-2 mb-2">
+                            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                                <input type="checkbox" v-model="newStatus.showCard" id="chkCard" class="w-4 h-4 accent-[#005565] cursor-pointer">
+                                <label for="chkCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('admin.status_sec.card_chk') }}</label>
+                            </div>
+                            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                                <input type="checkbox" v-model="newStatus.isAdmin" id="chkAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                                <label for="chkAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('admin.status_sec.admin_chk') }}</label>
+                            </div>
+                        </div>
+                        <div v-if="newStatus.showCard"><label class="lbl">{{ $t('admin.status_sec.color_lbl') }}</label><div class="h-9 w-12 rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newStatus.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
+                        <button @click="addStatus" :disabled="submitting" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('common.save') }}</button>
+                    </div>
                 </div>
-             </div>
-         </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-50 px-6 py-3 border-b border-slate-100"><span class="font-black text-xs text-slate-600 uppercase">{{ $t('admin.status_sec.registered_title') }}</span></div>
+                    <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div v-for="(s, idx) in statusDB" :key="idx" class="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:shadow-md transition group bg-white">
+                            <div>
+                                <span class="font-bold text-xs uppercase text-slate-700 block mb-1">{{ translateStatus(s.name) }}</span>
+                                <span v-if="s.showCard" class="text-[9px] font-bold px-2 py-0.5 rounded text-white shadow-sm flex inline-flex items-center gap-1" :style="{backgroundColor: s.color}"><i class="fas fa-chart-pie text-[8px]"></i> {{ $t('admin.status_sec.card_active') }}</span>
+                                <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">{{ $t('admin.status_sec.no_card') }}</span>
+                            </div>
+                            <div class="flex gap-2"><button @click="openEditStateModal(s)" class="text-slate-300 hover:text-blue-500 transition w-8 h-8 rounded-full hover:bg-blue-50"><i class="fas fa-edit"></i></button><button @click="deleteStatus(idx)" class="text-slate-300 hover:text-rose-500 transition w-8 h-8 rounded-full hover:bg-rose-50"><i class="fas fa-trash"></i></button></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUB-PESTAÑA 2: REGLAS DE ALERTAS DINÁMICAS -->
+            <div v-if="statusSubTab === 'alerts'" class="max-w-5xl mx-auto space-y-6 animate-fade">
+                <!-- Banner Explicativo -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex items-start justify-between gap-4 mb-4">
+                        <div>
+                            <h4 class="font-black text-slate-700 text-sm flex items-center gap-2">
+                                <i class="fas fa-shield-alt text-rose-500"></i> {{ $t('admin.status_sec.alerts_title') }}
+                            </h4>
+                            <p class="text-xs text-slate-500 mt-1 font-medium">{{ $t('admin.status_sec.alerts_desc') }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Constructor / Formulario de Alerta -->
+                    <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6" :class="editingAlert ? 'border-amber-400 ring-2 ring-amber-100' : ''">
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200">
+                            <span class="text-xs font-black uppercase text-slate-600 tracking-wider">
+                                <i class="fas mr-1.5" :class="editingAlert ? 'fa-edit text-amber-500' : 'fa-plus-circle text-[#005565]'"></i>
+                                {{ editingAlert ? $t('admin.status_sec.edit_alert_title') : $t('admin.status_sec.new_alert_title') }}
+                            </span>
+                            <!-- Live Preview del Badge -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{{ $t('admin.status_sec.badge_preview') }}</span>
+                                <div class="px-2.5 py-1 rounded shadow-sm border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5"
+                                     :class="{ 'animate-pulse': newAlertRule.pulse }"
+                                     :style="{ backgroundColor: newAlertRule.bgColor, color: newAlertRule.textColor, borderColor: newAlertRule.borderColor }">
+                                    <i class="fas text-[10px]" :class="newAlertRule.icon || 'fa-exclamation-circle'"></i>
+                                    <span>{{ newAlertRule.showPrefix ? ($t('dash.item.alert') + ': ') : '' }}{{ newAlertRule.name || 'VISTA PREVIA' }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label class="lbl">{{ $t('admin.status_sec.alert_name') }}</label>
+                                <input v-model="newAlertRule.name" class="input-std uppercase" :placeholder="$t('admin.status_sec.alert_name_ph')">
+                            </div>
+                            <div>
+                                <label class="lbl">{{ $t('admin.status_sec.target_field') }}</label>
+                                <select v-model="newAlertRule.targetField" class="input-std">
+                                    <option value="RESULTADO">{{ $t('admin.status_sec.target_result') }}</option>
+                                    <option value="ESTADO">{{ $t('admin.status_sec.target_status') }}</option>
+                                    <option value="VENCIMIENTO">{{ $t('admin.status_sec.target_expiration') }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="lbl">{{ $t('admin.status_sec.trigger_values') }}</label>
+                                <input v-model="newAlertRule.triggerValues" class="input-std uppercase" :placeholder="$t('admin.status_sec.trigger_values_ph')">
+                                <p class="text-[9px] text-slate-400 font-bold mt-1">{{ $t('admin.status_sec.trigger_hint') }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Estilos y Colores -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 bg-white rounded-lg border border-slate-200">
+                            <div>
+                                <label class="lbl text-[10px]">{{ $t('admin.status_sec.bg_color') }}</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" v-model="newAlertRule.bgColor" class="w-8 h-8 rounded border border-slate-300 cursor-pointer">
+                                    <input v-model="newAlertRule.bgColor" class="input-std h-8 text-xs font-mono">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="lbl text-[10px]">{{ $t('admin.status_sec.text_color') }}</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" v-model="newAlertRule.textColor" class="w-8 h-8 rounded border border-slate-300 cursor-pointer">
+                                    <input v-model="newAlertRule.textColor" class="input-std h-8 text-xs font-mono">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="lbl text-[10px]">{{ $t('admin.status_sec.border_color') }}</label>
+                                <div class="flex items-center gap-2">
+                                    <input type="color" v-model="newAlertRule.borderColor" class="w-8 h-8 rounded border border-slate-300 cursor-pointer">
+                                    <input v-model="newAlertRule.borderColor" class="input-std h-8 text-xs font-mono">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="lbl text-[10px]">{{ $t('admin.status_sec.icon_lbl') }}</label>
+                                <select v-model="newAlertRule.icon" class="input-std h-8 text-xs">
+                                    <option value="fa-exclamation-circle">Exclamation Circle</option>
+                                    <option value="fa-exclamation-triangle">Triangle Warning</option>
+                                    <option value="fa-ban">Ban / Prohibited</option>
+                                    <option value="fa-times-circle">Times Circle</option>
+                                    <option value="fa-shield-alt">Shield</option>
+                                    <option value="fa-radiation">Radiation</option>
+                                    <option value="fa-temperature-high">High Temp</option>
+                                    <option value="fa-clock">Clock</option>
+                                    <option value="fa-info-circle">Info</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Opciones Booleanas -->
+                        <div class="flex flex-wrap items-center gap-4 mb-4">
+                            <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 cursor-pointer text-xs font-bold text-slate-600 hover:bg-slate-50">
+                                <input type="checkbox" v-model="newAlertRule.pulse" class="w-4 h-4 accent-rose-500 cursor-pointer">
+                                {{ $t('admin.status_sec.pulse_chk') }}
+                            </label>
+                            <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 cursor-pointer text-xs font-bold text-slate-600 hover:bg-slate-50">
+                                <input type="checkbox" v-model="newAlertRule.showPrefix" class="w-4 h-4 accent-[#005565] cursor-pointer">
+                                {{ $t('admin.status_sec.prefix_chk') }}
+                            </label>
+                            <label class="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 cursor-pointer text-xs font-bold text-slate-600 hover:bg-slate-50">
+                                <input type="checkbox" v-model="newAlertRule.active" class="w-4 h-4 accent-emerald-500 cursor-pointer">
+                                {{ $t('admin.status_sec.active_chk') }}
+                            </label>
+                        </div>
+
+                        <!-- Botones de Acción -->
+                        <div class="flex gap-2">
+                            <button @click="saveAlertRule" :disabled="submitting" 
+                                    class="flex-1 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2"
+                                    :class="editingAlert ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#005565] hover:bg-[#004455]'">
+                                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (editingAlert ? 'fa-sync' : 'fa-save')"></i>
+                                {{ submitting ? $t('common.processing') : (editingAlert ? $t('admin.btn_update') : $t('admin.btn_save')) }}
+                            </button>
+                            <button v-if="editingAlert" @click="cancelAlertEdit" class="px-5 py-2.5 bg-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-300 transition">
+                                {{ $t('admin.btn_cancel_edit') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Reglas de Alerta Registradas -->
+                    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                        <div class="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
+                            <span class="font-black text-xs text-slate-600 uppercase tracking-wider">{{ $t('admin.status_sec.registered_alerts') }}</span>
+                            <span class="badge bg-[#005565] text-white px-2.5 py-0.5 rounded-full text-xs font-bold">{{ alertsDB ? alertsDB.length : 0 }}</span>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            <div v-for="al in alertsDB" :key="al.id" 
+                                 class="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50 transition">
+                                <div class="flex items-center gap-3">
+                                    <!-- Badge en vivo -->
+                                    <div class="px-2.5 py-1 rounded shadow-sm border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5"
+                                         :class="{ 'animate-pulse': al.pulse }"
+                                         :style="{ backgroundColor: al.bgColor, color: al.textColor, borderColor: al.borderColor }">
+                                        <i class="fas text-[10px]" :class="al.icon || 'fa-exclamation-circle'"></i>
+                                        <span>{{ al.showPrefix ? ($t('dash.item.alert') + ': ') : '' }}{{ translateDynamic(al.name, 'catalogs') }}</span>
+                                    </div>
+
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold text-slate-800">{{ al.name }}</span>
+                                            <span class="badge text-[9px] px-1.5 py-0.5 rounded font-bold"
+                                                  :class="al.active ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'">
+                                                {{ al.active ? $t('admin.active') : $t('admin.inactive') }}
+                                            </span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-400 font-bold mt-0.5">
+                                            <span class="text-slate-600 uppercase">{{ al.targetField }}</span>: 
+                                            <span class="font-mono text-slate-500">{{ al.triggerValues || '(Cualquier valor)' }}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center gap-2 self-end sm:self-auto">
+                                    <button @click="toggleAlertRule(al)" class="w-8 h-8 rounded-lg flex items-center justify-center transition border"
+                                            :class="al.active ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'"
+                                            :title="al.active ? 'Deshabilitar' : 'Habilitar'">
+                                        <i class="fas" :class="al.active ? 'fa-toggle-on text-lg' : 'fa-toggle-off text-lg'"></i>
+                                    </button>
+                                    <button @click="editAlertRule(al)" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-slate-200 transition flex items-center justify-center">
+                                        <i class="fas fa-edit text-xs"></i>
+                                    </button>
+                                    <button @click="deleteAlertRule(al.id)" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition flex items-center justify-center">
+                                        <i class="fas fa-trash-alt text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-if="!alertsDB || alertsDB.length === 0" class="py-12 text-center text-slate-300 font-bold text-xs uppercase">
+                                {{ $t('admin.empty_list') }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`
+        
+         <!-- PESTAÑA: EMAIL -->
+        <transition name="fade" mode="out-in">
+          <div v-if="adminTab === 'email'" class="max-w-5xl mx-auto space-y-6">
+              <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                      <div>
+                          <h3 class="font-black text-slate-700 flex items-center gap-2 text-lg">
+                              <i class="fas fa-envelope-open-text text-[#005565]"></i> {{ $t('admin.email_center.title') }}
+                          </h3>
+                          <p class="text-xs text-slate-500 mt-1 font-medium">Gestión de notificaciones dinámicas, listas de distribución corporativas y plantillas con tags.</p>
+                      </div>
+                      <button @click="saveEmailConfig" :disabled="submitting" class="bg-[#005565] text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md hover:bg-[#004455] transition flex items-center gap-2 self-start md:self-auto">
+                          <i class="fas fa-save"></i> {{ $t('admin.email_center.btn_save') }}
+                      </button>
+                  </div>
+                  
+                  <!-- Corporate Best Practice Note -->
+                  <div class="mb-6 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-3">
+                      <i class="fas fa-lightbulb text-amber-500 mt-0.5 text-sm"></i>
+                      <div class="flex-1 font-medium leading-relaxed">
+                          {{ $t('admin.email_center.group_recommendation') }}
+                      </div>
+                  </div>
+
+                  <!-- Event Type Tabs -->
+                  <div class="flex gap-2 mb-6 bg-slate-100 p-1 rounded-xl">
+                      <button v-for="type in ['OPEN', 'CLOSE', 'FORCED']" :key="type" 
+                              @click="activeEmailType = type"
+                              :class="activeEmailType === type ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:bg-white/50'"
+                              class="flex-1 py-2.5 rounded-lg text-xs font-black transition-all">
+                          <i class="fas mr-1.5" :class="{'fa-exclamation-circle text-rose-500': type==='OPEN', 'fa-check-circle text-emerald-500': type==='CLOSE', 'fa-shield-alt text-amber-500': type==='FORCED'}"></i>
+                          {{ type === 'OPEN' ? $t('admin.email_center.tab_open') : (type === 'CLOSE' ? $t('admin.email_center.tab_close') : $t('admin.email_center.tab_forced')) }}
+                      </button>
+                  </div>
+
+                  <div v-if="emailConfig[activeEmailType]" class="space-y-6 animate-fade">
+                      <!-- Dynamic Variable Tags Bar -->
+                      <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                          <span class="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-2.5">
+                              <i class="fas fa-tags text-[#005565] mr-1"></i> {{ $t('admin.email_center.insert_tag') }}
+                          </span>
+                          <div class="flex flex-wrap gap-1.5">
+                              <button v-for="tag in ['{{ID_ACTIVO}}', '{{DESCRIPCION}}', '{{FABRICA}}', '{{PROYECTO}}', '{{CUADRANTE}}', '{{FOLIO_TICKET}}', '{{RESPONSABLE}}', '{{FECHA}}', '{{ESTADO}}']"
+                                      :key="tag"
+                                      type="button"
+                                      @click="insertEmailTag(tag)"
+                                      class="px-2.5 py-1 bg-white hover:bg-cyan-50 text-[#005565] hover:text-[#003d4d] border border-cyan-200 hover:border-cyan-400 rounded-lg text-xs font-mono font-bold shadow-xs transition flex items-center gap-1 group">
+                                  <i class="fas fa-plus-circle text-[10px] text-cyan-400 group-hover:scale-110 transition-transform"></i>
+                                  <span>{{ tag }}</span>
+                              </button>
+                          </div>
+                      </div>
+
+                      <!-- Inputs -->
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div class="col-span-2 md:col-span-1">
+                              <label class="lbl">{{ $t('admin.email_center.recipients') }}</label>
+                              <input v-model="emailConfig[activeEmailType].to" 
+                                     @focus="lastFocusedEmailField = 'to'"
+                                     class="input-std" 
+                                     placeholder="mantenimiento@plexus.com, calidad@plexus.com">
+                          </div>
+                          <div class="col-span-2 md:col-span-1">
+                              <label class="lbl">{{ $t('admin.email_center.subject') }}</label>
+                              <input v-model="emailConfig[activeEmailType].subject" 
+                                     @focus="lastFocusedEmailField = 'subject'"
+                                     class="input-std" 
+                                     placeholder="⚠️ Reporte de Falla [{{ID_ACTIVO}}]">
+                          </div>
+                      </div>
+
+                      <div>
+                          <label class="lbl">{{ $t('admin.email_center.body') }}</label>
+                          <textarea v-model="emailConfig[activeEmailType].body" 
+                                    @focus="lastFocusedEmailField = 'body'"
+                                    class="input-std h-28 resize-y font-sans text-xs" 
+                                    placeholder="Escriba el mensaje. Puede usar {{ID_ACTIVO}}, {{FABRICA}}, etc..."></textarea>
+                      </div>
+
+                      <!-- Factory-based Routing Rules -->
+                      <div class="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl space-y-4">
+                          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div>
+                                  <h4 class="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                                      <i class="fas fa-network-wired text-[#005565]"></i> {{ $t('admin.email_center.factory_routing_title') }}
+                                  </h4>
+                                  <p class="text-[11px] text-slate-500 font-medium">{{ $t('admin.email_center.factory_routing_desc') }}</p>
+                              </div>
+                              <button type="button" @click="addFactoryEmailRule" class="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#005565] border border-slate-300 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 self-start sm:self-auto">
+                                  <i class="fas fa-plus"></i> {{ $t('admin.email_center.add_factory_rule') }}
+                              </button>
+                          </div>
+
+                          <div v-if="!emailConfig.factoryRules || emailConfig.factoryRules.length === 0" class="p-4 bg-white rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                              {{ $t('admin.email_center.no_factory_rules') }}
+                          </div>
+
+                          <div v-else class="space-y-2">
+                              <div v-for="(rule, idx) in emailConfig.factoryRules" :key="idx" class="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                                  <div class="w-1/3">
+                                      <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">{{ $t('admin.email_center.factory_label') }}</label>
+                                      <input v-model="rule.factory" class="input-std text-xs font-bold" placeholder="Ej: FAB 3 o Fab3">
+                                  </div>
+                                  <div class="flex-1">
+                                      <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">{{ $t('admin.email_center.email_group_label') }}</label>
+                                      <input v-model="rule.email" class="input-std text-xs" placeholder="Ej: Fab3_Quality@plexus.com">
+                                  </div>
+                                  <button type="button" @click="removeFactoryEmailRule(idx)" class="mt-4 p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition" title="Eliminar regla">
+                                      <i class="fas fa-trash-alt text-xs"></i>
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+
+                      <!-- Live Dynamic Preview Card -->
+                      <div class="p-5 bg-gradient-to-br from-slate-900 to-[#002f3a] text-white rounded-2xl shadow-md space-y-3">
+                          <div class="flex items-center justify-between border-b border-cyan-800/60 pb-3">
+                              <span class="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-cyan-300">
+                                  <i class="fas fa-eye text-cyan-400"></i> {{ $t('admin.email_center.live_preview_title') }}
+                              </span>
+                              <span class="text-[9px] bg-cyan-900/80 text-cyan-200 border border-cyan-500/30 px-2.5 py-0.5 rounded-full font-mono font-bold tracking-wider">
+                                  {{ $t('admin.email_center.preview_badge') }}
+                              </span>
+                          </div>
+                          <div>
+                              <span class="text-[10px] text-cyan-300/70 font-black uppercase tracking-wider block">{{ $t('admin.email_center.subject') }}:</span>
+                              <p class="font-mono text-xs font-bold text-white mt-0.5 bg-black/30 p-2 rounded-lg border border-white/10 break-words">
+                                  {{ previewEmailSubject || '(Sin asunto configurado)' }}
+                              </p>
+                          </div>
+                          <div>
+                              <span class="text-[10px] text-cyan-300/70 font-black uppercase tracking-wider block">{{ $t('admin.email_center.body') }}:</span>
+                              <div class="font-sans text-xs text-slate-200 mt-0.5 bg-black/30 p-3 rounded-lg border border-white/10 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                                  {{ previewEmailBody || '(Sin cuerpo configurado)' }}
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <!-- Explanation Note -->
+                      <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-[10px] text-blue-700 flex items-start gap-3">
+                          <i class="fas fa-info-circle mt-0.5 text-blue-500"></i>
+                          <div class="flex-1">
+                              <p v-if="activeEmailType === 'OPEN'"><b>{{ $t('admin.email_center.open_logic_title') }}</b> {{ $t('admin.email_center.open_logic_desc') }}</p>
+                              <p v-if="activeEmailType === 'CLOSE'"><b>{{ $t('admin.email_center.close_logic_title') }}</b> {{ $t('admin.email_center.close_logic_desc') }}</p>
+                              <p v-if="activeEmailType === 'FORCED'"><b>{{ $t('admin.email_center.forced_logic_title') }}</b> {{ $t('admin.email_center.forced_logic_desc') }}</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div class="pt-6 mt-6 border-t border-slate-100 flex justify-end">
+                      <button @click="saveEmailConfig" :disabled="submitting" class="bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition flex items-center gap-2">
+                          <i class="fas fa-save"></i> {{ $t('admin.email_center.btn_save') }}
+                      </button>
+                 </div>
+              </div>
+          </div>
         </transition>
 
          <!-- PESTAÑA: COPILOTO IA -->
@@ -369,16 +675,16 @@
               <div class="bg-gradient-to-br from-slate-900 to-[#003d4d] p-6 rounded-2xl text-white shadow-xl relative overflow-hidden">
                   <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-brain text-6xl"></i></div>
                   <div class="relative z-10">
-                      <h4 class="font-black text-lg mb-1 flex items-center gap-2"><i class="fas fa-microchip text-cyan-400"></i> Cerebro ESD v2.0</h4>
-                      <p class="text-[10px] text-cyan-200/70 font-bold uppercase tracking-widest">Gestión de Tokens y Personalidades</p>
+                      <h4 class="font-black text-lg mb-1 flex items-center gap-2"><i class="fas fa-microchip text-cyan-400"></i> {{ $t('admin.copilot.banner_title') }}</h4>
+                      <p class="text-[10px] text-cyan-200/70 font-bold uppercase tracking-widest">{{ $t('admin.copilot.banner_subtitle') }}</p>
                   </div>
               </div>
 
               <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
                   <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                       <div>
-                          <p class="text-xs font-black text-slate-700 uppercase">Estado del Copiloto</p>
-                          <p class="text-[9px] text-slate-400 font-bold">Activación global del servicio</p>
+                          <p class="text-xs font-black text-slate-700 uppercase">{{ $t('admin.copilot.status_title') }}</p>
+                          <p class="text-[9px] text-slate-400 font-bold">{{ $t('admin.copilot.status_desc') }}</p>
                       </div>
                       <label class="relative inline-flex items-center cursor-pointer">
                           <input type="checkbox" v-model="aiSettings.enabled" class="sr-only peer">
@@ -387,7 +693,7 @@
                   </div>
 
                   <div>
-                      <label class="lbl">Pool de API Keys (Rotación Automática)</label>
+                      <label class="lbl">{{ $t('admin.copilot.keys_title') }}</label>
                       <div class="space-y-2 border border-slate-100 p-4 rounded-xl bg-slate-50/50">
                           <div v-for="(key, idx) in aiSettings.apiKeys" :key="idx" class="flex gap-2 animate-fade">
                               <div class="relative flex-1">
@@ -396,25 +702,25 @@
                               </div>
                               <button v-if="aiSettings.apiKeys.length > 1" @click="aiSettings.apiKeys.splice(idx,1)" class="text-rose-400 p-2 hover:bg-rose-50 rounded-lg"><i class="fas fa-trash"></i></button>
                           </div>
-                          <button @click="aiSettings.apiKeys.push('')" class="text-[10px] text-blue-600 font-black mt-2 hover:underline">+ AGREGAR OTRA LLAVE DE RESPALDO</button>
+                          <button @click="aiSettings.apiKeys.push('')" class="text-[10px] text-blue-600 font-black mt-2 hover:underline">{{ $t('admin.copilot.add_key') }}</button>
                       </div>
                   </div>
 
                   <div>
-                      <label class="lbl">Personalidad Activa (System Prompt)</label>
+                      <label class="lbl">{{ $t('admin.copilot.personality_title') }}</label>
                       <select v-model="aiSettings.activePromptId" class="input-std">
-                          <option value="">-- SELECCIONAR PROMPT DEL CATÁLOGO --</option>
-                          <option v-for="p in catalogs.aiPrompts" :key="p.id" :value="p.id">{{ p.id }}</option>
+                          <option value="">{{ $t('admin.copilot.select_prompt') }}</option>
+                          <option v-for="p in catalogs.aiPrompts" :key="p.id" :value="p.id">{{ translateDynamic(p.id, 'aiPersonalities') }}</option>
                       </select>
                       <div v-if="aiSettings.activePromptId" class="mt-3 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                          <p class="text-[10px] font-black text-amber-700 uppercase mb-1">Vista Previa de la Instrucción:</p>
-                          <p class="text-xs text-amber-800 italic">"{{ (catalogs.aiPrompts.find(x => x.id === aiSettings.activePromptId) || {}).label }}"</p>
+                          <p class="text-[10px] font-black text-amber-700 uppercase mb-1">{{ $t('admin.copilot.preview_title') }}</p>
+                          <p class="text-xs text-amber-800 italic">"{{ translateDynamic((catalogs.aiPrompts.find(x => x.id === aiSettings.activePromptId) || {}).label) }}"</p>
                       </div>
-                      <p class="text-[9px] text-slate-400 mt-2">Para crear o editar estas instrucciones, ve a la pestaña <b>Catálogos > Personalidades IA</b>.</p>
+                      <p class="text-[9px] text-slate-400 mt-2">{{ $t('admin.copilot.hint_catalog') }}</p>
                   </div>
 
                   <button @click="saveAiConfig" :disabled="submitting" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs shadow-xl hover:bg-black transition flex justify-center items-center gap-2">
-                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i> {{ submitting ? 'GUARDANDO...' : 'SINCRONIZAR CEREBRO' }}
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i> {{ submitting ? $t('common.processing') : $t('admin.copilot.btn_sync') }}
                   </button>
               </div>
           </div>
@@ -425,30 +731,30 @@
          <div v-if="adminTab === 'security'" class="max-w-6xl mx-auto space-y-8 animate-fade">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="card p-8 bg-white shadow-sm">
-                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-user-shield text-[#005565]"></i> Matriz de Roles</h3>
+                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-user-shield text-[#005565]"></i> {{ $t('admin.security_sec.matrix_title') }}</h3>
                     <div class="space-y-4">
                         <div v-for="(perms, roleName) in rolesDB" :key="roleName" class="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition group">
                             <div class="flex justify-between items-center mb-3">
-                                <span class="font-black text-xs uppercase tracking-widest text-[#005565]">{{ roleName }}</span>
+                                <span class="font-black text-xs uppercase tracking-widest text-[#005565]">{{ translateRole(roleName) }} <span class="text-[10px] text-slate-400 font-normal">({{ roleName }})</span></span>
                                 <button @click="deleteRole(roleName)" v-if="roleName !== 'SUPER_ADMIN' && roleName !== 'INVITADO'" class="text-rose-300 hover:text-rose-500 text-xs"><i class="fas fa-trash-alt"></i></button>
                             </div>
                             <div class="grid grid-cols-2 gap-2">
                                 <label v-for="(val, pKey) in perms" :key="pKey" class="flex items-center gap-2 cursor-pointer p-2 bg-white rounded border border-slate-100 shadow-sm">
                                     <input type="checkbox" v-model="rolesDB[roleName][pKey]" :disabled="roleName === 'SUPER_ADMIN'" class="w-4 h-4 accent-[#005565]">
-                                    <span class="text-[9px] font-bold text-slate-500 uppercase">{{ pKey.replace('can','').replace(/([A-Z])/g, ' $1') }}</span>
+                                    <span class="text-[9px] font-bold text-slate-500 uppercase">{{ $t('admin.security_sec.perms.' + pKey) || pKey.replace('can','').replace(/([A-Z])/g, ' $1') }}</span>
                                 </label>
                             </div>
                         </div>
-                        <button @click="addNewRole" class="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-xs hover:bg-slate-50 transition">+ CREAR NUEVO ROL</button>
-                        <button @click="saveRoles" :disabled="submitting" class="w-full bg-[#005565] text-white py-3 rounded-xl font-bold text-xs mt-4 shadow-lg hover:bg-[#004455] transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? 'GUARDANDO...' : 'GUARDAR MATRIZ DE ROLES' }}</button>
+                        <button @click="addNewRole" class="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-xs hover:bg-slate-50 transition">{{ $t('admin.security_sec.btn_new_role') }}</button>
+                        <button @click="saveRoles" :disabled="submitting" class="w-full bg-[#005565] text-white py-3 rounded-xl font-bold text-xs mt-4 shadow-lg hover:bg-[#004455] transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('admin.security_sec.btn_save_matrix') }}</button>
                     </div>
                 </div>
                 <div class="card p-8 bg-white shadow-sm">
-                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-users-cog text-[#005565]"></i> Usuarios y Accesos</h3>
+                    <h3 class="font-black text-slate-700 mb-6 flex items-center gap-2"><i class="fas fa-users-cog text-[#005565]"></i> {{ $t('admin.security_sec.users_title') }}</h3>
                     <div class="flex gap-2 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <input v-model="newUserEmail" class="input-std flex-1" placeholder="correo@plexus.com">
                         <select v-model="newUserRole" class="input-std w-32">
-                            <option v-for="(_, rName) in rolesDB" :key="rName" :value="rName">{{ rName }}</option>
+                            <option v-for="(_, rName) in rolesDB" :key="rName" :value="rName">{{ translateRole(rName) }} ({{ rName }})</option>
                         </select>
                         <button @click="addUser" class="bg-emerald-600 text-white px-4 rounded-lg hover:bg-emerald-700 transition"><i class="fas fa-plus"></i></button>
                     </div>
@@ -456,14 +762,15 @@
                         <div v-for="(uRole, uEmail) in usersDB" :key="uEmail" class="flex justify-between items-center p-3 border-b border-slate-50 hover:bg-slate-50 transition group">
                             <div>
                                 <p class="font-bold text-xs text-slate-700">{{ uEmail }}</p>
-                                <span class="text-[9px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 uppercase">{{ uRole }}</span>
+                                <span class="text-[9px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 uppercase">{{ translateRole(uRole) }}</span>
                             </div>
-                            <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                                <button @click="deleteUser(uEmail)" class="text-rose-400 hover:text-rose-600"><i class="fas fa-trash"></i></button>
+                            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                                <button @click="openEditUser(uEmail, uRole)" class="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition" :title="$t('common.edit') || 'Editar'"><i class="fas fa-pencil-alt text-xs"></i></button>
+                                <button @click="deleteUser(uEmail)" class="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" :title="$t('common.delete') || 'Eliminar'"><i class="fas fa-trash text-xs"></i></button>
                             </div>
                         </div>
                     </div>
-                    <button @click="saveUsers" :disabled="submitting" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs mt-6 shadow-lg hover:bg-black transition uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-users'"></i> {{ submitting ? 'SINCRONIZANDO...' : 'Sincronizar Usuarios' }}</button>
+                    <button @click="saveUsers" :disabled="submitting" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold text-xs mt-6 shadow-lg hover:bg-black transition uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-users'"></i> {{ submitting ? $t('admin.security_sec.syncing') : $t('admin.security_sec.btn_sync_users') }}</button>
                 </div>
             </div>
         </div>
@@ -474,18 +781,18 @@
           <div v-if="adminTab === 'datahub'" class="max-w-6xl mx-auto space-y-8 animate-fade">
             <div class="card p-0 bg-white shadow-sm overflow-hidden border border-slate-200">
               <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-5 flex justify-between items-center text-white">
-                <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> Importación Masiva (CSV)</h3>
+                <h3 class="font-black flex items-center gap-2"><i class="fas fa-database text-cyan-400"></i> {{ $t('admin.bulk_import.title_csv') }}</h3>
               </div>
               
               <div class="p-8 bg-slate-50 min-h-[400px]">
                <div v-if="bulkDataPreview.length === 0" class="space-y-6 animate-fade">
                   <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
                     <div class="flex-1 w-full">
-                      <label class="lbl text-[#005565]"><i class="fas fa-crosshairs mr-1"></i> 1. ¿Qué datos deseas importar?</label>
+                      <label class="lbl text-[#005565]"><i class="fas fa-crosshairs mr-1"></i> {{ $t('admin.bulk_import.step1') }}</label>
                       <select v-model="importTarget" class="input-std font-bold text-slate-700 bg-slate-50 border-slate-300">
-                        <option value="ASSETS">📦 Inventario Principal (Equipos ESD)</option>
-                        <option value="USERS">👥 Usuarios y Accesos (Roles)</option>
-                        <option value="RULES">📏 Reglas y Tolerancias Matemáticas</option>
+                        <option value="ASSETS">{{ $t('admin.bulk_import.opt_assets') }}</option>
+                        <option value="USERS">{{ $t('admin.bulk_import.opt_users') }}</option>
+                        <option value="RULES">{{ $t('admin.bulk_import.opt_rules') }}</option>
                       </select>
                     </div>
                     <div class="flex flex-col sm:flex-row gap-2">
@@ -499,33 +806,33 @@
                   </div>
 
                   <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <label class="lbl text-[#005565] mb-4"><i class="fas fa-cloud-upload-alt mr-1"></i> 3. Método de Carga de Datos</label>
+                    <label class="lbl text-[#005565] mb-4"><i class="fas fa-cloud-upload-alt mr-1"></i> {{ $t('admin.bulk_import.step3') }}</label>
                     <div class="flex gap-3 mb-6 bg-slate-100 p-1.5 rounded-xl">
                       <button @click="importMethod = 'CSV'" :class="importMethod === 'CSV' ? 'bg-white text-[#005565] shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2.5 rounded-lg font-black text-[10px] sm:text-xs transition flex items-center justify-center gap-2 uppercase tracking-wide">
-                        <i class="fas fa-file-csv text-lg"></i> Archivo Excel (.CSV)
+                        <i class="fas fa-file-csv text-lg"></i> {{ $t('admin.bulk_import.btn_method_csv') }}
                       </button>
                       <button @click="importMethod = 'GOOGLE'" :class="importMethod === 'GOOGLE' ? 'bg-emerald-50 text-emerald-700 shadow-sm border border-emerald-100' : 'text-slate-500 hover:text-slate-700'" class="flex-1 py-2.5 rounded-lg font-black text-[10px] sm:text-xs transition flex items-center justify-center gap-2 uppercase tracking-wide">
-                        <i class="fab fa-google-drive text-lg"></i> Google Sheets (URL)
+                        <i class="fab fa-google-drive text-lg"></i> {{ $t('admin.bulk_import.btn_method_gsheet') }}
                       </button>
                     </div>
 
                     <div v-if="importMethod === 'CSV'" class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 transition bg-white group animate-fade">
                       <i class="fas fa-upload text-5xl text-slate-300 mb-4 group-hover:-translate-y-2 transition-transform duration-300"></i>
-                      <h3 class="text-base font-black text-slate-700">Sube tu archivo .CSV lleno</h3>
-                      <p class="text-xs text-slate-500 mb-6 font-medium">No modifiques la fila 1 (los nombres de las columnas) de tu plantilla.</p>
+                      <h3 class="text-base font-black text-slate-700">{{ $t('admin.bulk_import.csv_upload_title') }}</h3>
+                      <p class="text-xs text-slate-500 mb-6 font-medium">{{ $t('admin.bulk_import.csv_upload_hint') }}</p>
                       <label class="cursor-pointer bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition inline-flex items-center gap-2">
-                        <i class="fas fa-folder-open"></i> Explorar Archivos
+                        <i class="fas fa-folder-open"></i> {{ $t('admin.bulk_import.btn_browse') }}
                         <input type="file" accept=".csv" class="hidden" @change="handleCSVUpload">
                       </label>
                     </div>
 
                     <div v-if="importMethod === 'GOOGLE'" class="border border-emerald-200 rounded-xl p-8 bg-gradient-to-br from-emerald-50 to-white shadow-inner animate-fade">
-                      <h3 class="text-base font-black text-emerald-800 mb-2 flex items-center gap-2"><i class="fas fa-link"></i> Importar desde la Nube</h3>
-                      <p class="text-xs text-emerald-600 mb-5 font-medium">Pega el enlace de tu Google Sheet. El archivo debe tener permisos de <b>"Cualquier persona con el enlace"</b>.</p>
+                      <h3 class="text-base font-black text-emerald-800 mb-2 flex items-center gap-2"><i class="fas fa-link"></i> {{ $t('admin.bulk_import.gsheet_title') }}</h3>
+                      <p class="text-xs text-emerald-600 mb-5 font-medium" v-html="$t('admin.bulk_import.gsheet_desc')"></p>
                       <div class="flex flex-col sm:flex-row gap-3">
                         <input v-model="googleSheetUrl" type="text" class="input-std flex-1 !border-emerald-200 focus:!border-emerald-500 focus:!ring-emerald-100" placeholder="https://docs.google.com/spreadsheets/d/1abc123...">
                         <button @click="loadFromGoogleSheets" class="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-emerald-700 transition text-xs whitespace-nowrap">
-                           <i class="fas fa-sync-alt mr-1"></i> LEER DATOS
+                           <i class="fas fa-sync-alt mr-1"></i> {{ $t('admin.bulk_import.btn_read_data') }}
                         </button>
                       </div>
                     </div>
@@ -546,22 +853,22 @@
 
                   <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
                     <div class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><i class="fas fa-eye text-[#005565] mr-1"></i> Vista Previa de Datos</span>
-                      <span v-if="bulkDataPreview.length > 50" class="text-[10px] font-bold text-slate-400">Mostrando los primeros 50 registros...</span>
+                      <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><i class="fas fa-eye text-[#005565] mr-1"></i> {{ $t('admin.bulk_import.preview_title') }}</span>
+                      <span v-if="bulkDataPreview.length > 50" class="text-[10px] font-bold text-slate-400">{{ $t('admin.bulk_import.preview_limit') }}</span>
                     </div>
                     <div class="overflow-x-auto overflow-y-auto max-h-64">
                       <table class="w-full text-left text-xs whitespace-nowrap">
                         <thead class="bg-slate-100 text-slate-500 uppercase font-black sticky top-0 shadow-sm">
                           <tr>
-                            <th class="p-3">Estado</th>
+                            <th class="p-3">{{ $t('dash.item.status') }}</th>
                             <th v-for="col in Object.keys(bulkDataPreview[0] || {}).filter(k => k !== '_isDuplicate')" :key="col" class="p-3">{{ col }}</th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr v-for="(row, idx) in bulkDataPreview.slice(0, 50)" :key="idx" class="border-b border-slate-100 last:border-0 transition-colors" :class="row._isDuplicate ? 'bg-amber-50/30 hover:bg-amber-50' : 'bg-emerald-50/30 hover:bg-emerald-50'">
                             <td class="p-3 font-bold">
-                              <span v-if="row._isDuplicate" class="text-amber-600 bg-amber-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-bolt mr-1"></i> EXISTENTE</span>
-                              <span v-else class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-star mr-1"></i> NUEVO</span>
+                              <span v-if="row._isDuplicate" class="text-amber-600 bg-amber-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-bolt mr-1"></i> {{ $t('admin.bulk_import.badge_existing') }}</span>
+                              <span v-else class="text-emerald-600 bg-emerald-100 px-2 py-1 rounded text-[9px] uppercase"><i class="fas fa-star mr-1"></i> {{ $t('admin.bulk_import.badge_new') }}</span>
                             </td>
                             <td v-for="col in Object.keys(row).filter(k => k !== '_isDuplicate')" :key="col" class="p-3 text-slate-600 font-medium truncate max-w-[150px]" :title="row[col]">
                               {{ row[col] || '---' }}
@@ -574,10 +881,10 @@
                   
                   <div class="flex gap-4">
                     <button v-if="bulkStats.nuevos > 0" @click="executeBulkAction(true)" :disabled="submitting" class="flex-1 bg-emerald-600 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-plus-circle'"></i> {{ submitting ? 'Procesando...' : `Inyectar ${bulkStats.nuevos} Nuevos` }}
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-plus-circle'"></i> {{ submitting ? $t('common.processing') : $t('admin.bulk_import.btn_inject_new', { count: bulkStats.nuevos }) }}
                     </button>
                     <button v-if="bulkStats.duplicados > 0" @click="executeBulkAction(false)" :disabled="submitting" class="flex-1 bg-amber-500 text-white py-4 rounded-xl font-black text-xs shadow-lg hover:bg-amber-600 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-bolt'"></i> {{ submitting ? 'Procesando...' : `Actualizar ${bulkStats.duplicados} Existentes` }}
+                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-bolt'"></i> {{ submitting ? $t('common.processing') : $t('admin.bulk_import.btn_update_existing', { count: bulkStats.duplicados }) }}
                     </button>
                   </div>
                 </div>

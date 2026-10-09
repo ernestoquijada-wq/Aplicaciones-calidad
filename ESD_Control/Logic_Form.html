@@ -9,8 +9,9 @@ function useAssetForm(globalConfig) {
     const { 
         view, submitting, dbRules, catalogs, statusDB, currentThemeColor, 
         loadData, openTicketModal, runGAS, Swal, Toast, FIELD_MAP, FrontendValidator,
-        currentUser 
+        currentUser, ESDMath: injectedESDMath 
     } = globalConfig;
+    const mathEngine = injectedESDMath || (typeof ESDMath !== 'undefined' ? ESDMath : window.ESDMath);
 
     // 1. ESTADO LOCAL DEL FORMULARIO
     const editAsset = ref({});
@@ -48,6 +49,9 @@ function useAssetForm(globalConfig) {
         if (field.type === 'scientific' && field.limit?.m && field.limit?.e) {
             return `< ${field.limit.m}E${field.limit.e}`;
         }
+        if (field.limitInfo && field.limitInfo.value != null) {
+            return `${field.limitInfo.operator} ${field.limitInfo.value}`;
+        }
         if (field.limit) return `< ${field.limit}`;
         return 'N/A';
     };
@@ -62,21 +66,31 @@ function useAssetForm(globalConfig) {
        for(const k in FIELD_MAP) {
           if(rule[k]) {
              if(!form.value.measurements[k]) form.value.measurements[k] = FIELD_MAP[k].type === 'scientific' ? {mantissa:null, exponent:null} : null;
+             
+             const parsed = mathEngine ? mathEngine.parseLimit(rule[k]) : null;
              let limitM=0, limitE=0, limitVal=0;
              if(FIELD_MAP[k].type === 'scientific') { 
                  try { 
-                     const parts = String(rule[k]).toUpperCase().replace('<','').trim().split('E'); 
+                     const parts = String(rule[k]).toUpperCase().replace(/[<>=]/g,'').trim().split('E'); 
                      limitM=parseFloat(parts[0]); 
                      limitE=parseFloat(parts[1].replace('+','')); 
                  } catch(e){} 
              } else { 
-                 limitVal=parseFloat(String(rule[k]).replace(/[<a-zA-Z]/g, '')); 
+                 limitVal = parsed ? parsed.value : parseFloat(String(rule[k]).replace(/[<>=a-zA-Z]/g, '')); 
              }
              
              const tolerance = rule.tolerance ? parseFloat(rule.tolerance) : 0.8; 
              const finalRec = specificRecs[k] || rule.recommendation || "Revisar parámetros.";
 
-             fields.push({ key:k, ...FIELD_MAP[k], limit: FIELD_MAP[k].type==='scientific'?{m:limitM,e:limitE}:limitVal, specText:rule[k], recText:finalRec, tolerance:tolerance });
+             fields.push({ 
+                 key: k, 
+                 ...FIELD_MAP[k], 
+                 limitInfo: parsed,
+                 limit: FIELD_MAP[k].type === 'scientific' ? {m:limitM, e:limitE} : limitVal, 
+                 specText: rule[k], 
+                 recText: finalRec, 
+                 tolerance: tolerance 
+             });
           }
        }
        return fields;
@@ -104,20 +118,31 @@ function useAssetForm(globalConfig) {
        const val = form.value.measurements[field.key];
        if(!val) return {message:''};
        
-       let num=0, limit=0;
+       let num = null;
        if(field.type === 'scientific') {
           if(val.mantissa==null || val.exponent==null || val.mantissa==="" || val.exponent==="") return {message:''};
-          num = val.mantissa * Math.pow(10, val.exponent);
-          limit = field.limit.m * Math.pow(10, field.limit.e);
+          num = Number(val.mantissa) * Math.pow(10, Number(val.exponent));
        } else { 
           if(val==="" || val===null) return {message:''};
           num = Number(val); 
+       }
+       if(isNaN(num) || num === null) return {message:''};
+       
+       if (mathEngine) {
+           const limitInfo = field.limitInfo || mathEngine.parseLimit(field.specText || field.limit);
+           return mathEngine.evaluate(num, limitInfo, field.tolerance);
+       }
+
+       let limit = 0;
+       if(field.type === 'scientific') {
+          limit = field.limit.m * Math.pow(10, field.limit.e);
+       } else { 
           limit = Number(field.limit); 
        }
        if(!limit) return {message:''};
        
-       if(num > limit) return {message:'FUERA DE RANGO', class:'bg-rose-100 text-rose-600', borderClass:'border-rose-300 bg-rose-50/30', showRec:true};
-       if(num > (limit * field.tolerance)) return {message:'RIESGO', class:'bg-amber-100 text-amber-600', borderClass:'border-amber-300 bg-amber-50/30', showRec:true};
+       if(num >= limit) return {message:'FUERA DE RANGO', class:'bg-rose-100 text-rose-600', borderClass:'border-rose-300 bg-rose-50/30', showRec:true};
+       if(num >= (limit * (field.tolerance || 0.8))) return {message:'RIESGO', class:'bg-amber-100 text-amber-600', borderClass:'border-amber-300 bg-amber-50/30', showRec:true};
        
        return {message:'OK', class:'bg-emerald-100 text-emerald-600', borderClass:'border-emerald-300 bg-emerald-50/20', showRec:false};
     };

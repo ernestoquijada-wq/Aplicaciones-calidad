@@ -312,3 +312,223 @@ function adminSaveGeneralSettings(settings) {
   }
   return runner();
 }
+
+/**
+ * 👤 Actualiza de forma atómica y concurrente el rol de un usuario existente.
+ * Sincroniza la hoja CONF.SHEET_USERS ('Seguridad_Usuarios') y ScriptProperties 'USERS_DB'.
+ * @param {Object} payload { email: string, newRole: string }
+ * @return {Object} Respuesta con éxito y usuarios actualizados.
+ */
+function adminUpdateUserRole(payload) {
+  const runner = () => {
+    if (!payload || !payload.email || !payload.newRole) {
+      throw new Error("Parámetros 'email' y 'newRole' requeridos.");
+    }
+
+    const email = String(payload.email).trim().toLowerCase();
+    const newRole = String(payload.newRole).trim().toUpperCase();
+
+    // 1. Obtener y actualizar ScriptProperties USERS_DB
+    const props = PropertiesService.getScriptProperties();
+    let usersObj = {};
+    try {
+      usersObj = JSON.parse(props.getProperty('USERS_DB') || '{}');
+    } catch(e) {
+      usersObj = {};
+    }
+    usersObj[email] = newRole;
+
+    // 2. Persistir en la Hoja de Cálculo
+    const ss = SpreadsheetApp.openById(CONF.SS_ID);
+    let sh = ss.getSheetByName(CONF.SHEET_USERS);
+    if (!sh) {
+      sh = ss.insertSheet(CONF.SHEET_USERS);
+      sh.appendRow(['Correo Electrónico', 'Rol Asignado']);
+    }
+
+    const data = sh.getDataRange().getValues();
+    let found = false;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toLowerCase() === email) {
+        sh.getRange(i + 1, 2).setValue(newRole);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      sh.appendRow([email, newRole]);
+    }
+
+    // 3. Guardar en PropertiesService e invalidar caché
+    props.setProperty('USERS_DB', JSON.stringify(usersObj));
+    if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
+
+    return (typeof Utils !== 'undefined' && Utils.buildResponse) 
+      ? Utils.buildResponse(true, { email: email, role: newRole, users: usersObj }) 
+      : { success: true, email: email, role: newRole, users: usersObj };
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Actualizar Rol Usuario");
+  }
+  return runner();
+}
+
+// ==========================================
+// 🚨 ADMINISTRACIÓN: REGLAS DE ALERTAS DINÁMICAS
+// ==========================================
+
+function adminSaveAlertRule(rule) {
+  if (!rule || !rule.name) {
+    return Utils.buildResponse(false, "El nombre de la alerta es obligatorio.");
+  }
+
+  const runner = () => {
+    const ss = SpreadsheetApp.openById(CONF.SS_ID);
+    let sh = ss.getSheetByName(CONF.SHEET_ALERTS);
+    const headers = ['ID', 'Nombre', 'Campo_Objetivo', 'Valores_Disparo', 'Color_Fondo', 'Color_Texto', 'Color_Borde', 'Icono', 'Pulso', 'Mostrar_Prefijo', 'Activo'];
+    if (!sh) {
+      sh = ss.insertSheet(CONF.SHEET_ALERTS);
+      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground(CONF.DEFAULT_COLOR).setFontColor('white').setHorizontalAlignment('center');
+      sh.setFrozenRows(1);
+    }
+
+    const clean = (typeof Utils !== 'undefined' && Utils.clean) ? Utils.clean : (v) => String(v || '').trim();
+    const ruleId = rule.id ? clean(rule.id) : ('ALERT_' + new Date().getTime());
+    const row = [
+      ruleId,
+      clean(rule.name),
+      clean(rule.targetField).toUpperCase() || 'RESULTADO',
+      clean(rule.triggerValues),
+      clean(rule.bgColor) || '#fee2e2',
+      clean(rule.textColor) || '#b91c1c',
+      clean(rule.borderColor) || '#fca5a5',
+      clean(rule.icon) || 'fa-exclamation-circle',
+      rule.pulse === true || String(rule.pulse).toLowerCase() === 'true',
+      rule.showPrefix !== false && String(rule.showPrefix).toLowerCase() !== 'false',
+      rule.active !== false && String(rule.active).toLowerCase() !== 'false'
+    ];
+
+    sh.appendRow(row);
+    if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
+
+    const createdRule = {
+      id: row[0], name: row[1], targetField: row[2], triggerValues: row[3],
+      bgColor: row[4], textColor: row[5], borderColor: row[6], icon: row[7],
+      pulse: row[8], showPrefix: row[9], active: row[10]
+    };
+    return Utils.buildResponse(true, { rule: createdRule });
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Guardar Regla Alerta");
+  }
+  return runner();
+}
+
+function adminUpdateAlertRule(id, rule) {
+  if (!id || !rule) {
+    return Utils.buildResponse(false, "ID y datos de regla requeridos.");
+  }
+
+  const runner = () => {
+    const ss = SpreadsheetApp.openById(CONF.SS_ID);
+    const sh = ss.getSheetByName(CONF.SHEET_ALERTS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de alertas no encontrada.");
+
+    const data = sh.getDataRange().getValues();
+    const clean = (typeof Utils !== 'undefined' && Utils.clean) ? Utils.clean : (v) => String(v || '').trim();
+    const targetId = clean(id);
+
+    for (let i = 1; i < data.length; i++) {
+      if (clean(data[i][0]) === targetId) {
+        const row = [
+          targetId,
+          clean(rule.name) || clean(data[i][1]),
+          clean(rule.targetField).toUpperCase() || clean(data[i][2]),
+          clean(rule.triggerValues) || clean(data[i][3]),
+          clean(rule.bgColor) || clean(data[i][4]),
+          clean(rule.textColor) || clean(data[i][5]),
+          clean(rule.borderColor) || clean(data[i][6]),
+          clean(rule.icon) || clean(data[i][7]),
+          rule.pulse !== undefined ? (rule.pulse === true || String(rule.pulse).toLowerCase() === 'true') : data[i][8],
+          rule.showPrefix !== undefined ? (rule.showPrefix === true || String(rule.showPrefix).toLowerCase() === 'true') : data[i][9],
+          rule.active !== undefined ? (rule.active === true || String(rule.active).toLowerCase() === 'true') : data[i][10]
+        ];
+
+        sh.getRange(i + 1, 1, 1, row.length).setValues([row]);
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
+
+        const updatedRule = {
+          id: row[0], name: row[1], targetField: row[2], triggerValues: row[3],
+          bgColor: row[4], textColor: row[5], borderColor: row[6], icon: row[7],
+          pulse: row[8], showPrefix: row[9], active: row[10]
+        };
+        return Utils.buildResponse(true, { rule: updatedRule });
+      }
+    }
+    return Utils.buildResponse(false, "Regla de alerta no encontrada.");
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Actualizar Regla Alerta");
+  }
+  return runner();
+}
+
+function adminDeleteAlertRule(id) {
+  if (!id) return Utils.buildResponse(false, "ID de regla requerido.");
+
+  const runner = () => {
+    const ss = SpreadsheetApp.openById(CONF.SS_ID);
+    const sh = ss.getSheetByName(CONF.SHEET_ALERTS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de alertas no encontrada.");
+
+    const data = sh.getDataRange().getValues();
+    const clean = (typeof Utils !== 'undefined' && Utils.clean) ? Utils.clean : (v) => String(v || '').trim();
+    const targetId = clean(id);
+
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (clean(data[i][0]) === targetId) {
+        sh.deleteRow(i + 1);
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
+        return Utils.buildResponse(true, { deletedId: targetId });
+      }
+    }
+    return Utils.buildResponse(false, "Regla de alerta no encontrada.");
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Eliminar Regla Alerta");
+  }
+  return runner();
+}
+
+function adminToggleAlertRule(id, isActive) {
+  if (!id) return Utils.buildResponse(false, "ID requerido.");
+
+  const runner = () => {
+    const ss = SpreadsheetApp.openById(CONF.SS_ID);
+    const sh = ss.getSheetByName(CONF.SHEET_ALERTS);
+    if (!sh) return Utils.buildResponse(false, "Hoja de alertas no encontrada.");
+
+    const data = sh.getDataRange().getValues();
+    const clean = (typeof Utils !== 'undefined' && Utils.clean) ? Utils.clean : (v) => String(v || '').trim();
+    const targetId = clean(id);
+    const newActiveState = isActive === true || String(isActive).toLowerCase() === 'true';
+
+    for (let i = 1; i < data.length; i++) {
+      if (clean(data[i][0]) === targetId) {
+        sh.getRange(i + 1, 11).setValue(newActiveState);
+        if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
+        return Utils.buildResponse(true, { id: targetId, active: newActiveState });
+      }
+    }
+    return Utils.buildResponse(false, "Regla no encontrada.");
+  };
+
+  if (typeof withScriptLock !== 'undefined') {
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Alternar Regla Alerta");
+  }
+  return runner();
+}

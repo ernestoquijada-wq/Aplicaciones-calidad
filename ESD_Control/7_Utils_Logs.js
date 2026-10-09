@@ -20,6 +20,14 @@ const Utils = {
     }
     return String(d);
   },
+  normalizeStatusResult: function(val) {
+    if (!val) return "";
+    const s = String(val).trim().toUpperCase();
+    if (s === "CIMPLE" || s === "CUMPLE" || s === "PASS" || s === "PASSED" || s === "OK" || s === "P") return "CUMPLE";
+    if (s === "F" || s === "FAIL" || s === "FAILED" || s === "NO CUMPLE" || s === "FALLA") return "FALLA";
+    if (s === "PENDIENTE" || s === "PENDING") return "PENDIENTE";
+    return String(val).trim();
+  },
   normalizeText: function(text) {
     if (!text) return "";
     return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
@@ -116,7 +124,8 @@ const Validator = {
 const CacheManager = {
   KEYS: {
     CATALOGS_AND_RULES: 'ESD_CACHE_CATALOGS_AND_RULES',
-    SETTINGS: 'ESD_CACHE_SETTINGS'
+    SETTINGS: 'ESD_CACHE_SETTINGS',
+    ALERTS: 'ESD_CACHE_ALERTS'
   },
   DEFAULT_TTL: 21600, // 6 horas en segundos (máximo de Apps Script)
 
@@ -160,7 +169,7 @@ const CacheManager = {
   },
 
   invalidateCatalogs: function() {
-    this.remove([this.KEYS.CATALOGS_AND_RULES, this.KEYS.SETTINGS]);
+    this.remove([this.KEYS.CATALOGS_AND_RULES, this.KEYS.SETTINGS, this.KEYS.ALERTS]);
     if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('CONFIG');
   },
 
@@ -382,13 +391,62 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
     const masterConfig = JSON.parse(props.getProperty('EMAIL_MASTER_CONFIG') || '{}');
     const cfg = masterConfig[type] || {};
 
+    // 1. Recolección de destinatarios: Fijos + Reglas por Fábrica + Dinámicos
     const fixedTo = cfg.to || "";
+    
+    // Reglas por Fábrica (Google Groups por planta)
+    let factoryRecipients = [];
+    const fRules = masterConfig.factoryRules || cfg.factoryRules;
+    if (fRules) {
+      const assetFactory = String(aInfo.factory || "").trim().toUpperCase();
+      if (Array.isArray(fRules)) {
+        factoryRecipients = fRules
+          .filter(r => r && r.factory && (String(r.factory).trim().toUpperCase() === assetFactory || assetFactory.includes(String(r.factory).trim().toUpperCase())))
+          .map(r => r.email || r.emails)
+          .filter(Boolean);
+      } else if (typeof fRules === 'object') {
+        Object.keys(fRules).forEach(fKey => {
+          if (String(fKey).trim().toUpperCase() === assetFactory || assetFactory.includes(String(fKey).trim().toUpperCase())) {
+            if (fRules[fKey]) factoryRecipients.push(fRules[fKey]);
+          }
+        });
+      }
+    }
+
     const dynamicTo = tData.emails_notificados || "";
-    const finalTo = [fixedTo, dynamicTo].filter(Boolean).join(", ");
+    const finalTo = [fixedTo, ...factoryRecipients, dynamicTo].filter(Boolean).join(", ");
     if (!finalTo) return; 
 
-    const subject = `${cfg.subject || 'Notificación ESD'} - Ticket: ${tId}`;
+    // 2. Variables dinámicas para plantillas {{TAG}}
+    const placeholders = {
+      ID_ACTIVO: aInfo.controlNo || "",
+      DESCRIPCION: aInfo.description || "",
+      TIPO_ACTIVO: aInfo.description || "",
+      FABRICA: aInfo.factory || "",
+      PROYECTO: aInfo.project || "",
+      CUADRANTE: aInfo.quadrant || "",
+      FOLIO_TICKET: tId || "",
+      RESPONSABLE: tData.systemUser || aInfo.responsible || "Auditor ESD",
+      FECHA: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"),
+      ESTADO: type === 'OPEN' ? 'FALLA' : (type === 'CLOSE' ? 'CUMPLE' : 'DICTAMEN FORZADO'),
+      COMENTARIOS: tData.comentarios || aInfo.comments || "Sin comentarios adicionales."
+    };
+
+    const renderTemplate = (str, data) => {
+      if (!str) return "";
+      return String(str).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
+        return (data[key] !== undefined && data[key] !== null) ? data[key] : match;
+      });
+    };
+
+    // 3. Renderizar Asunto y Mensaje
+    const rawSubject = cfg.subject || (type === 'OPEN' ? '⚠️ Notificación de Falla ESD' : (type === 'CLOSE' ? '✅ Equipo Liberado ESD' : '⚠️ Alerta de Calidad ESD'));
+    const subject = `${renderTemplate(rawSubject, placeholders)} - Ticket: ${tId}`;
     
+    const rawBody = cfg.body || 'Se ha registrado una novedad en el sistema de control ESD.';
+    const renderedBody = renderTemplate(rawBody, placeholders).replace(/\n/g, '<br>');
+
+    // 4. Enlaces de evidencia fotográfica
     let photoLinks = "<p style='color: #64748b;'>Sin evidencia fotográfica adjunta.</p>";
     if (tData.evidencia_fotos && tData.evidencia_fotos.length > 0) {
         photoLinks = tData.evidencia_fotos.map((url, i) => 
@@ -396,24 +454,43 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
         ).join('');
     }
     
+    const badgeColor = type === 'OPEN' ? '#e11d48' : (type === 'CLOSE' ? '#10b981' : '#f59e0b');
+    const badgeTitle = type === 'OPEN' ? 'FALLA DETECTADA' : (type === 'CLOSE' ? 'EQUIPO REPARADO / LIBERADO' : 'ALERTA DE CALIDAD');
+
     const htmlBody = `
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
-        <div style="background-color: ${type==='OPEN'?'#e11d48':(type==='CLOSE'?'#10b981':'#f59e0b')}; color: white; padding: 20px; text-align: center;">
-            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px;">${cfg.subject || 'Reporte de Sistema'}</h2>
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 620px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <div style="background-color: ${badgeColor}; color: white; padding: 22px 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 19px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800;">${badgeTitle}</h2>
+            <p style="margin: 6px 0 0; font-size: 12px; opacity: 0.9; letter-spacing: 0.5px;">SISTEMA DE CONTROL Y AUDITORÍA ESD</p>
         </div>
-        <div style="padding: 30px; color: #334155;">
-            <p style="margin-top: 0; font-size: 15px; line-height: 1.6;">${cfg.body || 'Se ha registrado una novedad.'}</p>
-            <div style="background-color: #f8fafc; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                <p style="margin:5px 0; font-size: 14px;"><b>Folio de Ticket:</b> <span style="color:#0f172a; font-family:monospace; font-size: 16px; font-weight: bold;">${tId}</span></p>
-                <p style="margin:5px 0; font-size: 14px;"><b>Activo:</b> ${aInfo.controlNo} (${aInfo.description})</p>
-                <p style="margin:5px 0; font-size: 14px;"><b>Ubicación:</b> Factoria ${aInfo.factory} - Proyecto ${aInfo.project}</p>
-                <p style="margin:5px 0; font-size: 14px;"><b>Cuadrante:</b> ${aInfo.quadrant}</p>
-                <p style="margin:5px 0; font-size: 14px;"><b>Reportado por:</b> ${tData.systemUser || 'Sistema Automático'}</p>
+        <div style="padding: 28px 24px; color: #334155;">
+            <div style="font-size: 14.5px; line-height: 1.6; color: #1e293b; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 22px;">
+                ${renderedBody}
             </div>
-            <h3 style="color: ${CONF.DEFAULT_COLOR}; font-size: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 25px;">Evidencia</h3>
-            <div style="margin: 15px 0;">${photoLinks}</div>
-            <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
-                Este es un mensaje automático generado por el Sistema PLEXUS ESD. No responda a este correo.
+            
+            <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin: 20px 0;">
+                <div style="background-color: #f1f5f9; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-weight: bold; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Detalles del Activo Afectado
+                </div>
+                <div style="padding: 14px 16px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13.5px;">
+                        <tr><td style="padding: 5px 0; color: #64748b; width: 35%;"><b>Folio Ticket:</b></td><td style="padding: 5px 0; font-family: monospace; font-weight: bold; color: #0f172a;">${tId}</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Activo / ID:</b></td><td style="padding: 5px 0; font-weight: bold; color: #0f172a;">${aInfo.controlNo} (${aInfo.description || 'N/A'})</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Ubicación:</b></td><td style="padding: 5px 0; color: #0f172a;">Fábrica ${aInfo.factory} &bull; Proyecto: ${aInfo.project}</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Cuadrante:</b></td><td style="padding: 5px 0; color: #0f172a;">${aInfo.quadrant}</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Auditor / Emisor:</b></td><td style="padding: 5px 0; color: #0f172a;">${tData.systemUser || 'Sistema Automático'}</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Fecha y Hora:</b></td><td style="padding: 5px 0; color: #0f172a;">${placeholders.FECHA}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <h3 style="color: ${CONF.DEFAULT_COLOR}; font-size: 13px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 24px; letter-spacing: 0.5px;">
+                Evidencia Adjunta
+            </h3>
+            <div style="margin: 14px 0;">${photoLinks}</div>
+            
+            <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+                Mensaje generado automáticamente por el Sistema Integral PLEXUS ESD. Por favor no responda a este buzón no monitoreado.
             </p>
         </div>
       </div>`;
@@ -524,7 +601,8 @@ function setupDatabase() {
       { name: CONF.SHEET_LOGS, headers: ['Fecha y Hora', 'Usuario', 'Acción Realizada', 'ID Relacionado', 'Detalle Técnico'] },
       { name: CONF.SHEET_AI_LOGS, headers: ['Fecha/Hora', 'Usuario', 'Rol', 'Pregunta Usuario', 'Personalidad Usada', 'Respuesta IA', 'Tokens/Status'] },
       { name: CONF.SHEET_ROLES, headers: ['Nombre del Rol', 'Permisos (JSON)'] },
-      { name: CONF.SHEET_USERS, headers: ['Correo Electrónico', 'Rol Asignado'] }
+      { name: CONF.SHEET_USERS, headers: ['Correo Electrónico', 'Rol Asignado'] },
+      { name: CONF.SHEET_ALERTS, headers: ['ID', 'Nombre', 'Campo_Objetivo', 'Valores_Disparo', 'Color_Fondo', 'Color_Texto', 'Color_Borde', 'Icono', 'Pulso', 'Mostrar_Prefijo', 'Activo'] }
     ];
     let creadas = 0;
 
@@ -669,4 +747,42 @@ function translateBatch(texts, targetLang = 'en', sourceLang = '') {
   }
 
   return Utils.buildResponse(true, { results: results });
+}
+// ==========================================
+// 🔄 DISPARADOR AUTOMÁTICO DE EDICIÓN EN SHEETS
+// ==========================================
+
+/**
+ * Disparador simple que se ejecuta automáticamente cuando cualquier usuario edita
+ * manualmente una celda dentro del archivo de Google Sheets.
+ * Invalida CacheService y aumenta la versión en VersionManager para auto-sincronizar los clientes.
+ */
+function onEdit(e) {
+  try {
+    if (typeof CacheManager !== 'undefined') {
+      CacheManager.invalidateAll();
+    }
+    if (typeof VersionManager !== 'undefined') {
+      VersionManager.bumpVersion('SHEET_EDIT');
+    }
+  } catch (err) {
+    console.warn("Error en onEdit auto-sync:", err);
+  }
+}
+
+/**
+ * Función expuesta para forzar una sincronización y refresco completo desde la aplicación web.
+ */
+function forceSyncData() {
+  try {
+    if (typeof CacheManager !== 'undefined') {
+      CacheManager.invalidateAll();
+    }
+    if (typeof VersionManager !== 'undefined') {
+      VersionManager.bumpVersion('MANUAL_FORCE');
+    }
+    return getData();
+  } catch (err) {
+    return (typeof Utils !== 'undefined' && Utils.buildResponse) ? Utils.buildResponse(false, err.message) : { success: false, error: err.message };
+  }
 }

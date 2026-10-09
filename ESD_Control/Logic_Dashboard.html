@@ -3,7 +3,7 @@
  * 🟢 COMPOSABLE: LÓGICA DEL DASHBOARD
  * Maneja filtros, paginación, métricas y formato de tarjetas.
  */
-function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, utils = {}) {
+function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, utils = {}, alertsDB = Vue.ref([])) {
     const { ref, computed, watch } = Vue;
     const runGAS = utils.runGAS || ((fn, ...args) => new Promise((resolve, reject) => {
         if (window.google?.script?.run) {
@@ -36,30 +36,87 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         return target < today; 
     };
 
+    const isExpiringSoon = (d) => {
+        if(!d || d === 'PENDIENTE') return false;
+        const target = new Date(d);
+        if (isNaN(target.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        target.setHours(0, 0, 0, 0);
+        const warn = new Date();
+        warn.setDate(today.getDate() + 30);
+        warn.setHours(23, 59, 59, 999);
+        return target >= today && target <= warn;
+    };
+
+    const norm = (val) => {
+        let s = String(val || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        if (s === "CIMPLE" || s === "PASS" || s === "PASSED" || s === "OK" || s === "P") return "CUMPLE";
+        if (s === "F" || s === "FAIL" || s === "FAILED" || s === "NO CUMPLE") return "FALLA";
+        return s;
+    };
+
+    const isAlertResult = (res) => {
+        if (!res) return false;
+        const n = norm(res);
+        return !['CUMPLE', 'PASS', 'OK', 'PENDIENTE', ''].includes(n);
+    };
+
+    // 🚨 EVALUADOR DINÁMICO DE REGLAS DE ALERTAS
+    const getAssetAlerts = (asset) => {
+        if (!asset || !alertsDB || !alertsDB.value || !Array.isArray(alertsDB.value)) return [];
+        const activeRules = alertsDB.value.filter(r => r.active !== false && String(r.active).toLowerCase() !== 'false');
+        const matched = [];
+
+        for (const rule of activeRules) {
+            const field = String(rule.targetField || 'RESULTADO').toUpperCase();
+            const triggers = String(rule.triggerValues || '')
+                .split(',')
+                .map(v => norm(v))
+                .filter(Boolean);
+
+            let assetVal = '';
+            if (field === 'RESULTADO') {
+                assetVal = norm(asset.lastResult);
+            } else if (field === 'ESTADO') {
+                assetVal = norm(asset.status);
+            } else if (field === 'VENCIMIENTO') {
+                if (isExpired(asset.nextDate)) assetVal = 'VENCIDO';
+                else if (isExpiringSoon(asset.nextDate)) assetVal = 'POR_VENCER';
+                else assetVal = 'VIGENTE';
+            }
+
+            if (triggers.length === 0 || triggers.includes(assetVal)) {
+                matched.push(rule);
+            }
+        }
+        return matched;
+    };
+
     const filteredAssets = computed(() => {
         let list = assets.value.filter(a => a.estadoRegistro !== 'INACTIVO'); 
         const now = new Date(); 
         const warn = new Date(); warn.setDate(now.getDate() + 30);
         
-        const dynamicNames = dynamicCards.value.map(dc => dc.name.toUpperCase());
+        const dynamicNames = dynamicCards.value.map(dc => norm(dc.name));
 
-        if (dynamicNames.includes(currentFilter.value.toUpperCase())) {
-            list = list.filter(x => (x.status || '').toUpperCase() === currentFilter.value.toUpperCase());
+        if (dynamicNames.includes(norm(currentFilter.value))) {
+            list = list.filter(x => norm(x.status) === norm(currentFilter.value));
         } else if (currentFilter.value !== 'all') {
-            list = list.filter(x => !dynamicNames.includes((x.status || '').toUpperCase()));
+            list = list.filter(x => !dynamicNames.includes(norm(x.status)));
             
             if(currentFilter.value === 'expired') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && isExpired(x.nextDate));
             else if(currentFilter.value === 'warning') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && !isExpired(x.nextDate) && new Date(x.nextDate) < warn);
-            else if(currentFilter.value === 'compliant') list = list.filter(x => ['CUMPLE','PASS','OK'].includes((x.lastResult||'').toUpperCase()) && !isExpired(x.nextDate));
-            else if(currentFilter.value === 'noncompliant') list = list.filter(x => { const r = (x.lastResult || '').toUpperCase(); return !['CUMPLE','PASS','OK'].includes(r); });
+            else if(currentFilter.value === 'compliant') list = list.filter(x => ['CUMPLE','PASS','OK'].includes(norm(x.lastResult)) && !isExpired(x.nextDate));
+            else if(currentFilter.value === 'noncompliant') list = list.filter(x => { const r = norm(x.lastResult); return !['CUMPLE','PASS','OK'].includes(r); });
         }
         
-        if(filters.value.type) list = list.filter(a => (a.description||'').trim().toUpperCase() === filters.value.type);
-        if(filters.value.quadrant) list = list.filter(a => (a.quadrant||'').trim().toUpperCase() === filters.value.quadrant);
-        if(filters.value.status) list = list.filter(a => (a.status||'').trim().toUpperCase() === filters.value.status);
-        if(filters.value.responsible) list = list.filter(a => (a.responsible||'').trim().toUpperCase() === filters.value.responsible);
-        if(filters.value.factory) list = list.filter(a => (a.factory||'').trim().toUpperCase() === filters.value.factory);
-        if(filters.value.project) list = list.filter(a => (a.project||'').trim().toUpperCase() === filters.value.project);
+        if(filters.value.type) list = list.filter(a => norm(a.description) === norm(filters.value.type));
+        if(filters.value.quadrant) list = list.filter(a => norm(a.quadrant) === norm(filters.value.quadrant));
+        if(filters.value.status) list = list.filter(a => norm(a.status) === norm(filters.value.status));
+        if(filters.value.responsible) list = list.filter(a => norm(a.responsible) === norm(filters.value.responsible));
+        if(filters.value.factory) list = list.filter(a => norm(a.factory) === norm(filters.value.factory));
+        if(filters.value.project) list = list.filter(a => norm(a.project) === norm(filters.value.project));
         
         if(filters.value.month) {
             const [y, m] = filters.value.month.split('-');
@@ -71,8 +128,8 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         }
 
         if(searchQuery.value) { 
-            const q = searchQuery.value.toLowerCase();
-            list = list.filter(a => String(a.controlNo).toLowerCase().includes(q) || String(a.description).toLowerCase().includes(q)); 
+            const q = norm(searchQuery.value);
+            list = list.filter(a => norm(a.controlNo).includes(q) || norm(a.description).includes(q)); 
         }
         return list;
     });
@@ -145,34 +202,47 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         return userDate.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'}).toUpperCase().replace('.',''); 
     };
 
-    const getQuadrantColor = (n) => { const q=quadrantDB.value.find(x=>x.id===n); return q?q.hex:'#cbd5e1'; };
-    const getStatusColor = (s) => { const st = (statusDB.value || []).find(x => (x.name || '').toUpperCase() === (s || '').toUpperCase()); return st ? st.color : '#cbd5e1'; };
+    const getQuadrantColor = (n) => { const q=quadrantDB.value.find(x=>norm(x.id)===norm(n)); return q?q.hex:'#cbd5e1'; };
+    const getStatusColor = (s) => { const st = (statusDB.value || []).find(x => norm(x.name) === norm(s)); return st ? st.color : '#cbd5e1'; };
     const getIcon = (t) => dbRules.value[t]?.defaultIcon || 'fa-box';
-    const highlightMatch = (t) => searchQuery.value ? String(t).replace(new RegExp(`(${searchQuery.value})`,'gi'), '<span class="bg-yellow-200 text-yellow-900">$1</span>') : t;
+    const highlightMatch = (t) => searchQuery.value ? String(t).replace(new RegExp(`(${searchQuery.value.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`,'gi'), '<span class="bg-yellow-200 text-yellow-900">$1</span>') : t;
 
     const getAssetFailures = (asset) => {
         if (!asset || !asset.measurements || !asset.description) return [];
         const rule = dbRules.value[String(asset.description).trim().toUpperCase()];
         if (!rule) return [];
+        const mathEngine = utils.ESDMath || (typeof ESDMath !== 'undefined' ? ESDMath : window.ESDMath);
         const failures = [];
         for (const k in FIELD_MAP) {
             if (!rule[k]) continue;
             const m = asset.measurements[k];
             if (!m || m === 'N/A' || m.mantissa === 'N/A') continue;
-            let num = 0, limit = 0;
+            let num = null;
             if (FIELD_MAP[k].type === 'scientific') {
                 if (m.mantissa == null || m.exponent == null || m.mantissa === "" || m.exponent === "") continue;
                 num = Number(m.mantissa) * Math.pow(10, Number(m.exponent));
-                try { 
-                    const parts = String(rule[k]).toUpperCase().replace('<','').trim().split('E');
-                    limit = parseFloat(parts[0]) * Math.pow(10, parseFloat(parts[1].replace('+',''))); 
-                } catch(e){}
             } else {
                 if (m === "" || m === null) continue;
                 num = Number(m);
-                limit = parseFloat(String(rule[k]).replace(/[<a-zA-Z]/g, ''));
             }
-            if (limit > 0 && num > limit) failures.push(FIELD_MAP[k].label);
+            if (num === null || isNaN(num)) continue;
+
+            if (mathEngine) {
+                const limitInfo = mathEngine.parseLimit(rule[k]);
+                const evalRes = mathEngine.evaluate(num, limitInfo, rule.tolerance ? parseFloat(rule.tolerance) : 0.8);
+                if (evalRes && evalRes.isFail) failures.push(FIELD_MAP[k].label);
+            } else {
+                let limit = 0;
+                if (FIELD_MAP[k].type === 'scientific') {
+                    try { 
+                        const parts = String(rule[k]).toUpperCase().replace(/[<>=]/g,'').trim().split('E');
+                        limit = parseFloat(parts[0]) * Math.pow(10, parseFloat(parts[1].replace('+',''))); 
+                    } catch(e){}
+                } else {
+                    limit = parseFloat(String(rule[k]).replace(/[<>=a-zA-Z]/g, ''));
+                }
+                if (limit > 0 && num >= limit) failures.push(FIELD_MAP[k].label);
+            }
         }
         return failures;
     };
@@ -208,7 +278,8 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         currentFilter, filters, searchQuery, itemsPerPage, page, showList,
         dynamicCards, filteredAssets, paginatedAssets, totalPages, metrics, uniqueTypes, availableTemplates,
         nextPage, prevPage, activateFilter, clearFilters, exportToDrive,
-        isExpired, formatDate, getQuadrantColor, getStatusColor, getIcon, highlightMatch, getAssetFailures
+        isExpired, formatDate, getQuadrantColor, getStatusColor, getIcon, highlightMatch, getAssetFailures, isAlertResult,
+        getAssetAlerts
     };
 }
 </script>

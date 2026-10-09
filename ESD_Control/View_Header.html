@@ -13,6 +13,16 @@
   </div>
 
   <div class="flex items-center gap-2">
+    <!-- Botón de Sincronización Forzada con Google Sheets -->
+    <button 
+      @click="triggerManualSync" 
+      :disabled="syncing"
+      class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/20 shadow-sm disabled:opacity-50"
+      :title="$t('header.sync_title')">
+      <i class="fas fa-sync-alt text-xs" :class="{'fa-spin text-yellow-300': syncing}"></i>
+      <span class="hidden sm:inline text-[11px] font-extrabold">{{ syncing ? $t('header.syncing') : $t('header.sync_btn') }}</span>
+    </button>
+
     <!-- Selector de Idiomas (4 Idiomas: ES, EN, ZH, TH) -->
     <div class="relative mr-2">
       <button 

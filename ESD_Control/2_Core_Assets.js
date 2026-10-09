@@ -34,14 +34,15 @@ function getData() {
       }
     }
 
-    // 🚀 Optimización de Caché: Intentar obtener catálogos, reglas y matriz desde CacheService
+    // 🚀 Optimización de Caché: Intentar obtener catálogos, reglas, matriz y alertas desde CacheService
     let cachedStatic = (typeof CacheManager !== 'undefined') ? CacheManager.get(CacheManager.KEYS.CATALOGS_AND_RULES) : null;
-    let rulesDB, catalogs, matrixDB;
+    let rulesDB, catalogs, matrixDB, alertsDB;
 
-    if (cachedStatic && cachedStatic.rulesDB && cachedStatic.catalogs && cachedStatic.matrixDB) {
+    if (cachedStatic && cachedStatic.rulesDB && cachedStatic.catalogs && cachedStatic.matrixDB && cachedStatic.alertsDB) {
       rulesDB = cachedStatic.rulesDB;
       catalogs = cachedStatic.catalogs;
       matrixDB = cachedStatic.matrixDB;
+      alertsDB = cachedStatic.alertsDB;
     } else {
       rulesDB = {};
       const shRules = ss.getSheetByName(CONF.SHEET_RULES);
@@ -103,8 +104,54 @@ function getData() {
         }
       }
 
+      alertsDB = [];
+      let shAlerts = ss.getSheetByName(CONF.SHEET_ALERTS);
+      if (!shAlerts) {
+        shAlerts = ss.insertSheet(CONF.SHEET_ALERTS);
+        const alertHeaders = ['ID', 'Nombre', 'Campo_Objetivo', 'Valores_Disparo', 'Color_Fondo', 'Color_Texto', 'Color_Borde', 'Icono', 'Pulso', 'Mostrar_Prefijo', 'Activo'];
+        shAlerts.getRange(1, 1, 1, alertHeaders.length).setValues([alertHeaders]).setFontWeight('bold').setBackground(CONF.DEFAULT_COLOR).setFontColor('white').setHorizontalAlignment('center');
+        shAlerts.setFrozenRows(1);
+      }
+      
+      const alertsData = shAlerts.getDataRange().getValues();
+      if (alertsData.length <= 1) {
+        // Sembrar reglas por defecto estándar de la industria
+        const defaultRules = [
+          ['ALERT_FAIL', 'FALLA', 'RESULTADO', 'FALLA, FAIL, F, RECHAZADO, NO CUMPLE', '#fee2e2', '#b91c1c', '#fca5a5', 'fa-exclamation-circle', true, true, true],
+          ['ALERT_WARNING', 'POR VENCER', 'VENCIMIENTO', 'POR_VENCER', '#fef3c7', '#b45309', '#fcd34d', 'fa-exclamation-triangle', false, true, true],
+          ['ALERT_BAJA', 'EQUIPO EN BAJA', 'ESTADO', 'BAJA', '#f1f5f9', '#475569', '#cbd5e1', 'fa-ban', false, false, true]
+        ];
+        shAlerts.getRange(2, 1, defaultRules.length, defaultRules[0].length).setValues(defaultRules);
+        defaultRules.forEach(r => {
+          alertsDB.push({
+            id: r[0], name: r[1], targetField: r[2], triggerValues: r[3],
+            bgColor: r[4], textColor: r[5], borderColor: r[6], icon: r[7],
+            pulse: r[8], showPrefix: r[9], active: r[10]
+          });
+        });
+      } else {
+        for (let i = 1; i < alertsData.length; i++) {
+          const row = alertsData[i];
+          const id = clean(row[0]);
+          if (!id) continue;
+          alertsDB.push({
+            id: id,
+            name: clean(row[1]) || id,
+            targetField: clean(row[2]).toUpperCase() || 'RESULTADO',
+            triggerValues: clean(row[3]),
+            bgColor: clean(row[4]) || '#fee2e2',
+            textColor: clean(row[5]) || '#b91c1c',
+            borderColor: clean(row[6]) || '#fca5a5',
+            icon: clean(row[7]) || 'fa-exclamation-circle',
+            pulse: row[8] === true || String(row[8]).toLowerCase() === 'true',
+            showPrefix: row[9] === true || String(row[9]).toLowerCase() === 'true',
+            active: row[10] === true || String(row[10]).toLowerCase() === 'true'
+          });
+        }
+      }
+
       if (typeof CacheManager !== 'undefined') {
-        CacheManager.put(CacheManager.KEYS.CATALOGS_AND_RULES, { rulesDB, catalogs, matrixDB });
+        CacheManager.put(CacheManager.KEYS.CATALOGS_AND_RULES, { rulesDB, catalogs, matrixDB, alertsDB });
       }
     }
 
@@ -141,7 +188,7 @@ function getData() {
           rowIndex: i + 1, controlNo: clean(r[0]), quadrant: q, colorCode: c,
           description: clean(r[3]), project: clean(r[4]), factory: clean(r[5]), status: clean(r[6]),
           measurements: { surfaceRes: { mantissa: clean(r[7]), exponent: clean(r[8]) }, floorMat: { mantissa: clean(r[9]), exponent: clean(r[10]) }, elecRes: clean(r[11]), impedance: clean(r[12]), voltage: clean(r[13]), jack: clean(r[14]) },
-          lastResult: clean(r[15]), lastDate: formatDateISO(r[16]), nextDate: formatDateISO(r[17]),
+          lastResult: (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(clean(r[15])) : clean(r[15]), lastDate: formatDateISO(r[16]), nextDate: formatDateISO(r[17]),
           responsible: clean(r[18]), comments: clean(r[19]),
           auditCount: auditCounts[clean(r[0])] || 0, estadoRegistro: estadoReg 
         });
@@ -150,9 +197,9 @@ function getData() {
 
     const masterConfigStr = allProps['EMAIL_MASTER_CONFIG'];
     let emailSettings = masterConfigStr ? JSON.parse(masterConfigStr) : {
-        OPEN: { to: '', subject: '⚠️ FALLA DETECTADA', body: 'Se ha reportado una falla en el siguiente activo.' },
-        CLOSE: { to: '', subject: '✅ EQUIPO REPARADO / LIBERADO', body: 'El activo ha pasado la verificación y el ticket ha sido cerrado.' },
-        FORCED: { to: '', subject: '⚠️ ALERTA: Dictamen Forzado', body: 'Se ha registrado un resultado manual que requiere revisión.' }
+        OPEN: { to: '', subject: '⚠️ FALLA DETECTADA - {{ID_ACTIVO}}', body: 'Se ha reportado una falla en el activo {{ID_ACTIVO}} ({{DESCRIPCION}}).', factoryRules: [] },
+        CLOSE: { to: '', subject: '✅ EQUIPO REPARADO / LIBERADO - {{ID_ACTIVO}}', body: 'El activo {{ID_ACTIVO}} ha pasado la verificación y el ticket {{FOLIO_TICKET}} ha sido cerrado.', factoryRules: [] },
+        FORCED: { to: '', subject: '⚠️ ALERTA: Dictamen Forzado - {{ID_ACTIVO}}', body: 'Se ha registrado un resultado manual que requiere revisión para {{ID_ACTIVO}}.', factoryRules: [] }
     };
 
     const aiConfigStr = allProps['AI_COPILOT_CONFIG'];
@@ -189,7 +236,7 @@ function getData() {
     const serverVersion = (typeof VersionManager !== 'undefined') ? VersionManager.getVersion() : { version: 1, lastUpdated: new Date().toISOString() };
 
     return { 
-      success: true, assets, rules: rulesDB, catalogs, matrix: matrixDB, 
+      success: true, assets, rules: rulesDB, catalogs, matrix: matrixDB, alerts: alertsDB || [],
       email: emailSettings, aiConfig: clientAiSettings, rolesDB: rolesDB, usersDB: usersDB,
       userRoleName: userRoleName, userPermissions: userPermissions, showPrevEvidence: showPrevEv,
       user: userEmail, serverTime: new Date().toISOString(),

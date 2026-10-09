@@ -4,15 +4,31 @@
  * Maneja Catálogos, Reglas, Estados, DataHub, Seguridad y Ajustes.
  */
 function useAdmin(globalConfig) {
-    const { ref, computed, nextTick } = Vue;
+    const { ref, computed, nextTick, watch } = Vue;
     
     // Extraemos las dependencias y variables maestras del Main
     const { 
         runGAS, loadData, Swal, Toast, submitting, assets,
-        catalogs, dbRules, statusDB, rolesDB, usersDB, 
+        catalogs, dbRules, statusDB, matrixDB, alertsDB, rolesDB, usersDB, 
         aiSettings, emailConfig, generalSettings, FIELD_MAP, ICONS, FrontendValidator,
         persistLocalStore, quadrantDB
     } = globalConfig;
+
+    const statusSubTab = ref('statuses');
+    const editingAlert = ref(false);
+    const newAlertRule = ref({
+        id: '',
+        name: '',
+        targetField: 'RESULTADO',
+        triggerValues: '',
+        bgColor: '#fee2e2',
+        textColor: '#b91c1c',
+        borderColor: '#fca5a5',
+        icon: 'fa-exclamation-circle',
+        pulse: false,
+        showPrefix: true,
+        active: true
+    });
 
     // ==========================================
     // 1. ESTADO DE NAVEGACIÓN Y UI
@@ -32,6 +48,17 @@ function useAdmin(globalConfig) {
     // 2. LÓGICA DE CATÁLOGOS (CRUD UNIVERSAL)
     // ==========================================
     const activeCatalogLabel = computed(() => {
+        const catMap = { 
+            'SECTOR': 'quadrants', 'FACTORY': 'factories', 'PROJECT': 'projects', 
+            'AUDITOR': 'auditors', 'TEMPLATE': 'templates', 
+            'TICKET_FIELD': 'ticketFields', 'EMAIL_GROUP': 'emailGroups',
+            'AI_PROMPT': 'aiPersonalities' 
+        };
+        const subKey = catMap[activeCatalogCategory.value];
+        if (typeof i18n !== 'undefined' && i18n?.global && subKey) {
+            const _loc = i18n.global.locale.value;
+            return i18n.global.t('admin.catalogs.' + subKey).toUpperCase();
+        }
         const map = { 
             'SECTOR': 'CUADRANTES', 'FACTORY': 'FÁBRICAS', 'PROJECT': 'PROYECTOS', 
             'AUDITOR': 'RESPONSABLES', 'TEMPLATE': 'PLANTILLAS DE REPORTE', 
@@ -71,7 +98,14 @@ function useAdmin(globalConfig) {
         if (FrontendValidator.isBlank(catId)) {
             return Swal.fire("Campo Obligatorio", "El ID del elemento es obligatorio.", "warning");
         }
-        if (FrontendValidator.isBlank(catLabel) && activeCatalogCategory.value !== 'EMAIL_GROUP') {
+        // Si es Fábrica, Proyecto o Auditor y no se especificó etiqueta, se toma el ID automáticamente
+        if (['FACTORY', 'PROJECT', 'AUDITOR'].includes(activeCatalogCategory.value)) {
+            if (FrontendValidator.isBlank(catLabel)) {
+                catLabel = catId;
+            }
+        }
+        
+        if (FrontendValidator.isBlank(catLabel) && !['EMAIL_GROUP', 'FACTORY', 'PROJECT', 'AUDITOR'].includes(activeCatalogCategory.value)) {
             return Swal.fire("Campo Obligatorio", "La etiqueta/nombre del elemento es obligatoria.", "warning");
         }
         
@@ -351,6 +385,127 @@ function useAdmin(globalConfig) {
     };
 
     // ==========================================
+    // 🚨 GESTIÓN DE REGLAS DE ALERTAS DINÁMICAS
+    // ==========================================
+    const saveAlertRule = async () => {
+        if (submitting.value) return;
+        const name = FrontendValidator.sanitize(newAlertRule.value.name).toUpperCase();
+        if (FrontendValidator.isBlank(name)) {
+            return Swal.fire("Campo Requerido", "El nombre de la alerta es obligatorio.", "warning");
+        }
+
+        const isEditing = editingAlert.value;
+        const payload = {
+            id: newAlertRule.value.id || ('ALERT_' + Date.now()),
+            name: name,
+            targetField: newAlertRule.value.targetField || 'RESULTADO',
+            triggerValues: FrontendValidator.sanitize(newAlertRule.value.triggerValues).toUpperCase(),
+            bgColor: newAlertRule.value.bgColor || '#fee2e2',
+            textColor: newAlertRule.value.textColor || '#b91c1c',
+            borderColor: newAlertRule.value.borderColor || '#fca5a5',
+            icon: newAlertRule.value.icon || 'fa-exclamation-circle',
+            pulse: !!newAlertRule.value.pulse,
+            showPrefix: newAlertRule.value.showPrefix !== false,
+            active: newAlertRule.value.active !== false
+        };
+
+        if (!alertsDB.value) alertsDB.value = [];
+        const prevAlerts = JSON.parse(JSON.stringify(alertsDB.value));
+
+        // 🚀 Optimistic UI Update (<50ms)
+        if (isEditing) {
+            const idx = alertsDB.value.findIndex(a => a.id === payload.id);
+            if (idx !== -1) alertsDB.value[idx] = payload;
+        } else {
+            alertsDB.value.push(payload);
+        }
+
+        editingAlert.value = false;
+        newAlertRule.value = {
+            id: '', name: '', targetField: 'RESULTADO', triggerValues: '',
+            bgColor: '#fee2e2', textColor: '#b91c1c', borderColor: '#fca5a5',
+            icon: 'fa-exclamation-circle', pulse: false, showPrefix: true, active: true
+        };
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'success', title: isEditing ? 'Alerta Actualizada' : 'Alerta Creada' });
+
+        try {
+            submitting.value = true;
+            const r = isEditing 
+                ? await runGAS('adminUpdateAlertRule', payload.id, payload)
+                : await runGAS('adminSaveAlertRule', payload);
+
+            if (r && r.success === false) throw new Error(r.error || 'Error al guardar');
+        } catch (e) {
+            console.error("Rollback en alerta:", e);
+            alertsDB.value = prevAlerts;
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        } finally {
+            submitting.value = false;
+        }
+    };
+
+    const editAlertRule = (rule) => {
+        editingAlert.value = true;
+        newAlertRule.value = JSON.parse(JSON.stringify(rule));
+    };
+
+    const cancelAlertEdit = () => {
+        editingAlert.value = false;
+        newAlertRule.value = {
+            id: '', name: '', targetField: 'RESULTADO', triggerValues: '',
+            bgColor: '#fee2e2', textColor: '#b91c1c', borderColor: '#fca5a5',
+            icon: 'fa-exclamation-circle', pulse: false, showPrefix: true, active: true
+        };
+    };
+
+    const deleteAlertRule = (id) => {
+        Swal.fire({
+            title: '¿Eliminar regla de alerta?',
+            text: 'Esta alerta ya no se evaluará en las tarjetas de resultados.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const prevAlerts = JSON.parse(JSON.stringify(alertsDB.value || []));
+                alertsDB.value = (alertsDB.value || []).filter(a => a.id !== id);
+                if (persistLocalStore) persistLocalStore();
+                Toast.fire({ icon: 'success', title: 'Regla de Alerta Eliminada' });
+
+                try {
+                    const r = await runGAS('adminDeleteAlertRule', id);
+                    if (r && r.success === false) throw new Error(r.error || 'Error al eliminar');
+                } catch (e) {
+                    alertsDB.value = prevAlerts;
+                    if (persistLocalStore) persistLocalStore();
+                    Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+                }
+            }
+        });
+    };
+
+    const toggleAlertRule = async (rule) => {
+        const nextState = !rule.active;
+        const prevAlerts = JSON.parse(JSON.stringify(alertsDB.value || []));
+        rule.active = nextState;
+        if (persistLocalStore) persistLocalStore();
+        Toast.fire({ icon: 'info', title: nextState ? 'Alerta Habilitada' : 'Alerta Deshabilitada' });
+
+        try {
+            const r = await runGAS('adminToggleAlertRule', rule.id, nextState);
+            if (r && r.success === false) throw new Error(r.error || 'Error al alternar');
+        } catch (e) {
+            alertsDB.value = prevAlerts;
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire("Error de Sincronización", e.message || 'Error en el servidor', "error");
+        }
+    };
+
+    // ==========================================
     // 4. LÓGICA DE REGLAS (ESD TOLERANCES)
     // ==========================================
     const openRuleModal = (key, rule) => { 
@@ -589,6 +744,64 @@ function useAdmin(globalConfig) {
     // ==========================================
     const activeEmailType = ref('OPEN');
     const adminEmailGroupList = ref(['']);
+    const lastFocusedEmailField = ref('body');
+
+    watch(() => emailConfig.value, (val) => {
+        if (val && !Array.isArray(val.factoryRules)) {
+            val.factoryRules = [];
+        }
+    }, { immediate: true });
+
+    const insertEmailTag = (tag) => {
+        if (!emailConfig.value || !emailConfig.value[activeEmailType.value]) return;
+        const targetField = lastFocusedEmailField.value === 'subject' ? 'subject' : 'body';
+        const currentVal = emailConfig.value[activeEmailType.value][targetField] || '';
+        emailConfig.value[activeEmailType.value][targetField] = currentVal ? (currentVal + ' ' + tag) : tag;
+    };
+
+    const addFactoryEmailRule = () => {
+        if (!emailConfig.value) return;
+        if (!Array.isArray(emailConfig.value.factoryRules)) {
+            emailConfig.value.factoryRules = [];
+        }
+        emailConfig.value.factoryRules.push({ factory: '', email: '' });
+    };
+
+    const removeFactoryEmailRule = (idx) => {
+        if (emailConfig.value && Array.isArray(emailConfig.value.factoryRules)) {
+            emailConfig.value.factoryRules.splice(idx, 1);
+        }
+    };
+
+    const interpolateEmailTemplate = (templateStr) => {
+        if (!templateStr) return '';
+        const sampleData = {
+            '{{ID_ACTIVO}}': '3075',
+            '{{DESCRIPCION}}': 'ESTACION TRABAJO SMT-04',
+            '{{FABRICA}}': 'FAB 3',
+            '{{PROYECTO}}': 'AUTOMOTIVE',
+            '{{CUADRANTE}}': 'C-12',
+            '{{FOLIO_TICKET}}': 'TCK-9901',
+            '{{RESPONSABLE}}': 'juan.perez@plexus.com',
+            '{{FECHA}}': new Date().toISOString().split('T')[0],
+            '{{ESTADO}}': activeEmailType.value === 'OPEN' ? 'FALLA' : (activeEmailType.value === 'CLOSE' ? 'CUMPLE' : 'ALERTA CALIDAD')
+        };
+        let res = templateStr;
+        Object.keys(sampleData).forEach(tag => {
+            res = res.split(tag).join(sampleData[tag]);
+        });
+        return res;
+    };
+
+    const previewEmailSubject = computed(() => {
+        const raw = emailConfig.value?.[activeEmailType.value]?.subject || '';
+        return interpolateEmailTemplate(raw);
+    });
+
+    const previewEmailBody = computed(() => {
+        const raw = emailConfig.value?.[activeEmailType.value]?.body || '';
+        return interpolateEmailTemplate(raw);
+    });
     
     const addAdminEmailField = async () => { 
         if (adminEmailGroupList.value[adminEmailGroupList.value.length - 1] !== '') {
@@ -697,6 +910,61 @@ function useAdmin(globalConfig) {
     
     const deleteUser = (email) => { delete usersDB.value[email]; };
     
+    const openEditUser = async (email, currentRole) => {
+        const roleOptions = {};
+        Object.keys(rolesDB.value).forEach(r => {
+            const translated = (typeof translateRole === 'function' ? translateRole(r) : r);
+            roleOptions[r] = translated !== r ? `${translated} (${r})` : r;
+        });
+        const titleText = (window.$t ? window.$t('admin.security_sec.edit_user_title') : 'Editar Rol de Usuario');
+        const saveText = (window.$t ? window.$t('common.save') : 'Guardar');
+        const cancelText = (window.$t ? window.$t('common.cancel') : 'Cancelar');
+        
+        const { value: selectedRole } = await Swal.fire({
+            title: titleText,
+            html: `<p class="text-xs text-slate-500 mb-2 font-mono font-bold">${email}</p>`,
+            input: 'select',
+            inputOptions: roleOptions,
+            inputValue: currentRole,
+            showCancelButton: true,
+            confirmButtonColor: '#005565',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: `<i class="fas fa-save mr-1"></i> ${saveText}`,
+            cancelButtonText: cancelText
+        });
+        
+        if (selectedRole && selectedRole !== currentRole) {
+            await updateUserRole(email, selectedRole);
+        }
+    };
+
+    const updateUserRole = async (email, newRole) => {
+        if (!email || !newRole) return;
+        const previousRole = usersDB.value[email];
+        usersDB.value[email] = newRole;
+        if (persistLocalStore) persistLocalStore();
+        
+        Toast.fire({ 
+            icon: 'info', 
+            title: (window.$t ? window.$t('admin.security_sec.saving_user') : 'Guardando...') 
+        });
+        
+        try {
+            const r = await runGAS('adminUpdateUserRole', { email, newRole });
+            if (!r || !r.success) {
+                throw new Error(r?.error || 'Error al actualizar');
+            }
+            Toast.fire({ 
+                icon: 'success', 
+                title: (window.$t ? window.$t('admin.security_sec.user_updated') : 'Rol actualizado correctamente') 
+            });
+        } catch(e) {
+            usersDB.value[email] = previousRole;
+            if (persistLocalStore) persistLocalStore();
+            Swal.fire("Error", e.message || 'No se pudo actualizar el rol', "error");
+        }
+    };
+    
     const saveUsers = async () => { 
         if (submitting.value) return;
         if (persistLocalStore) persistLocalStore();
@@ -717,17 +985,21 @@ function useAdmin(globalConfig) {
     // EXPORTAMOS TODO AL MAIN
     return {
         adminTab, activeCatalogCategory, activeCatalogLabel, activeList, editingCatalog, newCatalog, adminEmailGroupList, newStatus,
+        statusSubTab, editingAlert, newAlertRule, alertsDB,
         ruleModal, editModal, iconSelectorOpen, iconsList: ICONS, fieldsConfig: FIELD_MAP,
         showDataHubModal, bulkDataPreview, bulkStats, isProcessingBulk, importTarget, importMethod, googleSheetUrl,
         activeEmailType, newUserEmail, newUserRole,
+        lastFocusedEmailField, insertEmailTag, addFactoryEmailRule, removeFactoryEmailRule,
+        previewEmailSubject, previewEmailBody,
         
         saveCatalogItem, editCatalog, cancelCatalogEdit, deleteCatalogItem, moveColUp, moveColDown, previewTemplate,
         addStatus, deleteStatus, openEditStateModal, confirmStateUpdate,
+        saveAlertRule, editAlertRule, cancelAlertEdit, deleteAlertRule, toggleAlertRule,
         openRuleModal, deleteRule, saveRule, getActiveMeasurements,
         
         downloadTemplate, createGoogleSheetTemplate, loadFromGoogleSheets, handleCSVUpload, executeBulkAction, clearDataHub,
         addAdminEmailField, removeAdminEmailField, saveGeneralSettings, saveEmailConfig, saveAiConfig,
-        addNewRole, deleteRole, saveRoles, addUser, deleteUser, saveUsers
+        addNewRole, deleteRole, saveRoles, addUser, deleteUser, openEditUser, updateUserRole, saveUsers
     };
 }
 </script>
