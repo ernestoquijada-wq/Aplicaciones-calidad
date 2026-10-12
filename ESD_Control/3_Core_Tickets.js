@@ -65,24 +65,22 @@ function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, m
     const data = shAssets.getDataRange().getValues();
     const headers = data[0] || [];
     const targetId = String(assetId).trim().toUpperCase();
-    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
-    
+
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).trim().toUpperCase() === targetId) {
         const rowNum = i + 1;
         const numCols = Math.max(shAssets.getLastColumn(), 20);
         const rowValues = shAssets.getRange(rowNum, 1, 1, numCols).getValues()[0];
-        
-        // Solo actualizar Col G si es un valor de motivo admitido por la regla de validación de Google Sheets
-        if (newStatus && VALID_REASONS.includes(newStatus)) {
-          rowValues[6] = newStatus;
+
+        if (newStatus && String(newStatus).trim()) {
+          rowValues[6] = String(newStatus).trim();
         }
-        
-        // El resultado técnico (FALLA, CUMPLE) reside estrictamente en Col P (index 15)
+
+        // El resultado técnico (FALLA, CUMPLE, BAJA) reside estrictamente en Col P (index 15)
         if (newResult) {
           rowValues[15] = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(newResult) : newResult;
         }
-        
+
         if (measurements) {
           const chk = (val) => (val === null || val === undefined || val === "") ? "N/A" : val;
           if (measurements.surfaceRes) {
@@ -98,7 +96,7 @@ function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, m
           if (measurements.voltage !== undefined) rowValues[13] = chk(measurements.voltage);
           if (measurements.jack !== undefined) rowValues[14] = chk(measurements.jack);
         }
-        
+
         if (comments) {
           rowValues[19] = comments;
         }
@@ -110,7 +108,7 @@ function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, m
         if (modColIndex !== -1 && modColIndex < rowValues.length) {
           rowValues[modColIndex] = new Date().toISOString();
         }
-        
+
         shAssets.getRange(rowNum, 1, 1, rowValues.length).setValues([rowValues]);
         return true;
       }

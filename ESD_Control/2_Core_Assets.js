@@ -316,8 +316,7 @@ function saveNewAsset(payload) {
     const vDateStr = Utilities.formatDate(vDateUser, Session.getScriptTimeZone(), "dd-MMM-yy");
     const nDateStr = Utilities.formatDate(nDate, Session.getScriptTimeZone(), "dd-MMM-yy");
 
-    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
-    const safeStatus = (a.status && VALID_REASONS.includes(a.status)) ? a.status : "Validación";
+    const safeStatus = (a.status && String(a.status).trim()) ? String(a.status).trim() : "Validación";
     const safeResult = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(f.result) : (f.result || "CUMPLE");
 
     const row = [
@@ -358,12 +357,11 @@ function processAudit(payload) {
     const rowValues = sh.getRange(r, 1, 1, numCols).getValues()[0];
     const headers = sh.getRange(1, 1, 1, numCols).getValues()[0];
 
-    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
     rowValues[1] = asset.quadrant;
     rowValues[2] = asset.colorCode;
-    if (asset.status && VALID_REASONS.includes(asset.status)) {
-      rowValues[6] = asset.status;
-    } else if (!rowValues[6] || !VALID_REASONS.includes(rowValues[6])) {
+    if (asset.status && String(asset.status).trim()) {
+      rowValues[6] = String(asset.status).trim();
+    } else if (!rowValues[6]) {
       rowValues[6] = "Validación";
     }
     rowValues[18] = asset.responsible;
@@ -388,10 +386,12 @@ function processAudit(payload) {
         ? Utils.normalizeStatusResult(formData.result) 
         : String(formData.result || '').toUpperCase().trim();
         
-      if (normalizedRes === 'FALLA' || normalizedRes === 'NO CUMPLE') {
+            if (normalizedRes === 'FALLA' || normalizedRes === 'NO CUMPLE') {
         rowValues[15] = "FALLA";
       } else if (normalizedRes === 'CUMPLE') {
         rowValues[15] = "CUMPLE";
+      } else if (normalizedRes === 'BAJA' || String(asset.status || '').toUpperCase().trim() === 'BAJA') {
+        rowValues[15] = "BAJA";
       } else if (formData.result) {
         rowValues[15] = formData.result;
       }
@@ -417,6 +417,35 @@ function processAudit(payload) {
 
     // Escritura única por lote para toda la fila
     sh.getRange(r, 1, 1, rowValues.length).setValues([rowValues]);
+
+    // Si el activo se da de BAJA, auto-cerrar cualquier ticket abierto asociado
+    const isBajaAction = String(asset.status || '').toUpperCase().trim() === 'BAJA' || (typeof normalizedRes !== 'undefined' && normalizedRes === 'BAJA');
+    if (isBajaAction) {
+      try {
+        const shTkts = ss.getSheetByName(CONF.SHEET_TICKETS);
+        if (shTkts) {
+          const tktData = shTkts.getDataRange().getValues();
+          const targetAsset = String(asset.controlNo).trim().toUpperCase();
+          const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+          for (let ti = tktData.length - 1; ti >= 1; ti--) {
+            if (String(tktData[ti][1]).trim().toUpperCase() === targetAsset && String(tktData[ti][3]).trim().toUpperCase() === "ABIERTO") {
+              let oldData = { apertura: {}, intentos_medicion: [] };
+              try { oldData = JSON.parse(tktData[ti][4]); } catch(e) {}
+              if (!oldData.intentos_medicion) oldData.intentos_medicion = [];
+              oldData.intentos_medicion.push({
+                fecha: dateStr,
+                ticketData: { comments: (formData && formData.comments) || "Baja administrativa de activo" },
+                dictamen: "CERRADO POR BAJA DE ACTIVO"
+              });
+              shTkts.getRange(ti + 1, 4, 1, 2).setValues([["CERRADO", JSON.stringify(oldData)]]);
+            }
+          }
+        }
+      } catch (tktErr) {
+        console.error("Error al auto-cerrar tickets por baja:", tktErr);
+      }
+    }
+
 
     if (formData && formData.isAudit) {
       logAudit(ss, asset.controlNo, formData.result, { ...m, comments: formData.comments, nextDate: nDateStr, validationDate: vDateStr });

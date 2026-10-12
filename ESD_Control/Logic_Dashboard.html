@@ -106,9 +106,9 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
             list = list.filter(x => !dynamicNames.includes(norm(x.status)));
             
             if(currentFilter.value === 'expired') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && isExpired(x.nextDate));
-            else if(currentFilter.value === 'warning') list = list.filter(x => x.nextDate && !x.nextDate.includes('PEND') && !isExpired(x.nextDate) && new Date(x.nextDate) < warn);
+            else if(currentFilter.value === 'warning') list = list.filter(x => norm(x.status) !== 'BAJA' && norm(x.lastResult) !== 'BAJA' && x.nextDate && !x.nextDate.includes('PEND') && !isExpired(x.nextDate) && new Date(x.nextDate) < warn);
             else if(currentFilter.value === 'compliant') list = list.filter(x => ['CUMPLE','PASS','OK'].includes(norm(x.lastResult)) && !isExpired(x.nextDate));
-            else if(currentFilter.value === 'noncompliant') list = list.filter(x => { const r = norm(x.lastResult); return !['CUMPLE','PASS','OK'].includes(r); });
+            else if(currentFilter.value === 'noncompliant') list = list.filter(x => { const r = norm(x.lastResult); return !['CUMPLE','PASS','OK','BAJA'].includes(r) && norm(x.status) !== 'BAJA'; });
         }
         
         if(filters.value.type) list = list.filter(a => norm(a.description) === norm(filters.value.type));
@@ -149,17 +149,26 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         const activos = assets.value.filter(a => a.estadoRegistro !== 'INACTIVO'); 
 
         activos.forEach(a => {
-            m.total++; 
             const status = (a.status || '').toUpperCase();
-            const dynamicMatch = dynamicCards.value.find(dc => dc.name.toUpperCase() === status);
+            const r = (a.lastResult || '').toUpperCase();
+            const isBaja = status === 'BAJA' || status === 'SCRAP' || r === 'BAJA';
             
+            // Si tiene tarjeta dinámica configurada
+            const dynamicMatch = dynamicCards.value.find(dc => dc.name.toUpperCase() === status);
             if(dynamicMatch) {
+                m.total++;
                 m.dynamic[dynamicMatch.name]++;
                 return; 
             }
 
+            // Si está dado de baja, se cuenta en total pero no ensucia fallas ni vencidos
+            if (isBaja) {
+                m.total++;
+                return;
+            }
+
+            m.total++; 
             const ie = isExpired(a.nextDate); 
-            const r = (a.lastResult || '').toUpperCase(); 
             const isOk = ['CUMPLE','PASS','OK'].includes(r); 
             
             if(ie) m.expired++;

@@ -31,9 +31,18 @@ function useAssetForm(globalConfig) {
         return sector ? sector.label : 'NO ENCONTRADO'; 
     });
 
+    const isStatusBaja = computed(() => {
+        const s = (editAsset.value?.status || '').toUpperCase().trim();
+        return ['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(s);
+    });
+
     const isCurrentStatusAdmin = computed(() => {
-        const st = statusDB.value.find(s => s.name === editAsset.value.status);
-        return st ? st.isAdmin : false;
+        const stName = (editAsset.value?.status || '').toUpperCase().trim();
+        if (!stName) return false;
+        const defaultAdminStatuses = ['BAJA', 'SCRAP', 'INACTIVO', 'OBSOLETO', 'DESINCORPORADO', 'MOVIMIENTO', 'INSTALACIÓN', 'INSTALACION'];
+        if (defaultAdminStatuses.includes(stName)) return true;
+        const st = (statusDB.value || []).find(s => (s.name || '').toUpperCase().trim() === stName);
+        return st ? (st.isAdmin === true || String(st.isAdmin).toLowerCase() === 'true') : false;
     });
 
     const isAssetFailed = computed(() => {
@@ -456,19 +465,22 @@ function useAssetForm(globalConfig) {
            
            // Si el resultado de la auditoría es NO CUMPLE / FALLA, reflejar en editAsset.lastResult
            const resNorm = (form.value.result || '').toUpperCase();
-           if (resNorm === 'NO CUMPLE' || resNorm === 'FAIL' || resNorm === 'FALLA') {
-               editAsset.value.lastResult = 'FALLA';
-               form.value.result = 'FALLA';
-           } else if (resNorm === 'CUMPLE' || resNorm === 'PASS') {
-               editAsset.value.lastResult = 'CUMPLE';
-               form.value.result = 'CUMPLE';
-           }
+            if (isStatusBaja.value || resNorm === 'BAJA') {
+                editAsset.value.lastResult = 'BAJA';
+                form.value.result = 'BAJA';
+                editAsset.value.status = 'Baja';
+            } else if (resNorm === 'NO CUMPLE' || resNorm === 'FAIL' || resNorm === 'FALLA') {
+                editAsset.value.lastResult = 'FALLA';
+                form.value.result = 'FALLA';
+            } else if (resNorm === 'CUMPLE' || resNorm === 'PASS') {
+                editAsset.value.lastResult = 'CUMPLE';
+                form.value.result = 'CUMPLE';
+            }
 
-           // Asegurar que status en Col G mantenga un motivo válido admitido por Sheets
-           const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
-           if (!editAsset.value.status || !VALID_REASONS.includes(editAsset.value.status)) {
-               editAsset.value.status = 'Validación';
-           }
+            // Asegurar que status en Col G mantenga un motivo válido
+            if (!editAsset.value.status) {
+                editAsset.value.status = 'Validación';
+            }
 
            // Actualización reactiva optimista local (0ms en UI)
            if (assets && assets.value && editAsset.value?.controlNo) {
@@ -481,9 +493,11 @@ function useAssetForm(globalConfig) {
                    if (form.value.measurements) {
                        assets.value[localIdx].measurements = JSON.parse(JSON.stringify(form.value.measurements));
                    }
-                   if (editAsset.value.openTicket !== undefined) {
-                       assets.value[localIdx].openTicket = editAsset.value.openTicket;
-                   }
+                   if (isStatusBaja.value) {
+                        assets.value[localIdx].openTicket = null;
+                    } else if (editAsset.value.openTicket !== undefined) {
+                        assets.value[localIdx].openTicket = editAsset.value.openTicket;
+                    }
                }
            }
 
@@ -524,22 +538,31 @@ function useAssetForm(globalConfig) {
        }
 
        if (resultType === 'ADMIN') {
-           for(const field of activeFields.value) { form.value.measurements[field.key] = field.type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; }
-           form.value.result = editAsset.value.status;
-           form.value.requiresSecondRevision = false; 
-           isAuditMode.value = true; 
-           Swal.fire({ 
-               title: 'Confirmar Movimiento', 
-               html: `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, 
-               icon: 'info', 
-               showCancelButton: true, 
-               confirmButtonColor: '#005565', 
-               confirmButtonText: 'Sí, Registrar' 
-           }).then((r) => { 
-               if(r.isConfirmed) performSave(); 
-           });
-           return; 
-       }
+            for(const field of activeFields.value) { form.value.measurements[field.key] = field.type === 'scientific' ? {mantissa:'N/A', exponent:'N/A'} : 'N/A'; }
+            const isBaja = isStatusBaja.value;
+            form.value.result = isBaja ? 'BAJA' : editAsset.value.status;
+            form.value.requiresSecondRevision = false; 
+            isAuditMode.value = true; 
+            Swal.fire({ 
+                title: isBaja ? '¿Confirmar Baja de Activo?' : 'Confirmar Movimiento', 
+                html: isBaja 
+                    ? `<div class="text-left bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-2">
+                         <p>El activo <b>ID: ${editAsset.value.controlNo}</b> (${editAsset.value.description}) cambiará a estado de <b>BAJA</b>.</p>
+                         <p class="text-rose-600 font-bold"><i class="fas fa-ban mr-1"></i> Se desincorporará de las auditorías periódicas y no se exigirán lecturas técnicas.</p>
+                         ${form.value.comments ? `<p class="mt-2 text-slate-500 italic"><b>Observaciones:</b> ${form.value.comments}</p>` : `<p class="text-[11px] text-amber-700"><b>Nota:</b> Puedes detallar el motivo de scrap o retiro en Observaciones.</p>`}
+                       </div>`
+                    : `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, 
+                icon: isBaja ? 'warning' : 'info', 
+                showCancelButton: true, 
+                confirmButtonColor: isBaja ? '#334155' : '#005565', 
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: isBaja ? '<i class="fas fa-ban mr-1"></i> Sí, Dar de Baja' : 'Sí, Registrar',
+                cancelButtonText: 'Cancelar'
+            }).then((r) => { 
+                if(r.isConfirmed) performSave(); 
+            });
+            return; 
+        }
 
        let validMeasurementsCount = 0;
        for(const field of activeFields.value) {
@@ -626,6 +649,15 @@ function useAssetForm(globalConfig) {
     };
 
     // 4. WATCHERS
+    watch(() => editAsset.value?.status, (newStatus) => {
+        const s = (newStatus || '').toUpperCase().trim();
+        if (['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO', 'MOVIMIENTO', 'INSTALACIÓN', 'INSTALACION'].includes(s) || isCurrentStatusAdmin.value) {
+            for (const key in FIELD_MAP) {
+                form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A';
+            }
+        }
+    });
+
     watch(() => editAsset.value.quadrant, (val) => {
         if(!val) { currentThemeColor.value = '#005565'; return; }
         const search = String(val).toUpperCase().trim();
@@ -675,7 +707,7 @@ function useAssetForm(globalConfig) {
     // 5. EXPORTAR TODO AL MAIN
     return {
         editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
-        sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields, isAssetFailed, formatLimit,
+        sectorColor, sectorLabel, isCurrentStatusAdmin, isStatusBaja, activeFields, isAssetFailed, formatLimit,
         isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, prepareForMeasurementCapture, submit, performSave,
         releasePresence
     };
