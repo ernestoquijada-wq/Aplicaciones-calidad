@@ -165,6 +165,28 @@ function getData() {
       props.setProperty('DB_CONFIGURED_ESTADO_REGISTRO', 'true');
     }
 
+    let openTickets = {};
+    const shTickets = ss.getSheetByName(CONF.SHEET_TICKETS);
+    if (shTickets) {
+      const tktData = shTickets.getDataRange().getValues();
+      for (let i = 1; i < tktData.length; i++) {
+        const tktAssetId = clean(tktData[i][1]).toUpperCase();
+        const tktStatus = clean(tktData[i][3]).toUpperCase();
+        if (tktAssetId && tktStatus === "ABIERTO") {
+          let comments = "";
+          try {
+            const parsed = JSON.parse(tktData[i][4]);
+            comments = parsed?.apertura?.Comentarios || parsed?.apertura?.comments || parsed?.apertura?.Observaciones || "";
+          } catch(e) {}
+          openTickets[tktAssetId] = {
+            folio: clean(tktData[i][0]),
+            date: tktData[i][2] ? Utilities.formatDate(new Date(tktData[i][2]), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm") : "",
+            comments: comments
+          };
+        }
+      }
+    }
+
     let assets = [];
     const shAssets = ss.getSheetByName(CONF.SHEET_ASSETS);
     if(shAssets) {
@@ -183,6 +205,7 @@ function getData() {
         }
         
         const estadoReg = estadoColIndex > -1 ? clean(r[estadoColIndex]).toUpperCase() : "ACTIVO";
+        const assetIdClean = clean(r[0]).toUpperCase();
 
         assets.push({
           rowIndex: i + 1, controlNo: clean(r[0]), quadrant: q, colorCode: c,
@@ -190,7 +213,8 @@ function getData() {
           measurements: { surfaceRes: { mantissa: clean(r[7]), exponent: clean(r[8]) }, floorMat: { mantissa: clean(r[9]), exponent: clean(r[10]) }, elecRes: clean(r[11]), impedance: clean(r[12]), voltage: clean(r[13]), jack: clean(r[14]) },
           lastResult: (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(clean(r[15])) : clean(r[15]), lastDate: formatDateISO(r[16]), nextDate: formatDateISO(r[17]),
           responsible: clean(r[18]), comments: clean(r[19]),
-          auditCount: auditCounts[clean(r[0])] || 0, estadoRegistro: estadoReg 
+          auditCount: auditCounts[clean(r[0])] || 0, estadoRegistro: estadoReg,
+          openTicket: openTickets[assetIdClean] || null
         });
       }
     }
@@ -292,11 +316,15 @@ function saveNewAsset(payload) {
     const vDateStr = Utilities.formatDate(vDateUser, Session.getScriptTimeZone(), "dd-MMM-yy");
     const nDateStr = Utilities.formatDate(nDate, Session.getScriptTimeZone(), "dd-MMM-yy");
 
+    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
+    const safeStatus = (a.status && VALID_REASONS.includes(a.status)) ? a.status : "Validación";
+    const safeResult = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(f.result) : (f.result || "CUMPLE");
+
     const row = [
-      newId, a.quadrant, a.colorCode || CONF.DEFAULT_COLOR, a.description, a.project, a.factory, a.status || "ACTIVO",
+      newId, a.quadrant, a.colorCode || CONF.DEFAULT_COLOR, a.description, a.project, a.factory, safeStatus,
       chk(m.surfaceRes?.mantissa), chk(m.surfaceRes?.exponent), chk(m.floorMat?.mantissa), chk(m.floorMat?.exponent),
       chk(m.elecRes), chk(m.impedance), chk(m.voltage), chk(m.jack),
-      f.result||"", vDateStr, nDateStr, a.responsible || "", f.comments||""
+      safeResult, vDateStr, nDateStr, a.responsible || "", f.comments||""
     ];
 
     sh.appendRow(row);
@@ -304,7 +332,7 @@ function saveNewAsset(payload) {
     logAudit(ss, newId, f.result, { ...m, comments: f.comments, nextDate: nDateStr, validationDate: vDateStr });
     
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
-    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ASSETS');
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
     return Utils.buildResponse(true, { id: newId });
   };
 
@@ -330,9 +358,14 @@ function processAudit(payload) {
     const rowValues = sh.getRange(r, 1, 1, numCols).getValues()[0];
     const headers = sh.getRange(1, 1, 1, numCols).getValues()[0];
 
+    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
     rowValues[1] = asset.quadrant;
     rowValues[2] = asset.colorCode;
-    rowValues[6] = asset.status;
+    if (asset.status && VALID_REASONS.includes(asset.status)) {
+      rowValues[6] = asset.status;
+    } else if (!rowValues[6] || !VALID_REASONS.includes(rowValues[6])) {
+      rowValues[6] = "Validación";
+    }
     rowValues[18] = asset.responsible;
 
     let vDateStr = "";
@@ -349,7 +382,19 @@ function processAudit(payload) {
       rowValues[12] = chk(m.impedance);
       rowValues[13] = chk(m.voltage);
       rowValues[14] = chk(m.jack);
-      rowValues[15] = formData.result || "";
+
+      // Sincronizar el resultado técnico (Col P, index 15) sin violar validación de Col G
+      const normalizedRes = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) 
+        ? Utils.normalizeStatusResult(formData.result) 
+        : String(formData.result || '').toUpperCase().trim();
+        
+      if (normalizedRes === 'FALLA' || normalizedRes === 'NO CUMPLE') {
+        rowValues[15] = "FALLA";
+      } else if (normalizedRes === 'CUMPLE') {
+        rowValues[15] = "CUMPLE";
+      } else if (formData.result) {
+        rowValues[15] = formData.result;
+      }
 
       const vDateUser = new Date(formData.validationDate);
       const vDateFixed = new Date(vDateUser.getTime() + vDateUser.getTimezoneOffset()*60000);
@@ -383,7 +428,7 @@ function processAudit(payload) {
     }
 
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
-    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ASSETS');
+    if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
     if (asset && asset.controlNo && typeof PresenceManager !== 'undefined') {
       const activeUser = Session.getActiveUser().getEmail() || (formData && formData.auditor) || '';
       PresenceManager.release(asset.controlNo, activeUser);

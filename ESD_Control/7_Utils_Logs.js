@@ -513,13 +513,27 @@ function getAssetHistory(controlNo) {
     if (!sh) return [];
     const data = sh.getDataRange().getValues();
     const history = [];
+    const scriptTimeZone = Session.getScriptTimeZone();
     for (let i = data.length - 1; i >= 1; i--) {
       if (String(data[i][2]) === String(controlNo)) {
-        let displayDate = Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "dd-MMM-yy");
-        try { const jsonData = JSON.parse(data[i][4]); if(jsonData.validationDate) displayDate = jsonData.validationDate; } catch(e) {}
-        const timeStr = Utilities.formatDate(new Date(data[i][1]), Session.getScriptTimeZone(), "HH:mm");
-        history.push({ date: displayDate + " " + timeStr, result: data[i][3], technicalData: data[i][4] });
-        if (history.length >= 10) break;
+        let displayDate = Utilities.formatDate(new Date(data[i][1]), scriptTimeZone, "dd-MMM-yy");
+        let rawDate = data[i][1] instanceof Date ? data[i][1].toISOString() : String(data[i][1]);
+        let auditor = data[i][5] || '';
+        try { 
+          const jsonData = JSON.parse(data[i][4]); 
+          if(jsonData.validationDate) displayDate = jsonData.validationDate;
+          if(jsonData.systemUser && !auditor) auditor = jsonData.systemUser;
+        } catch(e) {}
+        const timeStr = Utilities.formatDate(new Date(data[i][1]), scriptTimeZone, "HH:mm");
+        history.push({ 
+          id: data[i][0] || ('hist_' + i),
+          date: displayDate + " " + timeStr, 
+          rawDate: rawDate,
+          result: data[i][3], 
+          technicalData: data[i][4],
+          user: auditor
+        });
+        if (history.length >= 200) break;
       }
     }
     return history;

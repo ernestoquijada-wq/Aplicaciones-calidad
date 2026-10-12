@@ -273,35 +273,46 @@
       const adminLogic  = useAdmin(globalConfig);
       const modalsLogic = useModals({ ...globalConfig, ...formLogic });
 
-      // 4. MOTOR EN TIEMPO REAL Y CARGA INICIAL
+      // 4. MOTOR EN TIEMPO REAL Y CARGA INICIAL (Retorna Promise para await)
       const loadData = (isSilent = false) => { 
         if (!isSilent && !isHydratedFromCache) {
           loading.value = true;
         }
-        google.script.run
-          .withSuccessHandler(r => { 
-            if(r?.success){
-                assets.value = r.assets || []; dbRules.value = r.rules || {}; 
-                if(r.catalogs) catalogs.value = r.catalogs; 
-                if(r.catalogs?.sectors) quadrantDB.value = r.catalogs.sectors;
-                else if(r.sectors) quadrantDB.value = r.sectors; 
-                if(r.matrix) matrixDB.value = r.matrix; 
-                if(r.alerts) alertsDB.value = r.alerts;
-                if(r.email) emailConfig.value = r.email; 
-                if(r.aiConfig) aiSettings.value = r.aiConfig;
-                if(r.showPrevEvidence !== undefined) generalSettings.value.showPrevEvidence = r.showPrevEvidence;
-                
-                userRoleName.value = r.userRoleName; userPermissions.value = r.userPermissions;
-                rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
-                if(r.user) currentUser.value = r.user;
-                if(r.serverVersion) clientVersion.value = r.serverVersion;
-                lastSyncTime.value = r.serverTime; 
-                loading.value = false;
-                persistLocalStore();
-            } else { 
-                Swal.fire('Error', r?.error || 'Fallo de servidor', 'error'); loading.value = false;
-            } 
-          }).getData();
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(r => { 
+              if(r?.success){
+                  assets.value = r.assets || []; dbRules.value = r.rules || {}; 
+                  if(r.catalogs) catalogs.value = r.catalogs; 
+                  if(r.catalogs?.sectors) quadrantDB.value = r.catalogs.sectors;
+                  else if(r.sectors) quadrantDB.value = r.sectors; 
+                  if(r.matrix) matrixDB.value = r.matrix; 
+                  if(r.alerts) alertsDB.value = r.alerts;
+                  if(r.email) emailConfig.value = r.email; 
+                  if(r.aiConfig) aiSettings.value = r.aiConfig;
+                  if(r.showPrevEvidence !== undefined) generalSettings.value.showPrevEvidence = r.showPrevEvidence;
+                  
+                  userRoleName.value = r.userRoleName; userPermissions.value = r.userPermissions;
+                  rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
+                  if(r.user) currentUser.value = r.user;
+                  if(r.serverVersion) clientVersion.value = r.serverVersion;
+                  lastSyncTime.value = r.serverTime; 
+                  loading.value = false;
+                  persistLocalStore();
+                  resolve(r);
+              } else { 
+                  Swal.fire('Error', r?.error || 'Fallo de servidor', 'error'); 
+                  loading.value = false;
+                  resolve(r);
+              } 
+            })
+            .withFailureHandler(err => {
+              console.error('Error en loadData:', err);
+              loading.value = false;
+              reject(err);
+            })
+            .getData();
+        });
       };
 
       // Sincronización ligera en segundo plano (Polling de versiones)

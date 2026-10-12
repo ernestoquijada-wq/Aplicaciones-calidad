@@ -4,10 +4,10 @@
  * Maneja altas, auditorías, N/A, alertas matemáticas y guardado.
  */
 function useAssetForm(globalConfig) {
-    const { ref, computed, watch } = Vue;
+    const { ref, computed, watch, nextTick } = Vue;
     // Extraemos las dependencias globales que le pasaremos desde el Main
     const { 
-        view, submitting, dbRules, catalogs, statusDB, currentThemeColor, 
+        view, submitting, assets, dbRules, catalogs, statusDB, currentThemeColor, 
         loadData, openTicketModal, runGAS, Swal, Toast, FIELD_MAP, FrontendValidator,
         currentUser, ESDMath: injectedESDMath 
     } = globalConfig;
@@ -40,7 +40,7 @@ function useAssetForm(globalConfig) {
         const lr = (editAsset.value?.lastResult || '').toUpperCase();
         const st = (editAsset.value?.status || '').toUpperCase();
         const res = (form.value?.result || '').toUpperCase();
-        return lr === 'FALLA' || lr === 'NO CUMPLE' || st === 'FALLA' || res === 'FALLA' || res === 'NO CUMPLE' || !!activeTicketEvidence.value;
+        return lr === 'FALLA' || lr === 'NO CUMPLE' || lr === 'FAIL' || st === 'FALLA' || res === 'FALLA' || res === 'NO CUMPLE' || !!activeTicketEvidence.value || !!editAsset.value?.openTicket;
     });
 
     const formatLimit = (field) => {
@@ -293,33 +293,73 @@ function useAssetForm(globalConfig) {
        runGAS('getAssetHistory', a.controlNo).then(h => auditHistory.value = h);
        
        activeTicketEvidence.value = null;
+       if (a.openTicket) {
+           activeTicketEvidence.value = {
+               folio: a.openTicket.folio,
+               fecha: a.openTicket.date,
+               comentarios: a.openTicket.comments || '',
+               fotos: []
+           };
+       }
        const rStatus = (a.lastResult || '').toUpperCase();
        const isAdministrative = statusDB.value.find(s => s.name.toUpperCase() === rStatus)?.isAdmin;
-       if (rStatus && !['CUMPLE', 'PASS', 'OK', 'PENDIENTE'].includes(rStatus) && !isAdministrative) {
+       if ((a.openTicket || (rStatus && !['CUMPLE', 'PASS', 'OK', 'PENDIENTE'].includes(rStatus))) && !isAdministrative) {
            runGAS('getActiveTicketData', a.controlNo).then(data => { 
                if (data) activeTicketEvidence.value = data; 
            });
        }
     };
 
+    const prepareForMeasurementCapture = () => {
+        isAuditMode.value = true;
+        (nextTick || Vue.nextTick)(() => {
+            const el = document.getElementById('measurements-card');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (activeFields.value && activeFields.value.length > 0) {
+                activeInput.value = activeFields.value[0].key;
+            }
+        });
+    };
+
     const evaluateRepair = () => {
+        // 1. Si no está en modo auditoría o no se han capturado lecturas, activar modo y guiar al técnico
+        if (!isAuditMode.value) {
+            prepareForMeasurementCapture();
+            Swal.fire({
+                icon: 'info',
+                title: 'Captura de Mediciones Requerida',
+                html: `<p class="text-sm text-slate-600">Para dar seguimiento o cerrar el ticket de este equipo, <b>primero debes capturar las nuevas lecturas técnicas</b> de verificación.</p>
+                       <p class="text-xs text-[#005565] font-bold mt-2"><i class="fas fa-arrow-down mr-1"></i> Hemos habilitado los campos de medición a continuación.</p>`,
+                confirmButtonColor: '#005565',
+                confirmButtonText: 'Entendido, capturar lecturas'
+            });
+            return;
+        }
+
+        // 2. Validar que los campos activos no estén vacíos
         let validMeasurementsCount = 0;
-        for(const field of activeFields.value) {
+        for (const field of activeFields.value) {
             if (isNA(field.key)) continue; 
             
             const val = form.value.measurements[field.key];
             let isEmpty = false;
             
-            if(field.type === 'scientific') { 
-                if(val == null || FrontendValidator.isBlank(val.mantissa) || FrontendValidator.isBlank(val.exponent)) isEmpty = true;
+            if (field.type === 'scientific') { 
+                if (val == null || FrontendValidator.isBlank(val.mantissa) || FrontendValidator.isBlank(val.exponent)) isEmpty = true;
             } else { 
-                if(FrontendValidator.isBlank(val)) isEmpty = true;
+                if (FrontendValidator.isBlank(val)) isEmpty = true;
             }
             
-            if(isEmpty) {
+            if (isEmpty) {
                 activeInput.value = field.key;
-                Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición real para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#005565' });
-                isAuditMode.value = true;
+                const el = document.getElementById('measurements-card');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                Swal.fire({ 
+                    icon: 'warning', 
+                    title: 'Faltan Mediciones', 
+                    text: `Debes registrar una medición real para "${field.label}" o marcar 'N/A'.`, 
+                    confirmButtonColor: '#005565' 
+                });
                 return;
             } else { 
                 validMeasurementsCount++;
@@ -327,16 +367,60 @@ function useAssetForm(globalConfig) {
         }
 
         if (validMeasurementsCount === 0 && activeFields.value.length > 0) {
-            Swal.fire({ icon: 'error', title: 'Medición Obligatoria', text: 'Para evaluar la reparación, DEBES capturar al menos un valor numérico real.', confirmButtonColor: '#e11d48' });
-            isAuditMode.value = true;
+            Swal.fire({ 
+                icon: 'error', 
+                title: 'Medición Obligatoria', 
+                text: 'Para evaluar la reparación, debes capturar al menos un valor numérico real (no todo puede ser N/A).', 
+                confirmButtonColor: '#e11d48' 
+            });
             return;
         }
-        
-        openTicketModal('CLOSE');
+
+        // 3. Evaluación técnica contra reglas ESD
+        const failures = activeFields.value.filter(f => getAlert(f).message === 'FUERA DE RANGO');
+
+        if (failures.length === 0) {
+            // Todas las mediciones cumplen tolerancias
+            form.value.result = 'CUMPLE';
+            Swal.fire({
+                icon: 'success',
+                title: '¡Mediciones Aprobadas!',
+                html: `<div class="text-left bg-emerald-50 p-3 rounded-lg border border-emerald-200 text-xs text-emerald-800 mb-3">
+                         <p class="font-bold flex items-center gap-1"><i class="fas fa-check-circle text-emerald-600"></i> Todas las lecturas técnicas cumplen con las tolerancias ESD.</p>
+                       </div>
+                       <p class="text-sm text-slate-600">A continuación, completa el formulario de Cierre de Ticket (CAPA) para documentar la acción correctiva y reactivar el equipo.</p>`,
+                confirmButtonColor: '#005565',
+                confirmButtonText: '<i class="fas fa-clipboard-check mr-1"></i> Proceder al Cierre CAPA'
+            }).then((r) => { 
+                if (r.isConfirmed) {
+                    openTicketModal('CLOSE');
+                }
+            });
+        } else {
+            // Mediciones siguen fuera de rango
+            form.value.result = 'NO CUMPLE';
+            let failList = failures.map(f => `<li class="mb-1"><b>${f.label}</b>: ${f.recText || 'Lectura fuera de especificación'}</li>`).join('');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Mediciones Fuera de Rango',
+                html: `<p class="text-sm text-slate-600 mb-2">Las mediciones registradas <b>NO cumplen</b> las tolerancias requeridas:</p>
+                       <ul class="text-xs text-rose-700 text-left bg-rose-50 p-3 rounded-lg border border-rose-200 list-disc pl-6 mb-3">${failList}</ul>
+                       <p class="text-xs text-slate-500">¿Deseas registrar un <b>seguimiento intermedio</b> (el ticket seguirá ABIERTO) o prefieres <b>seguir reparando</b>?</p>`,
+                showCancelButton: true,
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: '<i class="fas fa-clipboard-list mr-1"></i> Registrar Seguimiento',
+                cancelButtonText: '<i class="fas fa-tools mr-1"></i> Seguir Reparando'
+            }).then((r) => { 
+                if (r.isConfirmed) {
+                    openTicketModal('CLOSE');
+                }
+            });
+        }
     };
 
-    const performSave = async () => {
-       if (submitting.value) return;
+    const performSave = async (forced = false) => {
+       if (submitting.value && !forced) return;
        submitting.value = true;
        try {
            editAsset.value.colorCode = currentThemeColor.value;
@@ -370,12 +454,45 @@ function useAssetForm(globalConfig) {
                if (!m[key]) { m[key] = field.type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A'; }
            }
            
+           // Si el resultado de la auditoría es NO CUMPLE / FALLA, reflejar en editAsset.lastResult
+           const resNorm = (form.value.result || '').toUpperCase();
+           if (resNorm === 'NO CUMPLE' || resNorm === 'FAIL' || resNorm === 'FALLA') {
+               editAsset.value.lastResult = 'FALLA';
+               form.value.result = 'FALLA';
+           } else if (resNorm === 'CUMPLE' || resNorm === 'PASS') {
+               editAsset.value.lastResult = 'CUMPLE';
+               form.value.result = 'CUMPLE';
+           }
+
+           // Asegurar que status en Col G mantenga un motivo válido admitido por Sheets
+           const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
+           if (!editAsset.value.status || !VALID_REASONS.includes(editAsset.value.status)) {
+               editAsset.value.status = 'Validación';
+           }
+
+           // Actualización reactiva optimista local (0ms en UI)
+           if (assets && assets.value && editAsset.value?.controlNo) {
+               const localIdx = assets.value.findIndex(a => String(a.controlNo).trim().toUpperCase() === String(editAsset.value.controlNo).trim().toUpperCase());
+               if (localIdx !== -1) {
+                   assets.value[localIdx].status = editAsset.value.status;
+                   assets.value[localIdx].lastResult = form.value.result || editAsset.value.lastResult;
+                   assets.value[localIdx].responsible = editAsset.value.responsible;
+                   assets.value[localIdx].quadrant = editAsset.value.quadrant;
+                   if (form.value.measurements) {
+                       assets.value[localIdx].measurements = JSON.parse(JSON.stringify(form.value.measurements));
+                   }
+                   if (editAsset.value.openTicket !== undefined) {
+                       assets.value[localIdx].openTicket = editAsset.value.openTicket;
+                   }
+               }
+           }
+
            const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
            const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
            if(r.success) { 
                releasePresence(editAsset.value?.controlNo);
                Toast.fire({ icon: 'success', title: isNewAsset.value ? 'Activo Registrado' : 'Verificación Guardada' });
-               await loadData(); 
+               await loadData(true); 
                view.value = 'dashboard'; 
            } else { 
                throw new Error(r.error || 'Error al guardar'); 
@@ -559,7 +676,7 @@ function useAssetForm(globalConfig) {
     return {
         editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
         sectorColor, sectorLabel, isCurrentStatusAdmin, activeFields, isAssetFailed, formatLimit,
-        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, submit, performSave,
+        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, prepareForMeasurementCapture, submit, performSave,
         releasePresence
     };
 }

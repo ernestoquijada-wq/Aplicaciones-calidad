@@ -7,7 +7,8 @@ function useModals(globalConfig) {
     const { ref, computed, nextTick, watch, onMounted, onUnmounted } = Vue;
     const { 
         runGAS, Swal, Toast, submitting, editAsset, form, catalogs, userRoleName,
-        activeFields, isNA, performSave, activeTicketEvidence, FIELD_MAP, FrontendValidator
+        activeFields, isNA, performSave, activeTicketEvidence, FIELD_MAP, FrontendValidator,
+        isAuditMode, evaluateRepair
     } = globalConfig;
 
     // ==========================================
@@ -15,15 +16,61 @@ function useModals(globalConfig) {
     // ==========================================
     const helpModal = ref(false);
     const historyModal = ref({ open: false });
-    const auditHistory = ref([]); // Se llena desde selectAsset en Logic_Form
+    const auditHistory = globalConfig.auditHistory || ref([]); // Compartido con el formulario
+    const historyLoading = ref(false);
+    const historySearchQuery = ref('');
+    const historyFilterStatus = ref('ALL'); // 'ALL' | 'CUMPLE' | 'FALLA'
+    const historyFilterPeriod = ref('ALL'); // 'ALL' | '30D' | '90D' | 'YEAR'
+    const historyCurrentPage = ref(1);
+    const historyItemsPerPage = ref(10);
+    const expandedHistoryIds = ref(new Set());
+
+    const toggleHistoryExpand = (key) => {
+        if (expandedHistoryIds.value.has(key)) {
+            expandedHistoryIds.value.delete(key);
+        } else {
+            expandedHistoryIds.value.add(key);
+        }
+    };
+
+    const expandAllHistory = () => {
+        const set = new Set();
+        paginatedHistory.value.forEach((h, idx) => set.add(h.id || idx));
+        expandedHistoryIds.value = set;
+    };
+
+    const collapseAllHistory = () => {
+        expandedHistoryIds.value.clear();
+    };
+
+    const openAssetHistoryModal = async (asset) => {
+        const target = asset || editAsset.value;
+        if (!target || !target.controlNo) return;
+        editAsset.value = target;
+        historyModal.value.open = true;
+        historySearchQuery.value = '';
+        historyFilterStatus.value = 'ALL';
+        historyFilterPeriod.value = 'ALL';
+        historyCurrentPage.value = 1;
+        expandedHistoryIds.value.clear();
+        historyLoading.value = true;
+        try {
+            const h = await runGAS('getAssetHistory', target.controlNo);
+            auditHistory.value = h || [];
+        } catch (e) {
+            console.error('Error fetching asset history:', e);
+        } finally {
+            historyLoading.value = false;
+        }
+    };
 
     const parseHistoryData = (jsonStr) => { 
         try { 
             if(!jsonStr) return {};
-            const data = JSON.parse(jsonStr); 
+            const data = (typeof jsonStr === 'string') ? JSON.parse(jsonStr) : jsonStr; 
             const clean = {}; 
             for (const k in data) { 
-                if(k === 'comments' || k === 'nextDate' || k === 'validationDate') continue;
+                if(k === 'comments' || k === 'nextDate' || k === 'validationDate' || k === 'systemUser') continue;
                 if (data[k] === null || data[k] === 'N/A' || data[k] === '') continue;
                 if (typeof data[k] === 'object' && (!data[k].mantissa || data[k].mantissa === 'N/A')) continue; 
                 clean[k] = data[k];
@@ -33,13 +80,23 @@ function useModals(globalConfig) {
     };
 
     const getHistoryComments = (jsonStr) => {
-        try { return JSON.parse(jsonStr).comments || null; } catch(e) { return null; }
+        try { 
+            const d = (typeof jsonStr === 'string') ? JSON.parse(jsonStr) : jsonStr;
+            return d?.comments || null; 
+        } catch(e) { return null; }
+    };
+
+    const getHistoryPhotos = (jsonStr) => {
+        try { 
+            const d = (typeof jsonStr === 'string') ? JSON.parse(jsonStr) : jsonStr;
+            return d?.photos || d?.fotos || d?.evidencia_fotos || []; 
+        } catch(e) { return []; }
     };
 
     const getHistoryExpiration = (jsonStr, verifDateStr) => {
         try {
             if(jsonStr) {
-                const data = JSON.parse(jsonStr);
+                const data = (typeof jsonStr === 'string') ? JSON.parse(jsonStr) : jsonStr;
                 if(data.nextDate && data.nextDate !== 'N/A') return data.nextDate;
             }
             if(!verifDateStr) return 'N/A';
@@ -52,8 +109,96 @@ function useModals(globalConfig) {
         } catch(e) { return 'N/A'; }
     };
 
+    const formatHistoryRelativeDate = (dateStr) => {
+        if (!dateStr) return '';
+        try {
+            let d = new Date(dateStr);
+            if (isNaN(d.getTime())) {
+                const clean = dateStr.replace(/-/g, '/');
+                d = new Date(clean);
+            }
+            if (isNaN(d.getTime())) return '';
+            const diffDays = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 0) return 'Hoy';
+            if (diffDays === 1) return 'Ayer';
+            if (diffDays < 30) return `Hace ${diffDays} d`;
+            const diffMonths = Math.floor(diffDays / 30);
+            if (diffMonths < 12) return `Hace ${diffMonths} m`;
+            return `Hace ${Math.floor(diffDays / 365)} a`;
+        } catch(e) { return ''; }
+    };
+
     const formatKey = (k) => FIELD_MAP[k]?.label || k;
     const formatValue = (v) => (typeof v === 'object' && v.mantissa) ? `${v.mantissa} x 10^${v.exponent}` : v;
+
+    // Resumen Ejecutivo de Métricas / KPIs del Historial
+    const historyKPIs = computed(() => {
+        const list = auditHistory.value || [];
+        const total = list.length;
+        if (total === 0) return { total: 0, cumple: 0, falla: 0, rate: 100, lastAudit: null };
+        
+        let cumple = 0;
+        list.forEach(item => {
+            const res = (item.result || '').toUpperCase();
+            if (res === 'CUMPLE' || res === 'PASS') cumple++;
+        });
+        
+        const falla = total - cumple;
+        const rate = Math.round((cumple / total) * 100);
+        const lastAudit = list[0] || null;
+
+        return { total, cumple, falla, rate, lastAudit };
+    });
+
+    // Filtros dinámicos
+    const filteredHistory = computed(() => {
+        let list = auditHistory.value || [];
+
+        if (historyFilterStatus.value === 'CUMPLE') {
+            list = list.filter(h => (h.result || '').toUpperCase() === 'CUMPLE');
+        } else if (historyFilterStatus.value === 'FALLA') {
+            list = list.filter(h => (h.result || '').toUpperCase() !== 'CUMPLE');
+        }
+
+        if (historyFilterPeriod.value !== 'ALL') {
+            const now = new Date();
+            const cutoff = new Date();
+            if (historyFilterPeriod.value === '30D') cutoff.setDate(now.getDate() - 30);
+            else if (historyFilterPeriod.value === '90D') cutoff.setDate(now.getDate() - 90);
+            else if (historyFilterPeriod.value === 'YEAR') cutoff.setFullYear(now.getFullYear(), 0, 1);
+
+            list = list.filter(h => {
+                const target = new Date(h.rawDate || h.date);
+                return !isNaN(target.getTime()) ? target >= cutoff : true;
+            });
+        }
+
+        const q = (historySearchQuery.value || '').trim().toLowerCase();
+        if (q) {
+            list = list.filter(h => {
+                const comm = (getHistoryComments(h.technicalData) || '').toLowerCase();
+                const user = (h.user || '').toLowerCase();
+                const d = (h.date || '').toLowerCase();
+                const tech = (h.technicalData || '').toLowerCase();
+                return comm.includes(q) || user.includes(q) || d.includes(q) || tech.includes(q);
+            });
+        }
+
+        return list;
+    });
+
+    const historyTotalPages = computed(() => {
+        return Math.ceil(filteredHistory.value.length / historyItemsPerPage.value) || 1;
+    });
+
+    const paginatedHistory = computed(() => {
+        const start = (historyCurrentPage.value - 1) * historyItemsPerPage.value;
+        return filteredHistory.value.slice(start, start + historyItemsPerPage.value);
+    });
+
+    watch([historyFilterStatus, historyFilterPeriod, historySearchQuery, historyItemsPerPage], () => {
+        historyCurrentPage.value = 1;
+    });
 
     // ==========================================
     // 2. COPILOTO IA (CHAT)
@@ -221,6 +366,12 @@ function useModals(globalConfig) {
     };
 
     const openTicketModal = (mode = 'CLOSE') => {
+        if (mode === 'CLOSE' && (!form.value.result || !isAuditMode?.value)) {
+            const evalFn = evaluateRepair || globalConfig?.evaluateRepair;
+            if (typeof evalFn === 'function') {
+                return evalFn();
+            }
+        }
         ticketForm.value = {}; currentTicketMode.value = mode; 
         ticketEmails.value = ['']; capturedPhotos.value = [];
         showTicketModal.value = true;
@@ -309,13 +460,22 @@ function useModals(globalConfig) {
 
             const r = await runGAS('saveTicketRecord', payload);
             if(r.success) {
+                submitting.value = false;
                 if (currentTicketMode.value === 'OPEN') { 
-                    await performSave(); 
+                    editAsset.value.lastResult = 'FALLA';
+                    editAsset.value.openTicket = { folio: r.data?.ticketId || 'TKT', date: new Date().toISOString(), comments: finalFormData.Comentarios || '' };
+                    await performSave(true); 
                     showTicketModal.value = false; 
                 } else {
-                    await performSave();
-                    if (passed) Swal.fire("¡Ticket Cerrado!", "Las mediciones fueron aprobadas.", "success");
-                    else Swal.fire({ icon: 'warning', title: 'Sigue en Falla', text: 'El equipo se reportó como NO CUMPLE. El ticket sigue ABIERTO.', confirmButtonColor: '#f59e0b' });
+                    if (passed) {
+                        editAsset.value.lastResult = 'CUMPLE';
+                        editAsset.value.openTicket = null;
+                    } else {
+                        editAsset.value.lastResult = 'FALLA';
+                    }
+                    await performSave(true);
+                    if (passed) Swal.fire("¡Ticket Cerrado!", "Las mediciones fueron aprobadas y el equipo ha sido reactivado.", "success");
+                    else Swal.fire({ icon: 'warning', title: 'Seguimiento Registrado', text: 'El equipo se reportó con mediciones fuera de tolerancia. El ticket sigue ABIERTO.', confirmButtonColor: '#f59e0b' });
                     showTicketModal.value = false;
                 }
             } else { 
@@ -329,7 +489,10 @@ function useModals(globalConfig) {
     };
 
     return {
-        helpModal, historyModal, auditHistory, parseHistoryData, getHistoryComments, getHistoryExpiration, formatKey, formatValue,
+        helpModal, historyModal, auditHistory, parseHistoryData, getHistoryComments, getHistoryPhotos, getHistoryExpiration, formatKey, formatValue,
+        historyLoading, historySearchQuery, historyFilterStatus, historyFilterPeriod, historyCurrentPage, historyItemsPerPage, expandedHistoryIds,
+        toggleHistoryExpand, expandAllHistory, collapseAllHistory, openAssetHistoryModal, formatHistoryRelativeDate,
+        historyKPIs, filteredHistory, historyTotalPages, paginatedHistory,
         showChat, isAiTyping, userMessage, chatMessages, selectedAiPersonality, myPersonalities, sendToAi, parseMarkdown,
         showTicketModal, currentTicketMode, ticketForm, ticketEmails, selectedGroups, cameraActive, videoStream, capturedPhotos, previewImage, viewingEvidenceIdx,
         startCamera, stopCamera, takePhoto, removePhoto, nextImage, prevImage, openGallery, openSweetGallery: openGallery, closeGallery, nextGalleryImage, prevGalleryImage,

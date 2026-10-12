@@ -2,56 +2,208 @@
 <!-- 🟢 VISTA: MODALES FLOTANTES GLOBALES       -->
 <!-- ========================================== -->
 
-<!-- MODAL: HISTORIAL -->
-<div v-if="historyModal.open" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative">
-      <div class="bg-[#005565] p-6 text-white text-center relative overflow-hidden">
-          <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          <h3 class="font-black text-xs uppercase tracking-widest text-emerald-300 relative z-10 mb-2">{{ $t('modals.history.title') }}</h3>
-          <div class="relative z-10 mb-1">
-              <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider block">{{ $t('modals.history.assetId') }}</span>
-              <p class="text-4xl font-black text-white leading-none tracking-tighter">{{ editAsset.controlNo }}</p>
-          </div>
-          <div class="inline-block mt-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/10 relative z-10">
-              <p class="text-[10px] font-bold text-white uppercase tracking-wide">
-                  <span class="text-emerald-200 mr-1 opacity-80">{{ $t('modals.history.type') }}:</span>{{ translateDynamic(editAsset.description, 'types') }}
-              </p>
-          </div>
-          <button @click="historyModal.open=false" class="absolute top-4 right-4 text-white/50 hover:text-white transition"><i class="fas fa-times text-xl"></i></button>
-      </div>
+<!-- MODAL: HISTORIAL DE VERIFICACIONES REDISEÑADO -->
+<div v-if="historyModal.open" class="fixed inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 relative">
       
-      <div class="p-0 max-h-[400px] overflow-y-auto bg-slate-50">
-          <div v-for="(h, i) in auditHistory" :key="i" class="p-5 border-b border-slate-200 bg-white hover:bg-slate-50 transition relative group">
-              <div class="flex justify-between items-start mb-3">
-                  <div class="flex flex-col gap-1.5">
-                       <div class="flex items-center gap-2">
-                          <span class="text-[9px] font-black text-[#005565] bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 uppercase tracking-wide w-14 text-center">{{ $t('modals.history.verif') }}</span>
-                          <span class="font-mono text-xs font-bold text-slate-700">{{ h.date.split(' ')[0] }}</span>
-                       </div>
-                       <div class="flex items-center gap-2">
-                          <span class="text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase tracking-wide w-14 text-center">{{ $t('modals.history.expires') }}</span>
-                          <span class="font-mono text-xs font-bold text-slate-500">{{ getHistoryExpiration(h.technicalData, h.date) }}</span>
-                       </div>
+      <!-- 1. CABECERA CON MÉTRICAS Y KPIS -->
+      <div class="bg-gradient-to-r from-[#003B46] via-[#005565] to-[#075985] p-5 sm:p-6 text-white relative">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+              <div class="flex items-center gap-3.5">
+                  <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner flex-none">
+                      <i class="fas fa-history text-xl sm:text-2xl text-emerald-300"></i>
                   </div>
-                  <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm" :class="h.result==='CUMPLE'?'bg-emerald-100 text-emerald-600 border border-emerald-200':'bg-rose-100 text-rose-600 border border-rose-200'">{{ translateStatus(h.result) }}</span>
-              </div>
-              <div class="text-[10px] text-slate-500 mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono overflow-x-auto whitespace-pre-wrap">
-                  <div v-for="(val, k) in parseHistoryData(h.technicalData)" :key="k" class="flex justify-between items-center text-[10px] border-b border-dashed border-slate-200 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
-                      <span class="font-bold text-slate-400 uppercase tracking-wide">{{ formatKey(k) }}</span>
-                      <span class="font-mono text-slate-700 font-bold bg-white px-1.5 rounded shadow-sm">{{ formatValue(val) }}</span>
+                  <div>
+                      <div class="flex items-center gap-2 flex-wrap">
+                          <span class="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-300 bg-white/10 px-2 py-0.5 rounded-full border border-white/10">{{ $t('modals.history.title') }}</span>
+                          <span class="text-xs text-white/70 font-semibold">{{ editAsset.description ? translateDynamic(editAsset.description, 'types') : 'N/A' }}</span>
+                      </div>
+                      <div class="flex items-center gap-2 mt-0.5">
+                          <span class="text-xs text-white/60 font-bold uppercase font-mono">{{ $t('modals.history.assetId') }}:</span>
+                          <h2 class="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white leading-none">{{ editAsset.controlNo }}</h2>
+                      </div>
                   </div>
               </div>
-              <div v-if="getHistoryComments(h.technicalData)" class="mt-3 text-[10px] text-slate-600 bg-amber-50/50 p-3 rounded-xl border border-amber-100/50 flex flex-col gap-1">
-                  <div class="flex items-center gap-1.5 mb-1">
-                      <i class="fas fa-comment-alt text-amber-400 text-xs"></i>
-                      <span class="font-black text-[9px] text-amber-600/70 uppercase tracking-widest">{{ $t('modals.history.obs') }}:</span>
+
+              <!-- 3 Tarjetas de Resumen KPI -->
+              <div class="grid grid-cols-3 gap-2 sm:gap-3 w-full md:w-auto">
+                  <div class="bg-white/10 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/10 text-center min-w-[85px]">
+                      <span class="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-white/70 block">Auditorías</span>
+                      <p class="text-lg sm:text-xl font-black text-white font-mono mt-0.5">{{ historyKPIs.total }}</p>
                   </div>
-                  <p class="italic pl-1">"{{ translateDynamic(getHistoryComments(h.technicalData)) }}"</p>
+                  <div class="bg-white/10 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/10 text-center min-w-[85px]">
+                      <span class="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-white/70 block">% Cumple</span>
+                      <p class="text-lg sm:text-xl font-black font-mono mt-0.5" :class="historyKPIs.rate >= 90 ? 'text-emerald-300' : (historyKPIs.rate >= 75 ? 'text-amber-300' : 'text-rose-300')">
+                          {{ historyKPIs.rate }}%
+                      </p>
+                  </div>
+                  <div class="bg-white/10 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/10 text-center min-w-[95px]">
+                      <span class="text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider text-white/70 block">Último Estatus</span>
+                      <span v-if="historyKPIs.lastAudit" class="inline-block mt-1 px-2 py-0.5 rounded text-[8.5px] sm:text-[9px] font-black uppercase shadow-sm" :class="historyKPIs.lastAudit.result === 'CUMPLE' ? 'bg-emerald-500/80 text-white' : 'bg-rose-500/80 text-white'">
+                          {{ translateStatus(historyKPIs.lastAudit.result) }}
+                      </span>
+                      <span v-else class="text-xs text-white/50 block mt-1">N/A</span>
+                  </div>
+              </div>
+
+              <button @click="historyModal.open=false" class="absolute top-2 right-2 sm:top-4 sm:right-4 text-white/60 hover:text-white transition w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center">
+                  <i class="fas fa-times text-lg"></i>
+              </button>
+          </div>
+      </div>
+
+      <!-- 2. BARRA DE HERRAMIENTAS Y FILTROS RÁPIDOS (STICKY) -->
+      <div class="bg-slate-50 border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <!-- Buscador -->
+          <div class="relative flex-1 min-w-[180px]">
+              <i class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input v-model="historySearchQuery" type="text" placeholder="Buscar por observaciones, auditor, fecha o valor..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white rounded-lg border border-slate-200 focus:outline-none focus:border-[#005565] transition shadow-xs">
+          </div>
+
+          <!-- Filtros de Estado y Rango -->
+          <div class="flex items-center gap-2 flex-wrap">
+              <div class="flex items-center bg-white p-0.5 rounded-lg border border-slate-200 text-[10px] font-bold shadow-xs">
+                  <button @click="historyFilterStatus = 'ALL'" :class="historyFilterStatus==='ALL'?'bg-[#005565] text-white shadow-sm':'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded transition">Todos ({{ historyKPIs.total }})</button>
+                  <button @click="historyFilterStatus = 'CUMPLE'" :class="historyFilterStatus==='CUMPLE'?'bg-emerald-600 text-white shadow-sm':'text-slate-600 hover:text-emerald-700'" class="px-2.5 py-1 rounded transition">Cumple ({{ historyKPIs.cumple }})</button>
+                  <button @click="historyFilterStatus = 'FALLA'" :class="historyFilterStatus==='FALLA'?'bg-rose-600 text-white shadow-sm':'text-slate-600 hover:text-rose-700'" class="px-2.5 py-1 rounded transition">Fallas ({{ historyKPIs.falla }})</button>
+              </div>
+
+              <select v-model="historyFilterPeriod" class="text-xs bg-white border border-slate-200 text-slate-600 font-bold px-2 py-1.5 rounded-lg focus:outline-none shadow-xs">
+                  <option value="ALL">Todo el tiempo</option>
+                  <option value="30D">Últimos 30 días</option>
+                  <option value="90D">Últimos 90 días</option>
+                  <option value="YEAR">Este año</option>
+              </select>
+
+              <button @click="expandAllHistory" title="Expandir todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#005565] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-down"></i></button>
+              <button @click="collapseAllHistory" title="Colapsar todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#005565] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-up"></i></button>
+          </div>
+      </div>
+
+      <!-- 3. CUERPO: TIMELINE MODERNO CON ACORDEÓN -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50 space-y-3 relative">
+          
+          <!-- Estado de Carga -->
+          <div v-if="historyLoading" class="flex flex-col items-center justify-center py-16 text-slate-400">
+              <i class="fas fa-circle-notch fa-spin text-3xl text-[#005565] mb-3"></i>
+              <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cargando registros históricos...</p>
+          </div>
+
+          <!-- Estado Vacío -->
+          <div v-else-if="paginatedHistory.length === 0" class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 p-8">
+              <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                  <i class="fas fa-history text-2xl"></i>
+              </div>
+              <p class="text-xs font-black text-slate-600 uppercase tracking-wider">No se encontraron registros de verificación</p>
+              <p class="text-[11px] text-slate-400 mt-1">Prueba ajustando los filtros de búsqueda o rango de fechas.</p>
+          </div>
+
+          <!-- Lista de Verificaciones Timeline -->
+          <div v-else v-for="(h, idx) in paginatedHistory" :key="h.id || idx" class="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden group">
+              
+              <!-- Fila Resumen (Click para desplegar) -->
+              <div @click="toggleHistoryExpand(h.id || idx)" class="p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 cursor-pointer hover:bg-slate-50/80 transition select-none">
+                  <!-- Nodo de Estado y Fecha -->
+                  <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-sm font-bold shadow-xs flex-none"
+                           :class="h.result === 'CUMPLE' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'">
+                          <i class="fas" :class="h.result === 'CUMPLE' ? 'fa-check' : 'fa-times'"></i>
+                      </div>
+                      <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                              <span class="font-mono text-xs font-black text-slate-800">{{ h.date }}</span>
+                              <span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{{ formatHistoryRelativeDate(h.rawDate || h.date) }}</span>
+                              <span class="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                  <i class="fas fa-calendar-alt text-[8px]"></i> Vence: {{ getHistoryExpiration(h.technicalData, h.date) }}
+                              </span>
+                          </div>
+                          <p class="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5 truncate">
+                              <i class="fas fa-user-check text-slate-300"></i>
+                              <span>Auditor: <strong class="text-slate-600">{{ h.user || 'Sistema' }}</strong></span>
+                              <span class="text-slate-200">•</span>
+                              <span class="text-slate-500 font-semibold">{{ Object.keys(parseHistoryData(h.technicalData)).length }} mediciones</span>
+                          </p>
+                      </div>
+                  </div>
+
+                  <!-- Badges y Chevron de Despliegue -->
+                  <div class="flex items-center gap-2.5 flex-none">
+                      <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1.5"
+                            :class="h.result === 'CUMPLE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-rose-100 text-rose-700 border border-rose-300'">
+                          <span class="w-1.5 h-1.5 rounded-full" :class="h.result === 'CUMPLE' ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                          {{ translateStatus(h.result) }}
+                      </span>
+
+                      <div class="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-[#005565] transition">
+                          <i class="fas fa-chevron-down text-xs transition-transform duration-200"
+                             :class="{ 'rotate-180 text-[#005565]': expandedHistoryIds.has(h.id || idx) }"></i>
+                      </div>
+                  </div>
+              </div>
+
+              <!-- Detalle Expandido (Matriz técnica + Observaciones + Fotos) -->
+              <div v-show="expandedHistoryIds.has(h.id || idx)" class="px-4 sm:px-5 pb-5 pt-3 border-t border-slate-100 bg-slate-50/50 animate-fade">
+                  
+                  <!-- Grid de Mediciones Técnicas -->
+                  <div>
+                      <div class="flex items-center justify-between mb-2">
+                          <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest"><i class="fas fa-microchip mr-1"></i> Parámetros Técnicos Registrados</span>
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          <div v-for="(val, k) in parseHistoryData(h.technicalData)" :key="k" class="p-2.5 bg-white rounded-lg border border-slate-200 flex justify-between items-center shadow-xs">
+                              <span class="text-[10px] font-bold text-slate-500 uppercase truncate mr-2">{{ formatKey(k) }}</span>
+                              <span class="font-mono text-xs font-black text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">{{ formatValue(val) }}</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Observaciones / Comentarios -->
+                  <div v-if="getHistoryComments(h.technicalData)" class="mt-3 p-3 bg-amber-50/70 border border-amber-200/60 rounded-xl">
+                      <div class="flex items-center gap-1.5 mb-1 text-[9px] font-black uppercase tracking-wider text-amber-700">
+                          <i class="fas fa-comment-dots text-amber-500"></i>
+                          <span>{{ $t('modals.history.obs') }}</span>
+                      </div>
+                      <p class="text-xs text-slate-700 italic pl-1">"{{ translateDynamic(getHistoryComments(h.technicalData)) }}"</p>
+                  </div>
+
+                  <!-- Galería de Fotos / Evidencias si existen -->
+                  <div v-if="getHistoryPhotos(h.technicalData).length > 0" class="mt-3">
+                      <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2"><i class="fas fa-camera mr-1"></i> Evidencias Adjuntas</span>
+                      <div class="flex gap-2 overflow-x-auto pb-1">
+                          <div v-for="(url, photoIdx) in getHistoryPhotos(h.technicalData)" :key="photoIdx" @click="openGallery(photoIdx)" class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex-none cursor-pointer hover:border-[#005565] transition shadow-xs group/img relative">
+                              <img :src="url" class="w-full h-full object-cover group-hover/img:scale-110 transition duration-300">
+                              <div class="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center">
+                                  <i class="fas fa-search-plus text-white text-xs"></i>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
               </div>
           </div>
       </div>
-      <div class="p-4 bg-slate-100 text-center border-t border-slate-200">
-          <button @click="historyModal.open=false" class="text-xs font-bold text-slate-500 hover:text-slate-800 uppercase tracking-widest">{{ $t('modals.history.close') }}</button>
+
+      <!-- 4. PIE DE PAGINACIÓN FLUIDA -->
+      <div class="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-center gap-3 flex-none">
+          <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <span>Mostrando <strong>{{ paginatedHistory.length }}</strong> de <strong>{{ filteredHistory.length }}</strong> registros</span>
+              <span class="text-slate-300">|</span>
+              <span class="text-[10px]">Por página:</span>
+              <select v-model="historyItemsPerPage" class="text-xs font-bold bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                  <option :value="10">10</option>
+                  <option :value="15">15</option>
+                  <option :value="25">25</option>
+                  <option :value="50">50</option>
+              </select>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+              <button @click="historyCurrentPage = 1" :disabled="historyCurrentPage === 1" class="w-7 h-7 rounded hover:bg-slate-100 disabled:opacity-30 text-xs font-bold transition flex items-center justify-center border border-slate-200 disabled:border-transparent">«</button>
+              <button @click="historyCurrentPage--" :disabled="historyCurrentPage === 1" class="w-7 h-7 rounded hover:bg-slate-100 disabled:opacity-30 text-xs transition flex items-center justify-center border border-slate-200 disabled:border-transparent"><i class="fas fa-chevron-left text-[10px]"></i></button>
+              <span class="text-xs font-bold text-slate-700 px-3 py-1 bg-slate-50 rounded border border-slate-200 font-mono">Pág. {{ historyCurrentPage }} de {{ historyTotalPages }}</span>
+              <button @click="historyCurrentPage++" :disabled="historyCurrentPage === historyTotalPages" class="w-7 h-7 rounded hover:bg-slate-100 disabled:opacity-30 text-xs transition flex items-center justify-center border border-slate-200 disabled:border-transparent"><i class="fas fa-chevron-right text-[10px]"></i></button>
+              <button @click="historyCurrentPage = historyTotalPages" :disabled="historyCurrentPage === historyTotalPages" class="w-7 h-7 rounded hover:bg-slate-100 disabled:opacity-30 text-xs font-bold transition flex items-center justify-center border border-slate-200 disabled:border-transparent">»</button>
+              <button @click="historyModal.open=false" class="ml-3 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider transition">{{ $t('modals.history.close') }}</button>
+          </div>
       </div>
   </div>
 </div>
@@ -191,20 +343,62 @@
 
 <!-- MODAL: TICKETS (CAPA) -->
 <div v-if="showTicketModal" class="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
-    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-rose-100">
-        <div class="bg-gradient-to-r from-rose-600 to-rose-800 px-6 py-5 flex justify-between items-center shadow-md z-10 relative">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border"
+         :class="{
+             'border-emerald-200': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+             'border-amber-200': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+             'border-rose-100': currentTicketMode === 'OPEN'
+         }">
+        <div class="px-6 py-5 flex justify-between items-center shadow-md z-10 relative"
+             :class="{
+                 'bg-gradient-to-r from-emerald-600 to-teal-800': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                 'bg-gradient-to-r from-amber-600 to-amber-700': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                 'bg-gradient-to-r from-rose-600 to-rose-800': currentTicketMode === 'OPEN'
+             }">
             <div class="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-            <h3 class="font-black text-white flex items-center gap-2 relative"><i class="fas fa-tools"></i> {{ $t('modals.ticket.title') }}</h3>
-            <button @click="showTicketModal=false" :disabled="submitting" class="text-rose-200 transition relative" :class="submitting ? 'opacity-50 cursor-not-allowed' : 'hover:text-white'"><i class="fas fa-times text-xl"></i></button>
+            <h3 class="font-black text-white flex items-center gap-2 relative">
+                <i class="fas" :class="{
+                    'fa-check-circle': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                    'fa-wrench': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                    'fa-tools': currentTicketMode === 'OPEN'
+                }"></i> 
+                <span v-if="currentTicketMode === 'CLOSE' && form.result === 'CUMPLE'">Cierre de Ticket (CAPA)</span>
+                <span v-else-if="currentTicketMode === 'CLOSE'">Seguimiento de Ticket (En Proceso)</span>
+                <span v-else>{{ $t('modals.ticket.title') }}</span>
+            </h3>
+            <button @click="showTicketModal=false" :disabled="submitting" class="text-white/80 transition relative" :class="submitting ? 'opacity-50 cursor-not-allowed' : 'hover:text-white'"><i class="fas fa-times text-xl"></i></button>
         </div>
         
         <div class="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50 relative">
-            <div class="bg-white p-4 rounded-xl border border-rose-100 shadow-sm flex items-center justify-between">
+            <div class="p-4 rounded-xl border shadow-sm flex items-center justify-between"
+                 :class="{
+                     'border-emerald-200 bg-emerald-50/50': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                     'border-amber-200 bg-amber-50/50': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                     'border-rose-100 bg-white': currentTicketMode === 'OPEN'
+                 }">
                 <div>
-                    <p class="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-0.5">{{ $t('modals.ticket.affected_asset') }}</p>
-                    <p class="text-xl font-mono font-black text-rose-700">{{ editAsset.controlNo }}</p>
+                    <p class="text-[9px] font-black uppercase tracking-widest mb-0.5"
+                       :class="{
+                           'text-emerald-700': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                           'text-amber-700': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                           'text-rose-400': currentTicketMode === 'OPEN'
+                       }">{{ $t('modals.ticket.affected_asset') }}</p>
+                    <p class="text-xl font-mono font-black"
+                       :class="{
+                           'text-emerald-800': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                           'text-amber-800': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                           'text-rose-700': currentTicketMode === 'OPEN'
+                       }">{{ editAsset.controlNo }}</p>
                 </div>
-                <i class="fas fa-clipboard-check text-3xl text-rose-100"></i>
+                <div class="text-right">
+                    <span v-if="currentTicketMode === 'CLOSE' && form.result === 'CUMPLE'" class="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm">
+                        <i class="fas fa-check-circle text-emerald-600"></i> Mediciones Aprobadas
+                    </span>
+                    <span v-else-if="currentTicketMode === 'CLOSE'" class="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm">
+                        <i class="fas fa-exclamation-circle text-amber-600"></i> Mediciones Fuera de Rango
+                    </span>
+                    <i v-else class="fas fa-clipboard-check text-3xl text-rose-100"></i>
+                </div>
             </div>
 
             <div v-for="field in visibleTicketFields" :key="field.id" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-rose-300 transition-colors">
@@ -275,8 +469,17 @@
         <div class="p-5 bg-white border-t border-slate-100 flex justify-end gap-3 z-10 relative">
             <div v-if="submitting" class="absolute inset-0 z-20"></div>
             <button @click="showTicketModal=false" :disabled="submitting" class="px-6 py-3 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition disabled:opacity-50">{{ $t('common.cancel') }}</button>
-            <button @click="submitTicket" :disabled="submitting" class="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-200 transition flex items-center gap-2 disabled:opacity-80">
-                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('modals.ticket.submitting_btn') : $t('modals.ticket.submit_btn') }}
+            <button @click="submitTicket" :disabled="submitting" class="px-6 py-3 text-white text-xs font-black rounded-xl shadow-lg transition flex items-center gap-2 disabled:opacity-80"
+                    :class="{
+                        'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200': currentTicketMode === 'CLOSE' && form.result === 'CUMPLE',
+                        'bg-amber-600 hover:bg-amber-700 shadow-amber-200': currentTicketMode === 'CLOSE' && form.result !== 'CUMPLE',
+                        'bg-rose-600 hover:bg-rose-700 shadow-rose-200': currentTicketMode === 'OPEN'
+                    }">
+                <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (currentTicketMode === 'CLOSE' && form.result === 'CUMPLE' ? 'fa-check' : 'fa-save')"></i> 
+                <span v-if="submitting">{{ $t('modals.ticket.submitting_btn') }}</span>
+                <span v-else-if="currentTicketMode === 'CLOSE' && form.result === 'CUMPLE'">Cerrar Ticket Definitivamente</span>
+                <span v-else-if="currentTicketMode === 'CLOSE'">Guardar Nota de Seguimiento</span>
+                <span v-else>{{ $t('modals.ticket.submit_btn') }}</span>
             </button>
         </div>
     </div>

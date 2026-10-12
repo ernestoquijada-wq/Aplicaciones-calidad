@@ -58,6 +58,69 @@ function uploadTicketFiles(files, ticketId, assetData) {
   } catch (e) { return { success: false, error: e.toString() }; }
 }
 
+function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, measurements) {
+  try {
+    const shAssets = ss.getSheetByName(CONF.SHEET_ASSETS);
+    if (!shAssets) return false;
+    const data = shAssets.getDataRange().getValues();
+    const headers = data[0] || [];
+    const targetId = String(assetId).trim().toUpperCase();
+    const VALID_REASONS = ['Instalación', 'Movimiento', 'Validación', 'Instalacion', 'Validacion'];
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toUpperCase() === targetId) {
+        const rowNum = i + 1;
+        const numCols = Math.max(shAssets.getLastColumn(), 20);
+        const rowValues = shAssets.getRange(rowNum, 1, 1, numCols).getValues()[0];
+        
+        // Solo actualizar Col G si es un valor de motivo admitido por la regla de validación de Google Sheets
+        if (newStatus && VALID_REASONS.includes(newStatus)) {
+          rowValues[6] = newStatus;
+        }
+        
+        // El resultado técnico (FALLA, CUMPLE) reside estrictamente en Col P (index 15)
+        if (newResult) {
+          rowValues[15] = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(newResult) : newResult;
+        }
+        
+        if (measurements) {
+          const chk = (val) => (val === null || val === undefined || val === "") ? "N/A" : val;
+          if (measurements.surfaceRes) {
+            rowValues[7] = chk(measurements.surfaceRes.mantissa);
+            rowValues[8] = chk(measurements.surfaceRes.exponent);
+          }
+          if (measurements.floorMat) {
+            rowValues[9] = chk(measurements.floorMat.mantissa);
+            rowValues[10] = chk(measurements.floorMat.exponent);
+          }
+          if (measurements.elecRes !== undefined) rowValues[11] = chk(measurements.elecRes);
+          if (measurements.impedance !== undefined) rowValues[12] = chk(measurements.impedance);
+          if (measurements.voltage !== undefined) rowValues[13] = chk(measurements.voltage);
+          if (measurements.jack !== undefined) rowValues[14] = chk(measurements.jack);
+        }
+        
+        if (comments) {
+          rowValues[19] = comments;
+        }
+
+        const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yy");
+        rowValues[16] = todayStr;
+
+        const modColIndex = headers.indexOf('LastModified');
+        if (modColIndex !== -1 && modColIndex < rowValues.length) {
+          rowValues[modColIndex] = new Date().toISOString();
+        }
+        
+        shAssets.getRange(rowNum, 1, 1, rowValues.length).setValues([rowValues]);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error("Error al actualizar estatus de activo en hoja:", err);
+  }
+  return false;
+}
+
 function saveTicketRecord(payload) {
   if (!payload || !payload.assetId || !payload.mode) {
     return Utils.buildResponse(false, "Datos de ticket incompletos o inválidos.");
@@ -92,13 +155,35 @@ function saveTicketRecord(payload) {
 
     let ticketId = "";
     if (payload.mode === 'OPEN') {
-        // Prevención de duplicados: validar si ya existe un ticket abierto para este activo
+        // Prevención de duplicados: si ya existe un ticket abierto, registrarlo como nuevo intento de falla en el mismo ticket
+        let existingOpenTicket = null;
+        let existingRowIndex = -1;
         for (let i = data.length - 1; i >= 1; i--) {
           if (String(data[i][1]).trim().toUpperCase() === String(payload.assetId).trim().toUpperCase() && 
               String(data[i][3]).trim().toUpperCase() === "ABIERTO") {
-            return Utils.buildResponse(false, `Ya existe un ticket abierto (${data[i][0]}) para el activo ${payload.assetId}.`);
+            existingOpenTicket = String(data[i][0]);
+            existingRowIndex = i + 1;
+            break;
           }
         }
+
+        if (existingOpenTicket) {
+          ticketId = existingOpenTicket;
+          let oldData = { apertura: {}, intentos_medicion: [] };
+          try { oldData = JSON.parse(data[existingRowIndex - 1][4]); } catch(e) {}
+          if (!oldData.intentos_medicion) oldData.intentos_medicion = [];
+          oldData.intentos_medicion.push({
+            fecha: dateStr, ticketData: payload.formData, mediciones: payload.measurements,
+            dictamen: "RE-NOTIFICACIÓN DE FALLA (SIGUE ABIERTO)"
+          });
+          sh.getRange(existingRowIndex, 4, 1, 2).setValues([["ABIERTO", JSON.stringify(oldData)]]);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+          sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
+          if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+          if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
+          return Utils.buildResponse(true, { ticketId: ticketId, reused: true });
+        }
+
         ticketId = "TKT-" + getNextFolio('TICKETS');
     } else {
         for (let i = data.length - 1; i >= 1; i--) {
@@ -123,8 +208,13 @@ function saveTicketRecord(payload) {
     if (payload.mode === 'OPEN') {
         const initialData = { apertura: payload.formData, intentos_medicion: [] };
         sh.appendRow([ticketId, payload.assetId, dateStr, "ABIERTO", JSON.stringify(initialData)]);
+        
+        // Sincronizar inmediatamente el resultado a FALLA en Col P (sin tocar Col G)
+        updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+        
         sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+        if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
         return Utils.buildResponse(true, { ticketId: ticketId });
     } else {
         let isUpdated = false;
@@ -149,7 +239,16 @@ function saveTicketRecord(payload) {
           sh.appendRow([ticketId, payload.assetId, dateStr, payload.passed ? "CERRADO" : "ABIERTO", JSON.stringify(newData)]);
           if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
         }
+        
+        // Sincronizar el estatus en Col P de DB_Assets según dictamen de cierre
+        if (payload.passed) {
+          updateAssetStatusInSheet(ss, payload.assetId, null, "CUMPLE", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+        } else {
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+        }
+
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+        if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
         return Utils.buildResponse(true, { ticketId: ticketId });
     }
   };
