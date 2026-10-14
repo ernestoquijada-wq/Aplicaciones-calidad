@@ -313,6 +313,10 @@
                                 <input type="checkbox" v-model="newStatus.isAdmin" id="chkAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer">
                                 <label for="chkAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('admin.status_sec.admin_chk') }}</label>
                             </div>
+                            <div class="flex items-center gap-2 bg-teal-50/60 px-4 py-2 rounded-lg border border-teal-200 cursor-pointer hover:bg-teal-50 transition">
+                                <input type="checkbox" v-model="newStatus.requiresMeasurements" id="chkReqMeas" class="w-4 h-4 accent-[#005565] cursor-pointer">
+                                <label for="chkReqMeas" class="text-xs font-bold text-[#005565] cursor-pointer select-none">{{ $t('admin.status_sec.req_meas_chk') || '¿Requiere Mediciones?' }}</label>
+                            </div>
                         </div>
                         <div v-if="newStatus.showCard"><label class="lbl">{{ $t('admin.status_sec.color_lbl') }}</label><div class="h-9 w-12 rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="newStatus.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
                         <button @click="addStatus" :disabled="submitting" class="bg-[#005565] text-white px-6 py-2 h-9 rounded-lg font-bold shadow-md hover:bg-[#004455] transition text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('common.save') }}</button>
@@ -324,8 +328,12 @@
                         <div v-for="(s, idx) in statusDB" :key="idx" class="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:shadow-md transition group bg-white">
                             <div>
                                 <span class="font-bold text-xs uppercase text-slate-700 block mb-1">{{ translateStatus(s.name) }}</span>
-                                <span v-if="s.showCard" class="text-[9px] font-bold px-2 py-0.5 rounded text-white shadow-sm flex inline-flex items-center gap-1" :style="{backgroundColor: s.color}"><i class="fas fa-chart-pie text-[8px]"></i> {{ $t('admin.status_sec.card_active') }}</span>
-                                <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">{{ $t('admin.status_sec.no_card') }}</span>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span v-if="s.showCard" class="text-[9px] font-bold px-2 py-0.5 rounded text-white shadow-sm inline-flex items-center gap-1" :style="{backgroundColor: s.color}"><i class="fas fa-chart-pie text-[8px]"></i> {{ $t('admin.status_sec.card_active') }}</span>
+                                    <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-400 border border-slate-200">{{ $t('admin.status_sec.no_card') }}</span>
+                                    <span v-if="s.requiresMeasurements !== false" class="text-[9px] font-bold px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 inline-flex items-center gap-1"><i class="fas fa-microscope text-[8px]"></i> {{ $t('admin.status_sec.req_meas_badge') || 'Requiere Mediciones' }}</span>
+                                    <span v-else class="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1"><i class="fas fa-ban text-[8px]"></i> {{ $t('admin.status_sec.no_meas_badge') || 'Omite Mediciones (N/A)' }}</span>
+                                </div>
                             </div>
                             <div class="flex gap-2"><button @click="openEditStateModal(s)" class="text-slate-300 hover:text-blue-500 transition w-8 h-8 rounded-full hover:bg-blue-50"><i class="fas fa-edit"></i></button><button @click="deleteStatus(idx)" class="text-slate-300 hover:text-rose-500 transition w-8 h-8 rounded-full hover:bg-rose-50"><i class="fas fa-trash"></i></button></div>
                         </div>

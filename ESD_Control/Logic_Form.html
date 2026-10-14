@@ -36,13 +36,18 @@ function useAssetForm(globalConfig) {
         return ['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(s);
     });
 
-    const isCurrentStatusAdmin = computed(() => {
+    const doesCurrentStatusRequireMeasurements = computed(() => {
         const stName = (editAsset.value?.status || '').toUpperCase().trim();
-        if (!stName) return false;
-        const defaultAdminStatuses = ['BAJA', 'SCRAP', 'INACTIVO', 'OBSOLETO', 'DESINCORPORADO', 'MOVIMIENTO', 'INSTALACIÓN', 'INSTALACION'];
-        if (defaultAdminStatuses.includes(stName)) return true;
+        if (!stName) return true;
         const st = (statusDB.value || []).find(s => (s.name || '').toUpperCase().trim() === stName);
-        return st ? (st.isAdmin === true || String(st.isAdmin).toLowerCase() === 'true') : false;
+        if (st && st.requiresMeasurements !== undefined) {
+            return st.requiresMeasurements === true || String(st.requiresMeasurements).toLowerCase() === 'true';
+        }
+        return !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(stName);
+    });
+
+    const isCurrentStatusAdmin = computed(() => {
+        return !doesCurrentStatusRequireMeasurements.value;
     });
 
     const isAssetFailed = computed(() => {
@@ -115,6 +120,7 @@ function useAssetForm(globalConfig) {
     };
     
     const toggleNA = (key) => {
+        if (!doesCurrentStatusRequireMeasurements.value || !isAuditMode.value) return;
         if(isNA(key)) {
             form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? {mantissa:null, exponent:null} : null;
         } else {
@@ -288,12 +294,26 @@ function useAssetForm(globalConfig) {
        editAsset.value = JSON.parse(JSON.stringify(a));
        const q = catalogs.value.sectors.find(x => x.id.toUpperCase() === (a.quadrant||'').toUpperCase());
        currentThemeColor.value = q ? q.hex : '#005565';
-       isAuditMode.value = false;
-       form.value = { measurements:{}, result:'', validationDate: new Date().toISOString().split('T')[0] };
+       form.value = {
+           measurements: {},
+           result: '',
+           comments: a.comments || '',
+           validationDate: a.lastDate || new Date().toISOString().split('T')[0]
+       };
        
-       if(a.measurements) {
-           for(const k in a.measurements) {
-               if(a.measurements[k]) form.value.measurements[k] = JSON.parse(JSON.stringify(a.measurements[k]));
+       // Por defecto al abrir la modal, HABILITAR EDICIÓN inicia desmarcado (false) y las lecturas bloqueadas
+       isAuditMode.value = false;
+       if (doesCurrentStatusRequireMeasurements.value) {
+           if (a.measurements) {
+               for (const k in a.measurements) {
+                   if (a.measurements[k] !== undefined && a.measurements[k] !== null) {
+                       form.value.measurements[k] = JSON.parse(JSON.stringify(a.measurements[k]));
+                   }
+               }
+           }
+       } else {
+           for (const key in FIELD_MAP) {
+               form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A';
            }
        }
        
@@ -321,6 +341,7 @@ function useAssetForm(globalConfig) {
 
     const prepareForMeasurementCapture = () => {
         isAuditMode.value = true;
+        onAuditModeToggle();
         (nextTick || Vue.nextTick)(() => {
             const el = document.getElementById('measurements-card');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -477,9 +498,14 @@ function useAssetForm(globalConfig) {
                 form.value.result = 'CUMPLE';
             }
 
-            // Asegurar que status en Col G mantenga un motivo válido
+           // Asegurar que status en Col G mantenga un motivo válido
             if (!editAsset.value.status) {
                 editAsset.value.status = 'Validación';
+            }
+
+            // Normalizar cuadrante en mayúsculas
+            if (editAsset.value.quadrant) {
+                editAsset.value.quadrant = String(editAsset.value.quadrant).trim().toUpperCase();
             }
 
            // Actualización reactiva optimista local (0ms en UI)
@@ -489,7 +515,11 @@ function useAssetForm(globalConfig) {
                    assets.value[localIdx].status = editAsset.value.status;
                    assets.value[localIdx].lastResult = form.value.result || editAsset.value.lastResult;
                    assets.value[localIdx].responsible = editAsset.value.responsible;
+                   assets.value[localIdx].factory = editAsset.value.factory;
+                   assets.value[localIdx].project = editAsset.value.project;
                    assets.value[localIdx].quadrant = editAsset.value.quadrant;
+                   assets.value[localIdx].colorCode = editAsset.value.colorCode;
+                   assets.value[localIdx].description = editAsset.value.description;
                    if (form.value.measurements) {
                        assets.value[localIdx].measurements = JSON.parse(JSON.stringify(form.value.measurements));
                    }
@@ -501,7 +531,18 @@ function useAssetForm(globalConfig) {
                }
            }
 
-           const payload = { asset: JSON.parse(JSON.stringify(editAsset.value)), formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
+           const assetPayload = {
+               ...JSON.parse(JSON.stringify(editAsset.value)),
+               status: editAsset.value.status,
+               responsible: editAsset.value.responsible,
+               factory: editAsset.value.factory,
+               project: editAsset.value.project,
+               quadrant: editAsset.value.quadrant,
+               colorCode: editAsset.value.colorCode,
+               description: editAsset.value.description
+           };
+
+           const payload = { asset: assetPayload, formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
            const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
            if(r.success) { 
                releasePresence(editAsset.value?.controlNo);
@@ -648,27 +689,14 @@ function useAssetForm(globalConfig) {
        else { performSave(); }
     };
 
-    // 4. WATCHERS
-    watch(() => editAsset.value?.status, (newStatus) => {
-        const s = (newStatus || '').toUpperCase().trim();
-        if (['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO', 'MOVIMIENTO', 'INSTALACIÓN', 'INSTALACION'].includes(s) || isCurrentStatusAdmin.value) {
-            for (const key in FIELD_MAP) {
-                form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A';
-            }
+    // 4. WATCHERS Y HANDLERS DE MODO DE MEDICIÓN
+    const onAuditModeToggle = () => {
+        if (isNewAsset.value) return;
+        if (!doesCurrentStatusRequireMeasurements.value) {
+            isAuditMode.value = false;
+            return;
         }
-    });
-
-    watch(() => editAsset.value.quadrant, (val) => {
-        if(!val) { currentThemeColor.value = '#005565'; return; }
-        const search = String(val).toUpperCase().trim();
-        const sector = catalogs.value.sectors.find(s => s.id.toUpperCase() === search);
-        currentThemeColor.value = sector ? sector.hex : '#005565';
-    });
-
-    watch(isAuditMode, (newVal) => {
-        if (isNewAsset.value) return; 
-
-        if (newVal === true) {
+        if (isAuditMode.value === true) {
             const cleanMeas = {};
             for (const key in FIELD_MAP) {
                 if (FIELD_MAP[key].type === 'scientific') {
@@ -683,13 +711,53 @@ function useAssetForm(globalConfig) {
             form.value.validationDate = new Date().toISOString().split('T')[0];
         } else {
             if (editAsset.value.measurements) {
-                 form.value.measurements = JSON.parse(JSON.stringify(editAsset.value.measurements));
+                form.value.measurements = JSON.parse(JSON.stringify(editAsset.value.measurements));
             }
             form.value.comments = editAsset.value.comments || '';
-             if(editAsset.value.lastDate) {
-                 form.value.validationDate = editAsset.value.lastDate;
-             }
+            if (editAsset.value.lastDate) {
+                form.value.validationDate = editAsset.value.lastDate;
+            }
         }
+    };
+
+    const onStatusChange = () => {
+        if (!editAsset.value) return;
+        if (!doesCurrentStatusRequireMeasurements.value) {
+            isAuditMode.value = false;
+            for (const key in FIELD_MAP) {
+                form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? { mantissa: 'N/A', exponent: 'N/A' } : 'N/A';
+            }
+        } else {
+            if (!isAuditMode.value) {
+                isAuditMode.value = true;
+                onAuditModeToggle();
+            } else {
+                // Verificar si las mediciones actuales están todas en N/A (ej. al cambiar desde BAJA)
+                let allCurrentNA = true;
+                for (const key in FIELD_MAP) {
+                    const val = form.value.measurements ? form.value.measurements[key] : null;
+                    if (val !== undefined && val !== null) {
+                        const valIsNA = (typeof val === 'string' && val === 'N/A') || (typeof val === 'object' && val.mantissa === 'N/A');
+                        if (!valIsNA) {
+                            allCurrentNA = false;
+                            break;
+                        }
+                    }
+                }
+                if (allCurrentNA) {
+                    for (const key in FIELD_MAP) {
+                        form.value.measurements[key] = FIELD_MAP[key].type === 'scientific' ? { mantissa: null, exponent: null } : null;
+                    }
+                }
+            }
+        }
+    };
+
+    watch(() => editAsset.value.quadrant, (val) => {
+        if(!val) { currentThemeColor.value = '#005565'; return; }
+        const search = String(val).toUpperCase().trim();
+        const sector = catalogs.value.sectors.find(s => s.id.toUpperCase() === search);
+        currentThemeColor.value = sector ? sector.hex : '#005565';
     });
 
     watch(view, (newVal, oldVal) => {
@@ -707,8 +775,8 @@ function useAssetForm(globalConfig) {
     // 5. EXPORTAR TODO AL MAIN
     return {
         editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
-        sectorColor, sectorLabel, isCurrentStatusAdmin, isStatusBaja, activeFields, isAssetFailed, formatLimit,
-        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, prepareForMeasurementCapture, submit, performSave,
+        sectorColor, sectorLabel, doesCurrentStatusRequireMeasurements, isCurrentStatusAdmin, isStatusBaja, activeFields, isAssetFailed, formatLimit,
+        isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, prepareForMeasurementCapture, onAuditModeToggle, onStatusChange, submit, performSave,
         releasePresence
     };
 }

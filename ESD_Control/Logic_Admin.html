@@ -39,9 +39,9 @@ function useAdmin(globalConfig) {
     const editingCatalogOriginalId = ref('');
     const newCatalog = ref({ category:'SECTOR', id:'', label:'', color:'#000000', config: { startRow: 8, columns: [], required: true, showOnOpen: true, showOnClose: false } });
     
-    const newStatus = ref({ name:'', showCard: false, color: '#64748b', isAdmin: false });
+    const newStatus = ref({ name:'', showCard: false, color: '#64748b', isAdmin: false, requiresMeasurements: true });
     const ruleModal = ref({ open:false, isEdit:false, data:{}, tempActive:{} });
-    const editModal = ref({ open:false, oldValue:'', newValue:{ name:'', showCard: false, color: '#64748b', isAdmin: false } });
+    const editModal = ref({ open:false, oldValue:'', newValue:{ name:'', showCard: false, color: '#64748b', isAdmin: false, requiresMeasurements: true } });
     const iconSelectorOpen = ref(false);
 
     // ==========================================
@@ -299,13 +299,13 @@ function useAdmin(globalConfig) {
             return Swal.fire("Estado Duplicado", `El estado "${statusName}" ya existe en el sistema.`, "warning");
         }
 
-        const newObj = { name: statusName, showCard: !!newStatus.value.showCard, color: newStatus.value.color || '#64748b', isAdmin: !!newStatus.value.isAdmin };
+        const newObj = { name: statusName, showCard: !!newStatus.value.showCard, color: newStatus.value.color || '#64748b', isAdmin: !!newStatus.value.isAdmin, requiresMeasurements: newStatus.value.requiresMeasurements !== false };
         if (!matrixDB.value.validationReasons) matrixDB.value.validationReasons = [];
         const prevReasons = JSON.parse(JSON.stringify(matrixDB.value.validationReasons));
 
         // 🚀 Renderizado Optimista (< 50ms)
         matrixDB.value.validationReasons.push(newObj);
-        newStatus.value = { name: '', showCard: false, color: '#64748b', isAdmin: false };
+        newStatus.value = { name: '', showCard: false, color: '#64748b', isAdmin: false, requiresMeasurements: true };
         if (persistLocalStore) persistLocalStore();
         Toast.fire({ icon: 'success', title: 'Estado Agregado' });
 
@@ -348,7 +348,15 @@ function useAdmin(globalConfig) {
         });
     };
 
-    const openEditStateModal = (sObj) => { editModal.value = { open: true, oldValue: sObj.name, newValue: JSON.parse(JSON.stringify(sObj)) }; };
+    const openEditStateModal = (sObj) => {
+        const clone = JSON.parse(JSON.stringify(sObj));
+        if (clone.requiresMeasurements === undefined) {
+            clone.requiresMeasurements = !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(String(clone.name || '').toUpperCase().trim());
+        } else {
+            clone.requiresMeasurements = clone.requiresMeasurements === true || String(clone.requiresMeasurements).toLowerCase() === 'true';
+        }
+        editModal.value = { open: true, oldValue: sObj.name, newValue: clone };
+    };
 
     const confirmStateUpdate = async () => { 
         if (submitting.value) return;
@@ -357,6 +365,7 @@ function useAdmin(globalConfig) {
             return Swal.fire("Campo Requerido", "El nombre del estado no puede estar vacío.", "warning");
         }
         editModal.value.newValue.name = newName;
+        editModal.value.newValue.requiresMeasurements = editModal.value.newValue.requiresMeasurements !== false;
         const oldName = editModal.value.oldValue;
         const updatedObj = JSON.parse(JSON.stringify(editModal.value.newValue));
         const prevReasons = JSON.parse(JSON.stringify(matrixDB.value.validationReasons || []));

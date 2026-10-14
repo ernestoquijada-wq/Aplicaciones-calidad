@@ -169,7 +169,8 @@ function adminAddMatrixOption(obj) {
         return Utils.buildResponse(false, "El estado ya existe.");
       }
     }
-    sh.appendRow(["VALIDATION_REASON", upperVal, obj.showCard || false, obj.color || '#64748b', obj.isAdmin || false]);
+    const reqMeas = obj.requiresMeasurements !== undefined ? Boolean(obj.requiresMeasurements) : !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(upperVal);
+    sh.appendRow(["VALIDATION_REASON", upperVal, obj.showCard || false, obj.color || '#64748b', obj.isAdmin || false, reqMeas]);
     SpreadsheetApp.flush();
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
     return Utils.buildResponse(true);
@@ -219,10 +220,13 @@ function adminUpdateMatrixOption(oldVal, obj) {
     const sh = ss.getSheetByName(CONF.SHEET_MATRIX);
     if (!sh) return Utils.buildResponse(false, "Hoja de matriz no encontrada.");
     const targetOld = String(oldVal).trim().toUpperCase();
+    const upperNew = String(obj.name).trim().toUpperCase();
+    const reqMeas = obj.requiresMeasurements !== undefined ? Boolean(obj.requiresMeasurements) : !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(upperNew);
     const data = sh.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]).toUpperCase() === "VALIDATION_REASON" && String(data[i][1]).trim().toUpperCase() === targetOld) {
-        sh.getRange(i + 1, 1, 1, 5).setValues([["VALIDATION_REASON", String(obj.name).trim().toUpperCase(), obj.showCard || false, obj.color || '#64748b', obj.isAdmin || false]]);
+        sh.getRange(i + 1, 1, 1, 6).setValues([["VALIDATION_REASON", upperNew, obj.showCard || false, obj.color || '#64748b', obj.isAdmin || false, reqMeas]]);
+        SpreadsheetApp.flush();
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateCatalogs();
         return Utils.buildResponse(true);
       }

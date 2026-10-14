@@ -56,7 +56,7 @@
       <div class="card p-8 shadow-sm border-t-4" :style="{borderTopColor: currentThemeColor}">
           <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i class="fas fa-info-circle"></i> {{ $t('form.info_gen') }}</h3>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-             <div><label class="lbl">{{ $t('form.status') }}</label><select v-model="editAsset.status" class="input-std font-bold"><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
+             <div><label class="lbl">{{ $t('form.status') }}</label><select v-model="editAsset.status" @change="onStatusChange" class="input-std font-bold"><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
              <div class="md:col-span-1"><label class="lbl">{{ $t('form.resp') }}</label><select v-model="editAsset.responsible" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{ a.label ? translateDynamic(a.label, 'auditors') : a.id }}</option></select></div>
              <div><label class="lbl">{{ $t('form.factory') }}</label><select v-model="editAsset.factory" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="f in catalogs.factories" :value="f.id">{{ f.label ? translateDynamic(f.label, 'factories') : translateDynamic(f.id, 'factories') }}</option></select></div>
              <div><label class="lbl">{{ $t('form.project') }}</label><select v-model="editAsset.project" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="p in catalogs.projects" :value="p.id">{{ p.label ? translateDynamic(p.label, 'projects') : translateDynamic(p.id, 'projects') }}</option></select></div>
@@ -75,52 +75,60 @@
           </div>
       </div>
 
-      <div v-if="editAsset.description" id="measurements-card" class="card p-8 shadow-md transition-all duration-500" :class="isAuditMode ? 'ring-4 ring-[#005565]/10 border-[#005565] shadow-2xl scale-[1.01]' : 'border-slate-200'">
+      <div v-if="editAsset.description" id="measurements-card" class="card p-8 shadow-md transition-all duration-500" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-50/60 opacity-90' : (isAuditMode ? 'ring-4 ring-[#005565]/10 border-[#005565] shadow-2xl scale-[1.01]' : 'border-slate-200')">
          <div class="flex justify-between items-center mb-8 pb-4 border-b border-slate-100">
            <h3 class="font-black text-xl text-slate-800 flex items-center gap-3"><i class="fas fa-microscope text-[#005565]"></i> {{ $t('form.tech_readings') }}</h3>
-           <label class="flex items-center gap-3 cursor-pointer bg-slate-50 px-4 py-2 rounded-full border border-slate-200 hover:bg-white hover:shadow-sm transition select-none"><input type="checkbox" v-model="isAuditMode" class="accent-[#005565] w-4 h-4"> <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{{ $t('form.enable_edit') }}</span></label>
+           <div class="flex items-center gap-2">
+             <span v-if="!doesCurrentStatusRequireMeasurements" class="text-[10px] font-black px-3 py-1.5 rounded-full bg-slate-200 text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+               <i class="fas fa-lock text-[9px]"></i> {{ $t('admin.status_sec.no_meas_badge') || 'Omite Mediciones (N/A)' }}
+             </span>
+             <label v-else class="flex items-center gap-3 cursor-pointer bg-slate-50 px-4 py-2 rounded-full border border-slate-200 hover:bg-white hover:shadow-sm transition select-none">
+               <input type="checkbox" v-model="isAuditMode" @change="onAuditModeToggle" class="accent-[#005565] w-4 h-4">
+               <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{{ $t('form.enable_edit') }}</span>
+             </label>
+           </div>
          </div>
 
          <div class="space-y-8">
             <div class="flex flex-col md:flex-row gap-6 items-center p-6 rounded-2xl border border-[#004455] bg-[#005565] shadow-md">
-               <div class="flex-1 w-full"><label class="text-[10px] uppercase font-bold text-white/70 tracking-wider mb-2 block">{{ $t('form.verif_date') }}</label><input type="date" v-model="form.validationDate" :disabled="!isAuditMode" class="input-std cursor-pointer bg-white/10 text-white border-white/20 focus:ring-white/30"></div>
+               <div class="flex-1 w-full"><label class="text-[10px] uppercase font-bold text-white/70 tracking-wider mb-2 block">{{ $t('form.verif_date') }}</label><input type="date" v-model="form.validationDate" :disabled="!isAuditMode && !isCurrentStatusAdmin" class="input-std cursor-pointer bg-white/10 text-white border-white/20 focus:ring-white/30"></div>
             </div>
 
-            <div v-for="field in activeFields" :key="field.key" class="transition-all duration-300">
+            <div v-for="field in activeFields" :key="field.key" class="transition-all duration-300" :class="{'opacity-60 select-none': !doesCurrentStatusRequireMeasurements}">
                <div class="mb-2 px-1">
                   <div class="flex justify-between items-center">
                       <span class="font-bold text-sm text-slate-700">{{ translateDynamic(field.label, 'measurements') }}</span>
-                      <span v-if="getAlert(field).message" class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse" :class="getAlert(field).class">{{ getAlert(field).message }}</span>
+                      <span v-if="doesCurrentStatusRequireMeasurements && getAlert(field).message" class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse" :class="getAlert(field).class">{{ getAlert(field).message }}</span>
                   </div>
                   <p class="text-xs font-black text-[#005565] mt-1 tracking-wide">{{ $t('form.limit') }}: {{ formatLimit(field) }}</p>
                </div>
 
-               <div class="sci-group" @click="activeInput = field.key" :class="getAlert(field).borderClass || (activeInput === field.key ? 'border-[#005565] ring-4 ring-[#005565]/5 shadow-lg' : 'border-slate-200')">
-                   <div v-if="isNA(field.key)" class="flex-1 flex items-center justify-center bg-slate-100">
+               <div class="sci-group" @click="doesCurrentStatusRequireMeasurements && (activeInput = field.key)" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-100' : (getAlert(field).borderClass || (activeInput === field.key ? 'border-[#005565] ring-4 ring-[#005565]/5 shadow-lg' : 'border-slate-200'))">
+                   <div v-if="!doesCurrentStatusRequireMeasurements || isNA(field.key)" class="flex-1 flex items-center justify-center bg-slate-100">
                        <span class="text-xs font-bold text-slate-400 tracking-widest">{{ $t('form.na') }}</span>
                    </div>
                    <div v-else class="flex-1 flex w-full">
                        <div v-if="field.type === 'scientific'" class="flex-1 flex">
-                          <input type="number" step="0.1" v-model="form.measurements[field.key].mantissa" :disabled="!isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-mantissa" placeholder="0.0">
+                          <input type="number" step="0.1" v-model="form.measurements[field.key].mantissa" :disabled="!doesCurrentStatusRequireMeasurements || !isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-mantissa" placeholder="0.0">
                           <div class="sci-x10">x 10</div>
-                          <input type="number" v-model="form.measurements[field.key].exponent" :disabled="!isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-exp" placeholder="E" oninput="if(this.value.length > 2) this.value = this.value.slice(0, 2);">
+                          <input type="number" v-model="form.measurements[field.key].exponent" :disabled="!doesCurrentStatusRequireMeasurements || !isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-exp" placeholder="E" oninput="if(this.value.length > 2) this.value = this.value.slice(0, 2);">
                        </div>
                        <div v-else class="flex-1">
-                            <input type="number" step="0.1" v-model="form.measurements[field.key]" :disabled="!isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-mantissa w-full text-left pl-4" :placeholder="$t('form.real_value')">
+                            <input type="number" step="0.1" v-model="form.measurements[field.key]" :disabled="!doesCurrentStatusRequireMeasurements || !isAuditMode" @focus="activeInput=field.key" @blur="activeInput=null" class="sci-mantissa w-full text-left pl-4" :placeholder="$t('form.real_value')">
                        </div>
                    </div>
-                   <div class="na-btn" :class="{'active': isNA(field.key)}" @click="toggleNA(field.key)" :title="$t('form.na_hint')">N/A</div>
+                   <div class="na-btn" :class="{'active': !doesCurrentStatusRequireMeasurements || isNA(field.key), 'opacity-50 cursor-not-allowed pointer-events-none': !doesCurrentStatusRequireMeasurements || !isAuditMode}" @click="toggleNA(field.key)" :title="$t('form.na_hint')">N/A</div>
                </div>
 
                <transition name="slide-down">
-                  <div v-if="isAuditMode && field.recText && (activeInput === field.key || getAlert(field).showRec)" class="mt-3 bg-[#fffbeb] border-l-[6px] border-[#f59e0b] p-4 rounded-r-lg shadow-sm flex items-start gap-4">
+                  <div v-if="doesCurrentStatusRequireMeasurements && isAuditMode && field.recText && (activeInput === field.key || getAlert(field).showRec)" class="mt-3 bg-[#fffbeb] border-l-[6px] border-[#f59e0b] p-4 rounded-r-lg shadow-sm flex items-start gap-4">
                       <div class="bg-[#fcd34d] text-white w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5"><i class="fas fa-lightbulb text-xs"></i></div>
                       <div><p class="text-[9px] font-black text-[#92400e] uppercase mb-1 tracking-widest">{{ $t('form.tech_rec') }}</p><p class="text-xs text-[#b45309] font-medium leading-relaxed">{{ field.recText }}</p></div>
                    </div>
                </transition>
             </div>
             
-            <div class="border-t pt-6"><label class="lbl">{{ $t('form.obs') }}</label><textarea v-model="form.comments" :disabled="!isAuditMode" class="input-std h-24 resize-none w-full" :placeholder="$t('form.obs_ph')"></textarea></div>
+            <div class="border-t pt-6"><label class="lbl">{{ $t('form.obs') }}</label><textarea v-model="form.comments" :disabled="!isAuditMode && !isCurrentStatusAdmin" class="input-std h-24 resize-none w-full" :placeholder="$t('form.obs_ph')"></textarea></div>
          </div>
       </div>
       

@@ -58,7 +58,7 @@ function uploadTicketFiles(files, ticketId, assetData) {
   } catch (e) { return { success: false, error: e.toString() }; }
 }
 
-function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, measurements) {
+function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, measurements, assetInfo) {
   try {
     const shAssets = ss.getSheetByName(CONF.SHEET_ASSETS);
     if (!shAssets) return false;
@@ -71,6 +71,31 @@ function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, m
         const rowNum = i + 1;
         const numCols = Math.max(shAssets.getLastColumn(), 20);
         const rowValues = shAssets.getRange(rowNum, 1, 1, numCols).getValues()[0];
+
+        // Actualizar campos de Información General si vienen en assetInfo
+        if (assetInfo && typeof assetInfo === 'object') {
+          if (assetInfo.quadrant !== undefined && String(assetInfo.quadrant).trim() !== "") {
+            rowValues[1] = String(assetInfo.quadrant).trim().toUpperCase();
+          }
+          if (assetInfo.colorCode !== undefined && String(assetInfo.colorCode).trim() !== "") {
+            rowValues[2] = String(assetInfo.colorCode).trim();
+          }
+          if (assetInfo.description !== undefined && String(assetInfo.description).trim() !== "") {
+            rowValues[3] = String(assetInfo.description).trim().toUpperCase();
+          }
+          if (assetInfo.project !== undefined && String(assetInfo.project).trim() !== "") {
+            rowValues[4] = String(assetInfo.project).trim();
+          }
+          if (assetInfo.factory !== undefined && String(assetInfo.factory).trim() !== "") {
+            rowValues[5] = String(assetInfo.factory).trim();
+          }
+          if (assetInfo.status && String(assetInfo.status).trim() !== "") {
+            rowValues[6] = String(assetInfo.status).trim();
+          }
+          if (assetInfo.responsible !== undefined && String(assetInfo.responsible).trim() !== "") {
+            rowValues[18] = String(assetInfo.responsible).trim();
+          }
+        }
 
         if (newStatus && String(newStatus).trim()) {
           rowValues[6] = String(newStatus).trim();
@@ -104,7 +129,9 @@ function updateAssetStatusInSheet(ss, assetId, newStatus, newResult, comments, m
         const todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd-MMM-yy");
         rowValues[16] = todayStr;
 
-        const modColIndex = headers.indexOf('LastModified');
+        const modColIndex = (typeof DataRepository !== 'undefined')
+          ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+          : headers.indexOf('LastModified');
         if (modColIndex !== -1 && modColIndex < rowValues.length) {
           rowValues[modColIndex] = new Date().toISOString();
         }
@@ -175,7 +202,7 @@ function saveTicketRecord(payload) {
             dictamen: "RE-NOTIFICACIÓN DE FALLA (SIGUE ABIERTO)"
           });
           sh.getRange(existingRowIndex, 4, 1, 2).setValues([["ABIERTO", JSON.stringify(oldData)]]);
-          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
           sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
           if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
           if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
@@ -207,8 +234,8 @@ function saveTicketRecord(payload) {
         const initialData = { apertura: payload.formData, intentos_medicion: [] };
         sh.appendRow([ticketId, payload.assetId, dateStr, "ABIERTO", JSON.stringify(initialData)]);
         
-        // Sincronizar inmediatamente el resultado a FALLA en Col P (sin tocar Col G)
-        updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+        // Sincronizar inmediatamente el resultado a FALLA en Col P y los campos de Información General
+        updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
         
         sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
@@ -238,11 +265,11 @@ function saveTicketRecord(payload) {
           if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
         }
         
-        // Sincronizar el estatus en Col P de DB_Assets según dictamen de cierre
+        // Sincronizar el estatus en Col P de DB_Assets y los campos de Información General según dictamen de cierre
         if (payload.passed) {
-          updateAssetStatusInSheet(ss, payload.assetId, null, "CUMPLE", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "CUMPLE", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
         } else {
-          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
         }
 
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();

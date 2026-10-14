@@ -94,11 +94,19 @@ function getData() {
         const data = shMatrix.getDataRange().getValues();
         for(let i=1; i<data.length; i++) { 
           if(String(data[i][0]).toUpperCase() === "VALIDATION_REASON") {
+             const stName = clean(data[i][1]);
+             const stUpper = stName.toUpperCase();
+             const rawReqMeas = data[i][5];
+             const defaultReqMeas = !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(stUpper);
+             const requiresMeasurements = (rawReqMeas === "" || rawReqMeas === null || rawReqMeas === undefined)
+               ? defaultReqMeas
+               : (rawReqMeas === true || String(rawReqMeas).toLowerCase() === 'true');
              matrixDB.validationReasons.push({
-                 name: clean(data[i][1]),
+                 name: stName,
                  showCard: data[i][2] === true || String(data[i][2]).toLowerCase() === 'true',
                  color: clean(data[i][3]) || '#64748b',
-                 isAdmin: data[i][4] === true || String(data[i][4]).toLowerCase() === 'true'
+                 isAdmin: data[i][4] === true || String(data[i][4]).toLowerCase() === 'true',
+                 requiresMeasurements: requiresMeasurements
              });
           } 
         }
@@ -192,7 +200,9 @@ function getData() {
     if(shAssets) {
       const data = shAssets.getDataRange().getValues();
       const headers = data[0] || [];
-      const estadoColIndex = headers.indexOf("Estado_Registro");
+      const estadoColIndex = (typeof DataRepository !== 'undefined')
+        ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+        : headers.indexOf("Estado_Registro");
 
       for(let i=1; i<data.length; i++) {
         const r = data[i];
@@ -319,15 +329,26 @@ function saveNewAsset(payload) {
     const safeStatus = (a.status && String(a.status).trim()) ? String(a.status).trim() : "Validación";
     const safeResult = (typeof Utils !== 'undefined' && Utils.normalizeStatusResult) ? Utils.normalizeStatusResult(f.result) : (f.result || "CUMPLE");
 
+    const headers = data[0] || [];
+    const estadoColIndex = (typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+      : headers.indexOf("Estado_Registro");
+    const modColIndex = (typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+      : headers.indexOf("LastModified");
+
     const row = [
       newId, a.quadrant, a.colorCode || CONF.DEFAULT_COLOR, a.description, a.project, a.factory, safeStatus,
       chk(m.surfaceRes?.mantissa), chk(m.surfaceRes?.exponent), chk(m.floorMat?.mantissa), chk(m.floorMat?.exponent),
       chk(m.elecRes), chk(m.impedance), chk(m.voltage), chk(m.jack),
       safeResult, vDateStr, nDateStr, a.responsible || "", f.comments||""
     ];
+    while (row.length < headers.length) row.push("");
+    if (estadoColIndex !== -1) row[estadoColIndex] = "ACTIVO";
+    if (modColIndex !== -1) row[modColIndex] = new Date().toISOString();
 
     sh.appendRow(row);
-    stampLastModified(sh, sh.getLastRow());
+    if (modColIndex === -1) stampLastModified(sh, sh.getLastRow());
     logAudit(ss, newId, f.result, { ...m, comments: f.comments, nextDate: nDateStr, validationDate: vDateStr });
     
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
@@ -352,19 +373,60 @@ function processAudit(payload) {
     if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
 
     const { formData, asset } = payload;
-    const r = asset.rowIndex;
     const numCols = Math.max(sh.getLastColumn(), 20);
-    const rowValues = sh.getRange(r, 1, 1, numCols).getValues()[0];
     const headers = sh.getRange(1, 1, 1, numCols).getValues()[0];
+    const targetControlNo = String(asset.controlNo || '').trim().toUpperCase();
 
-    rowValues[1] = asset.quadrant;
-    rowValues[2] = asset.colorCode;
+    let r = Number(asset.rowIndex);
+    let rowValues = null;
+
+    if (r >= 2 && r <= sh.getLastRow()) {
+      const candidateRow = sh.getRange(r, 1, 1, numCols).getValues()[0];
+      if (String(candidateRow[0] || '').trim().toUpperCase() === targetControlNo) {
+        rowValues = candidateRow;
+      }
+    }
+
+    // Fallback: si rowIndex se desfasó o no coincide con controlNo, buscar la fila exacta por ID
+    if (!rowValues && targetControlNo) {
+      const allIds = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
+      for (let idx = 1; idx < allIds.length; idx++) {
+        if (String(allIds[idx][0] || '').trim().toUpperCase() === targetControlNo) {
+          r = idx + 1;
+          rowValues = sh.getRange(r, 1, 1, numCols).getValues()[0];
+          break;
+        }
+      }
+    }
+
+    if (!rowValues) {
+      return Utils.buildResponse(false, "No se encontró el activo " + targetControlNo + " en la base de datos maestra.");
+    }
+
+    // Actualizar todos los campos de INFORMACIÓN GENERAL en DB_Assets
+    if (asset.quadrant !== undefined && String(asset.quadrant).trim() !== "") {
+      rowValues[1] = String(asset.quadrant).trim().toUpperCase();
+    }
+    if (asset.colorCode !== undefined && String(asset.colorCode).trim() !== "") {
+      rowValues[2] = String(asset.colorCode).trim();
+    }
+    if (asset.description !== undefined && String(asset.description).trim() !== "") {
+      rowValues[3] = String(asset.description).trim().toUpperCase();
+    }
+    if (asset.project !== undefined && String(asset.project).trim() !== "") {
+      rowValues[4] = String(asset.project).trim();
+    }
+    if (asset.factory !== undefined && String(asset.factory).trim() !== "") {
+      rowValues[5] = String(asset.factory).trim();
+    }
     if (asset.status && String(asset.status).trim()) {
       rowValues[6] = String(asset.status).trim();
     } else if (!rowValues[6]) {
       rowValues[6] = "Validación";
     }
-    rowValues[18] = asset.responsible;
+    if (asset.responsible !== undefined && String(asset.responsible).trim() !== "") {
+      rowValues[18] = String(asset.responsible).trim();
+    }
 
     let vDateStr = "";
     let nDateStr = "";
@@ -386,7 +448,7 @@ function processAudit(payload) {
         ? Utils.normalizeStatusResult(formData.result) 
         : String(formData.result || '').toUpperCase().trim();
         
-            if (normalizedRes === 'FALLA' || normalizedRes === 'NO CUMPLE') {
+      if (normalizedRes === 'FALLA' || normalizedRes === 'NO CUMPLE') {
         rowValues[15] = "FALLA";
       } else if (normalizedRes === 'CUMPLE') {
         rowValues[15] = "CUMPLE";
@@ -408,18 +470,20 @@ function processAudit(payload) {
       rowValues[16] = vDateStr;
       rowValues[17] = nDateStr;
       rowValues[19] = formData.comments || "";
+    }
 
-      const modColIndex = headers.indexOf('LastModified');
-      if (modColIndex !== -1 && modColIndex < rowValues.length) {
-        rowValues[modColIndex] = new Date().toISOString();
-      }
+    const modColIndex = (typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+      : headers.indexOf('LastModified');
+    if (modColIndex !== -1 && modColIndex < rowValues.length) {
+      rowValues[modColIndex] = new Date().toISOString();
     }
 
     // Escritura única por lote para toda la fila
     sh.getRange(r, 1, 1, rowValues.length).setValues([rowValues]);
 
     // Si el activo se da de BAJA, auto-cerrar cualquier ticket abierto asociado
-    const isBajaAction = String(asset.status || '').toUpperCase().trim() === 'BAJA' || (typeof normalizedRes !== 'undefined' && normalizedRes === 'BAJA');
+    const isBajaAction = String(asset.status || '').toUpperCase().trim() === 'BAJA' || (formData && String(formData.result || '').toUpperCase().trim() === 'BAJA');
     if (isBajaAction) {
       try {
         const shTkts = ss.getSheetByName(CONF.SHEET_TICKETS);
@@ -446,7 +510,6 @@ function processAudit(payload) {
       }
     }
 
-
     if (formData && formData.isAudit) {
       logAudit(ss, asset.controlNo, formData.result, { ...m, comments: formData.comments, nextDate: nDateStr, validationDate: vDateStr });
       
@@ -456,13 +519,14 @@ function processAudit(payload) {
       }
     }
 
+    SpreadsheetApp.flush();
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
     if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
     if (asset && asset.controlNo && typeof PresenceManager !== 'undefined') {
       const activeUser = Session.getActiveUser().getEmail() || (formData && formData.auditor) || '';
       PresenceManager.release(asset.controlNo, activeUser);
     }
-    return Utils.buildResponse(true);
+    return Utils.buildResponse(true, { nextDate: nDateStr, validationDate: vDateStr });
   };
 
   if (typeof withScriptLock !== 'undefined') {
@@ -479,7 +543,9 @@ function autoConfigurarBaseDatos() {
     const numCols = sheet.getLastColumn();
     const headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
     
-    let estadoColIndex = headers.indexOf("Estado_Registro");
+    let estadoColIndex = (typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+      : headers.indexOf("Estado_Registro");
     if (estadoColIndex === -1) {
       const newColIndex = numCols + 1;
       sheet.getRange(1, newColIndex).setValue("Estado_Registro");
@@ -504,7 +570,9 @@ function adminDeleteAsset(id) {
     if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
     const data = sh.getDataRange().getValues();
     const headers = data[0];
-    const estadoColIndex = headers.indexOf("Estado_Registro") + 1;
+    const estadoColIndex = ((typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+      : headers.indexOf("Estado_Registro")) + 1;
     if (estadoColIndex === 0) return Utils.buildResponse(false, "Columna de Estado_Registro no encontrada.");
 
     for (let i = 1; i < data.length; i++) {

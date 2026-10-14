@@ -222,7 +222,21 @@
 
       const statusDB = computed(() => {
           if (!matrixDB.value || !matrixDB.value.validationReasons) return [];
-          return matrixDB.value.validationReasons.map(item => typeof item === 'string' ? { name: item, showCard: false, color: '#64748b', isAdmin: false } : item);
+          return matrixDB.value.validationReasons.map(item => {
+              if (typeof item === 'string') {
+                  const upper = item.toUpperCase().trim();
+                  const isBajaLike = ['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(upper);
+                  return { name: item, showCard: false, color: '#64748b', isAdmin: isBajaLike, requiresMeasurements: !isBajaLike };
+              }
+              const upper = String(item.name || '').toUpperCase().trim();
+              const defaultReqMeas = !['BAJA', 'SCRAP', 'OBSOLETO', 'DESINCORPORADO'].includes(upper);
+              return {
+                  ...item,
+                  requiresMeasurements: item.requiresMeasurements !== undefined
+                      ? (item.requiresMeasurements === true || String(item.requiresMeasurements).toLowerCase() === 'true')
+                      : defaultReqMeas
+              };
+          });
       });
 
       // Estado y acción de sincronización manual rápida

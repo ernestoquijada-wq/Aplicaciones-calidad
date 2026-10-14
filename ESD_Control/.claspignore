@@ -1,6 +1,7 @@
-# Ignorar scripts de automatización local y documentación
+# Ignorar scripts de automatizacion local, JSON de entornos y documentacion
 **/*.ps1
 **/*.md
+environments.json
 .git/**
 node_modules/**
 

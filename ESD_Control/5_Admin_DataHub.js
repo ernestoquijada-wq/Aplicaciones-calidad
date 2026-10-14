@@ -203,11 +203,14 @@ function adminFetchExternalData(url) {
     const sh = ss.getSheets()[0];
     const data = sh.getDataRange().getValues();
     if (data.length < 2) throw new Error("La hoja está vacía.");
-    const headers = data[0].map(h => String(h).trim().toUpperCase());
+    const headers = data[0].map(h => (typeof DataRepository !== 'undefined') ? DataRepository.normalizeKey(h) : String(h).trim().toUpperCase());
     let results = [];
     for (let i = 1; i < data.length; i++) {
       let obj = {};
       headers.forEach((h, idx) => { obj[h] = data[i][idx]; });
+      if (typeof DataRepository !== 'undefined') {
+        obj = DataRepository.sanitizeRowObject(obj);
+      }
       results.push(obj);
     }
     return { success: true, data: results };
@@ -241,7 +244,13 @@ function bulkProcessAssets(ss, data, isUpdate) {
   const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
   const dbData = sh.getDataRange().getValues();
   const headers = dbData[0];
-  const estadoRegCol = headers.indexOf("Estado_Registro") + 1;
+  const estadoRegIdx = (typeof DataRepository !== 'undefined')
+    ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+    : headers.indexOf("Estado_Registro");
+  const estadoRegCol = estadoRegIdx + 1;
+  const modColIdx = (typeof DataRepository !== 'undefined')
+    ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+    : headers.indexOf("LastModified");
 
   if (isUpdate) {
     // Optimización O(1) con Map y actualización en memoria por lotes (Batch I/O)
@@ -252,7 +261,8 @@ function bulkProcessAssets(ss, data, isUpdate) {
     }
 
     let modified = false;
-    data.forEach(row => {
+    data.forEach(rawRow => {
+      const row = (typeof DataRepository !== 'undefined') ? DataRepository.sanitizeRowObject(rawRow) : rawRow;
       const id = String(row.CONTROL_NO || row.ID || "").trim().toUpperCase();
       if (!id || !idMap.has(id)) return;
       const i = idMap.get(id);
@@ -268,18 +278,23 @@ function bulkProcessAssets(ss, data, isUpdate) {
       if (row.ESTADO_ACTUAL !== undefined && row.ESTADO_ACTUAL !== "") { dbData[i][6] = row.ESTADO_ACTUAL; modified = true; }
       if (row.RESPONSABLE !== undefined && row.RESPONSABLE !== "") { dbData[i][18] = row.RESPONSABLE; modified = true; }
       if (row.COMENTARIOS !== undefined && row.COMENTARIOS !== "") { dbData[i][19] = row.COMENTARIOS; modified = true; }
+      if (modified && modColIdx !== -1 && modColIdx < dbData[i].length) {
+        dbData[i][modColIdx] = new Date().toISOString();
+      }
     });
 
     if (modified && dbData.length > 1) {
       sh.getRange(2, 1, dbData.length - 1, headers.length).setValues(dbData.slice(1));
     }
   } else {
-    const rowsToInject = data.map(r => {
+    const rowsToInject = data.map(rawRow => {
+      const r = (typeof DataRepository !== 'undefined') ? DataRepository.sanitizeRowObject(rawRow) : rawRow;
       let newRow = new Array(headers.length).fill("");
       newRow[0] = r.CONTROL_NO || r.ID; newRow[1] = r.CUADRANTE; newRow[2] = r.COLOR_CODE || CONF.DEFAULT_COLOR;
       newRow[3] = r.DESCRIPCION; newRow[4] = r.PROYECTO; newRow[5] = r.FABRICA; newRow[6] = r.ESTADO_ACTUAL || "ACTIVO";
       newRow[16] = new Date(); newRow[18] = r.RESPONSABLE; newRow[19] = r.COMENTARIOS;
       if (estadoRegCol > 0) newRow[estadoRegCol - 1] = "ACTIVO";
+      if (modColIdx !== -1 && modColIdx < newRow.length) newRow[modColIdx] = new Date().toISOString();
       return newRow;
     });
     if (rowsToInject.length > 0) sh.getRange(sh.getLastRow() + 1, 1, rowsToInject.length, headers.length).setValues(rowsToInject);

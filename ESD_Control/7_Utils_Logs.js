@@ -542,7 +542,9 @@ function getAssetHistory(controlNo) {
 
 function stampLastModified(sheet, rowIndex) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  let modColIndex = headers.indexOf('LastModified');
+  let modColIndex = (typeof DataRepository !== 'undefined')
+    ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+    : headers.indexOf('LastModified');
   if (modColIndex !== -1) sheet.getRange(rowIndex, modColIndex + 1).setValue(new Date().toISOString());
 }
 
@@ -553,7 +555,9 @@ function getUpdates(lastSyncTime) {
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     
-    const modColIndex = headers.indexOf('LastModified');
+    const modColIndex = (typeof DataRepository !== 'undefined')
+      ? DataRepository.findHeaderIndex(headers, 'LAST_MODIFIED', -1)
+      : headers.indexOf('LastModified');
     if (modColIndex === -1) return { success: true, updates: [], serverTime: new Date().toISOString() };
 
     let auditCounts = {};
@@ -607,12 +611,12 @@ function setupDatabase() {
   try {
     const ss = SpreadsheetApp.openById(CONF.SS_ID);
     const dbStructure = [
-      { name: CONF.SHEET_ASSETS, headers: ['ID / Control No.', 'Tipo / Descripción', 'Cuadrante', 'Fábrica', 'Proyecto', 'Estado Actual', 'Última Verificación', 'Último Resultado', 'Vencimiento', 'Responsable', 'Color Code', 'Comentarios', 'Auditorías', 'Datos Ocultos'] },
-      { name: CONF.SHEET_RULES, headers: ['Tipo de Activo (ID)', 'Icono', 'Recomendación General', 'Tolerancia', 'Configuraciones (JSON)', 'Reglas Específicas...'] },
-      { name: CONF.SHEET_CONFIG, headers: ['Categoría', 'ID (Valor)', 'Etiqueta / Correos', 'Color / Configuración Extra'] },
-      { name: CONF.SHEET_MATRIX, headers: ['Nombre del Estado', 'Mostrar Tarjeta (TRUE/FALSE)', 'Color de Tarjeta', 'Es Administrativo (TRUE/FALSE)'] },
-      { name: CONF.SHEET_TICKETS, headers: ['Folio', 'ID de Activo', 'Fecha de Movimiento', 'Estado del Ticket', 'Datos del Ticket (JSON)'] },
-      { name: CONF.SHEET_LOGS, headers: ['Fecha y Hora', 'Usuario', 'Acción Realizada', 'ID Relacionado', 'Detalle Técnico'] },
+      { name: CONF.SHEET_ASSETS, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.ASSETS) ? SCHEMA_MAP.ASSETS.HEADERS : ['CONTROL_NO', 'CUADRANTE', 'COLOR_CODE', 'DESCRIPCION', 'PROYECTO', 'FABRICA', 'ESTADO_ACTUAL', 'SURFACE_MANTISSA', 'SURFACE_EXPONENTE', 'FLOORMAT_MANTISSA', 'FLOORMAT_EXPONENTE', 'ELEC_RES', 'IMPEDANCE', 'VOLTAGE', 'JACK', 'ULTIMO_RESULTADO', 'ULTIMA_VERIFICACION', 'VENCIMIENTO', 'RESPONSABLE', 'COMENTARIOS', 'Estado_Registro', 'LastModified'] },
+      { name: CONF.SHEET_RULES, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.RULES) ? SCHEMA_MAP.RULES.HEADERS : ['TIPO_ACTIVO_ID', 'SURFACE_RES', 'FLOOR_MAT', 'ELEC_RES', 'JACK', 'VOLTAGE', 'IMPEDANCE', 'ICONO', 'REC_GENERAL', 'TOLERANCIA', 'REC_SURFACE_RES', 'REC_FLOOR_MAT', 'REC_ELEC_RES', 'REC_IMPEDANCE', 'REC_VOLTAGE', 'REC_JACK'] },
+      { name: CONF.SHEET_CONFIG, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.CONFIG) ? SCHEMA_MAP.CONFIG.HEADERS : ['CATEGORIA', 'ID', 'ETIQUETA', 'COLOR_HEX', 'CONFIG_JSON'] },
+      { name: CONF.SHEET_MATRIX, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.MATRIX) ? SCHEMA_MAP.MATRIX.HEADERS : ['Tipo_Registro', 'Nombre_Estado', 'Mostrar_Tarjeta', 'Color_Hex', 'Es_Administrativo', 'Requiere_Mediciones'] },
+      { name: CONF.SHEET_TICKETS, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.TICKETS) ? SCHEMA_MAP.TICKETS.HEADERS : ['TICKET_ID', 'ASSET_ID', 'FECHA_APERTURA', 'ESTADO_TICKET', 'DATA_JSON'] },
+      { name: CONF.SHEET_LOGS, headers: (typeof SCHEMA_MAP !== 'undefined' && SCHEMA_MAP.LOGS) ? SCHEMA_MAP.LOGS.HEADERS : ['UUID', 'FECHA', 'ID', 'RESULTADO', 'DATA', 'USUARIO_SISTEMA'] },
       { name: CONF.SHEET_AI_LOGS, headers: ['Fecha/Hora', 'Usuario', 'Rol', 'Pregunta Usuario', 'Personalidad Usada', 'Respuesta IA', 'Tokens/Status'] },
       { name: CONF.SHEET_ROLES, headers: ['Nombre del Rol', 'Permisos (JSON)'] },
       { name: CONF.SHEET_USERS, headers: ['Correo Electrónico', 'Rol Asignado'] },
