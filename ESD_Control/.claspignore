@@ -1,0 +1,9 @@
+# Ignorar scripts de automatización local y documentación
+**/*.ps1
+**/*.md
+.git/**
+node_modules/**
+
+# Evitar conflicto de nombres duplicados entre Test_Suite.js y Test_Suite.gs
+Test_Suite.gs
+
