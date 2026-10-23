@@ -1,13 +1,15 @@
 <script>
 /**
- * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO Y TRADUCCIÓN DINÁMICA
- * Maneja el cambio de 4 idiomas (ES, EN, ZH, TH), persistencia,
- * traducciones de estados, mapeo de catálogos y fallback con LanguageApp / CacheService.
+ * 🟢 COMPOSABLE: LÓGICA DEL ENCABEZADO Y SISTEMA DE TRADUCCIÓN CON CACHESERVICE
+ * Maneja el cambio de 4 idiomas (ES, EN, ZH, TH), persistencia en CacheService,
+ * traducciones de estados, veredictos matemáticos, mapeo de catálogos y batching con LanguageApp.
  */
 
 // Caché reactivo global en cliente para traducciones dinámicas
 const dynamicTranslationsCache = Vue.reactive({});
 const pendingTranslations = new Set();
+const batchQueue = new Map();
+let batchTimer = null;
 
 // Pre-cargar desde sessionStorage si existe
 try {
@@ -36,6 +38,32 @@ function useHeader() {
         return availableLanguages.find(l => l.code === locale.value) || availableLanguages[0];
     });
 
+    /**
+     * Hidrata la caché de traducciones desde el paquete inicial de CacheService (getData)
+     * y sincroniza los diccionarios estáticos hacia CacheService si aún no están cacheados.
+     */
+    const hydrateTranslationCache = (bundle) => {
+        if (!bundle || typeof bundle !== 'object') return;
+        if (bundle.dynamic && typeof bundle.dynamic === 'object') {
+            Object.entries(bundle.dynamic).forEach(([langKey, dict]) => {
+                if (dict && typeof dict === 'object') {
+                    Object.entries(dict).forEach(([srcText, translatedText]) => {
+                        const cacheKey = `${langKey.toUpperCase()}:${srcText}`;
+                        dynamicTranslationsCache[cacheKey] = translatedText;
+                        try {
+                            sessionStorage.setItem('trans_' + cacheKey, translatedText);
+                        } catch (e) {}
+                    });
+                }
+            });
+        }
+        if (bundle.hasStaticCache === false && typeof messages !== 'undefined' && typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+                .withFailureHandler(() => {})
+                .syncStaticTranslationCache(messages);
+        }
+    };
+
     const setLanguage = (langCode) => {
         if (['ES', 'EN', 'ZH', 'TH'].includes(langCode)) {
             locale.value = langCode;
@@ -43,6 +71,9 @@ function useHeader() {
                 localStorage.setItem('ESD_LANG', langCode);
             } catch (e) {
                 console.warn('No se pudo guardar la preferencia de idioma en localStorage:', e);
+            }
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run.withFailureHandler(() => {}).logClientInteraction('LANG_SWITCH', `Idioma cambiado a ${langCode}`);
             }
         }
         showLangDropdown.value = false;
@@ -55,10 +86,47 @@ function useHeader() {
     };
 
     /**
-     * Traduce valores dinámicos (tipos, mediciones, catálogos, estados o texto libre).
+     * Procesa en lote las traducciones pendientes hacia Apps Script (CacheService + LanguageApp)
+     */
+    const flushTranslationBatch = () => {
+        batchTimer = null;
+        if (batchQueue.size === 0) return;
+
+        for (const [lang, textsSet] of batchQueue.entries()) {
+            const texts = Array.from(textsSet);
+            batchQueue.delete(lang);
+            if (!texts.length) continue;
+
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run
+                    .withSuccessHandler((resMap) => {
+                        if (resMap && typeof resMap === 'object') {
+                            Object.entries(resMap).forEach(([orig, translated]) => {
+                                const cKey = lang + ':' + orig;
+                                pendingTranslations.delete(cKey);
+                                if (translated && typeof translated === 'string') {
+                                    dynamicTranslationsCache[cKey] = translated;
+                                    try {
+                                        sessionStorage.setItem('trans_' + cKey, translated);
+                                    } catch (e) {}
+                                }
+                            });
+                        }
+                    })
+                    .withFailureHandler((err) => {
+                        texts.forEach(t => pendingTranslations.delete(lang + ':' + t));
+                        console.warn('Error en lote de traducción dinámica:', err);
+                    })
+                    .translateBatch(texts, lang.toLowerCase(), '');
+            }
+        }
+    };
+
+    /**
+     * Traduce valores dinámicos (tipos, mediciones, veredictos, catálogos, estados o texto libre).
      * 1. Consulta el diccionario local i18n según clave normalizada.
-     * 2. Si no existe en el diccionario y el idioma != 'ES', consulta la caché dinámica reactiva.
-     * 3. Si no está en caché, dispara llamada asíncrona a translateText en servidor (LanguageApp + CacheService).
+     * 2. Si no existe en el diccionario y el idioma != 'ES', consulta la caché dinámica reactiva (hidratada desde CacheService).
+     * 3. Si no está en caché, encola en lote hacia translateBatch en servidor (LanguageApp + CacheService).
      */
     const translateDynamic = (val, category = '') => {
         if (val === null || val === undefined || val === '') return '';
@@ -74,7 +142,7 @@ function useHeader() {
             const langDict = messages[lang];
             const checkDict = (dict) => {
                 if (!dict) return null;
-                return dict[rawKey] || dict[normKey] || null;
+                return dict[rawKey] || dict[normKey] || dict[strVal] || null;
             };
 
             if (category && langDict.db && langDict.db[category]) {
@@ -87,6 +155,10 @@ function useHeader() {
             }
             if (category === 'roles' && langDict.security_sec?.roles) {
                 const found = checkDict(langDict.security_sec.roles);
+                if (found) return found;
+            }
+            if (langDict.db?.verdicts) {
+                const found = checkDict(langDict.db.verdicts);
                 if (found) return found;
             }
             if (langDict.db?.types) {
@@ -114,33 +186,22 @@ function useHeader() {
         // Si el idioma es Español y no requirió traducción de diccionario, devolvemos el valor original
         if (lang === 'ES') return strVal;
 
-        // 2. Verificación en caché reactiva en cliente
+        // No traducir códigos puramente numéricos o IDs técnicos cortos
+        if (/^[0-9#\-_/.]+$/.test(strVal)) return strVal;
+
+        // 2. Verificación en caché reactiva en cliente (pre-hidratada por CacheService)
         const cacheKey = lang + ':' + strVal;
         if (dynamicTranslationsCache[cacheKey]) {
             return dynamicTranslationsCache[cacheKey];
         }
 
-        // 3. Fallback asíncrono con LanguageApp en servidor
+        // 3. Fallback asíncrono en lote con CacheService + LanguageApp en servidor
         if (!pendingTranslations.has(cacheKey)) {
             pendingTranslations.add(cacheKey);
-            if (typeof google !== 'undefined' && google.script && google.script.run) {
-                google.script.run
-                    .withSuccessHandler((res) => {
-                        pendingTranslations.delete(cacheKey);
-                        const translated = (res && typeof res === 'object' && res.translated) ? res.translated : (typeof res === 'string' ? res : null);
-                        if (translated && typeof translated === 'string') {
-                            dynamicTranslationsCache[cacheKey] = translated;
-                            try {
-                                sessionStorage.setItem('trans_' + cacheKey, translated);
-                            } catch (e) {}
-                        }
-                    })
-                    .withFailureHandler((err) => {
-                        pendingTranslations.delete(cacheKey);
-                        console.warn('Error al traducir texto libre "' + strVal + '":', err);
-                    })
-                    .translateText(strVal, lang.toLowerCase(), '');
-            }
+            if (!batchQueue.has(lang)) batchQueue.set(lang, new Set());
+            batchQueue.get(lang).add(strVal);
+            if (batchTimer) clearTimeout(batchTimer);
+            batchTimer = setTimeout(flushTranslationBatch, 90);
         }
 
         return strVal;
@@ -168,6 +229,7 @@ function useHeader() {
         currentLanguage,
         showLangDropdown,
         dynamicTranslationsCache,
+        hydrateTranslationCache,
         setLanguage,
         toggleLanguage,
         translateDynamic,

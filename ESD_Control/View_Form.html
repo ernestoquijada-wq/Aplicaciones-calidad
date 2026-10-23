@@ -1,32 +1,58 @@
 <div v-if="view==='form'" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex flex-col animate-fade">
   
-  <div class="px-8 py-5 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm flex-none z-20">
+  <div class="px-8 py-5 bg-white border-b border-slate-200 flex flex-wrap justify-between items-center gap-4 shadow-sm flex-none z-20">
     <div>
       <div class="flex items-center gap-3">
-        <span class="w-2 h-8 rounded-full bg-gradient-to-b from-[#005565] to-teal-600"></span>
+        <span class="w-2 h-8 rounded-full bg-gradient-to-b from-[#043e49] to-[#065260]"></span>
         <div>
           <h2 class="font-black text-xl text-slate-800 flex items-center gap-2 tracking-tight">{{ isNewAsset ? $t('form.title_new') : $t('form.title_verify') }}</h2>
-          <p class="text-sm font-mono font-semibold text-[#1e293b] tracking-wider mt-0.5 flex items-center gap-1.5">
-            <span class="text-xs uppercase font-extrabold text-[#005565] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{{ $t('form.id') }}</span>
-            <span class="text-slate-900 font-bold text-sm">{{ editAsset.controlNo || 'AUTO' }}</span>
+          <p v-if="!isNewAsset" class="text-sm font-mono font-semibold text-[#1e293b] tracking-wider mt-0.5 flex items-center gap-1.5 tabular-nums">
+            <span class="text-xs uppercase font-extrabold text-[#043e49] bg-[#e6f0f2] px-2 py-0.5 rounded border border-[#043e49]/20">{{ $t('form.id') }}</span>
+            <span class="text-slate-900 font-bold text-sm">#{{ editAsset.controlNo }}</span>
           </p>
+          <p v-else class="text-xs font-bold text-slate-500 mt-0.5">{{ $t('form.subtitle_new') }}</p>
         </div>
       </div>
     </div>
-    <button @click="view='dashboard'" class="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 hover:scale-110 transition border border-slate-200"><i class="fas fa-times text-lg"></i></button>
+
+    <div class="flex items-center gap-4">
+      <!-- Indicador Destacado del Próximo ID en Tiempo Real (Solo en Alta de Activo) -->
+      <div v-if="isNewAsset" class="flex items-center gap-3 bg-[#e6f0f2] border border-[#043e49]/20 px-4 py-2 rounded-xl shadow-sm">
+        <div class="w-9 h-9 rounded-lg bg-[#043e49] text-white flex items-center justify-center font-black text-sm shadow-sm">
+          <i class="fas fa-hashtag"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-black uppercase tracking-widest text-[#043e49]">{{ $t('form.next_id_avail') }}</span>
+            <span v-if="isBannerSyncing" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+              <i class="fas fa-sync-alt fa-spin text-[8px]"></i> {{ $t('dash.banner.syncing') }}
+            </span>
+            <span v-else class="badge-success-role text-[9px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping"></span> {{ $t('dash.banner.live') }}
+            </span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-xl font-black font-mono text-[#043e49] tracking-tight tabular-nums">#{{ bannerInfo?.nextId || 1 }}</span>
+            <span class="text-[10px] font-bold text-slate-500">{{ $t('form.atomic_assign') }}</span>
+          </div>
+        </div>
+      </div>
+
+      <button @click="view='dashboard'" class="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-[#bd1a31] hover:scale-110 transition border border-slate-200"><i class="fas fa-times text-lg"></i></button>
+    </div>
   </div>
   
-  <div class="flex-1 overflow-y-auto p-8 bg-[#f8fafc] pb-24">
+  <div class="flex-1 overflow-y-auto p-8 bg-[#f8f9fa] pb-24">
      <div class="max-w-5xl mx-auto space-y-8">
       
-      <div v-if="isAssetFailed" class="bg-rose-50 border-l-4 border-rose-500 p-6 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 animate-fade">
+      <div v-if="isAssetFailed" class="bg-rose-50 border-l-4 border-[#bd1a31] p-6 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 animate-fade">
          <div>
              <h3 class="text-rose-800 font-black text-lg flex items-center gap-2"><i class="fas fa-exclamation-triangle"></i> {{ $t('form.fail_alert') }}</h3>
              <p class="text-rose-600 text-xs font-bold mt-1">{{ $t('form.fail_desc') }}</p>
          </div>
          <div class="flex flex-wrap items-center gap-2">
              <button v-if="editAsset.openTicket || activeTicketEvidence" @click="evaluateRepair()" type="button" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black uppercase tracking-wider shadow-sm transition flex items-center gap-2 cursor-pointer">
-                 <i class="fas fa-wrench"></i> Seguimiento Ticket / Cierre (CAPA)
+                 <i class="fas fa-wrench"></i> {{ $t('form.btn_capa_followup') }}
              </button>
              <button type="button" @click="prepareForMeasurementCapture()" class="px-4 py-2 bg-rose-200 hover:bg-rose-300 text-rose-800 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer shadow-sm">
                  <i class="fas fa-arrow-down animate-bounce"></i> {{ $t('form.capture_meas') }}
@@ -42,7 +68,7 @@
           <div class="p-6">
               <p class="text-xs text-slate-600 italic mb-4 font-medium border-l-4 border-rose-400 pl-3 bg-rose-50 p-2 rounded-r">"{{ translateDynamic(activeTicketEvidence.comentarios) }}"</p>
               <div class="flex gap-4 overflow-x-auto pb-4">
-                  <div v-for="(url, idx) in activeTicketEvidence.fotos" :key="idx" @click="openGallery(idx)" class="relative flex-none w-32 h-32 sm:w-40 sm:h-40 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-[#005565] hover:shadow-md transition shadow-sm group">
+                  <div v-for="(url, idx) in activeTicketEvidence.fotos" :key="idx" @click="openGallery(idx)" class="relative flex-none w-32 h-32 sm:w-40 sm:h-40 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:border-[#043e49] hover:shadow-md transition shadow-sm group">
                       <img :src="url" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">
                       <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                           <i class="fas fa-search-plus text-white text-3xl drop-shadow-lg"></i>
@@ -54,7 +80,7 @@
       </div>
 
       <div class="card p-8 shadow-sm border-t-4" :style="{borderTopColor: currentThemeColor}">
-          <h3 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i class="fas fa-info-circle"></i> {{ $t('form.info_gen') }}</h3>
+          <h3 class="text-xs font-black text-[#043e49] uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><i class="fas fa-info-circle"></i> {{ $t('form.info_gen') }}</h3>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
              <div><label class="lbl">{{ $t('form.status') }}</label><select v-model="editAsset.status" @change="onStatusChange" class="input-std font-bold"><option v-for="s in statusDB" :value="s.name">{{ translateStatus(s.name) }}</option></select></div>
              <div class="md:col-span-1"><label class="lbl">{{ $t('form.resp') }}</label><select v-model="editAsset.responsible" class="input-std"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="a in catalogs.auditors" :value="a.id">{{ a.label ? translateDynamic(a.label, 'auditors') : a.id }}</option></select></div>
@@ -63,7 +89,7 @@
              
              <div>
                  <label class="lbl">{{ $t('form.quadrant') }}</label>
-                 <input list="sectorList" v-model="editAsset.quadrant" class="input-std font-bold text-[#005565] text-center uppercase" placeholder="EJ: B4">
+                 <input list="sectorList" v-model="editAsset.quadrant" class="input-std font-bold text-[#043e49] text-center uppercase" placeholder="EJ: B4">
                  <datalist id="sectorList"><option v-for="s in catalogs.sectors" :value="s.id">{{ translateDynamic(s.label, 'catalogs') }}</option></datalist>
              </div>
              <div class="flex items-center gap-2">
@@ -71,39 +97,78 @@
                  <div class="flex-1"><label class="lbl">{{ $t('form.quadrant_auto') }}</label><input :value="sectorLabel" readonly class="input-std bg-slate-50 text-slate-500 text-xs font-bold"></div>
              </div>
              
-             <div class="md:col-span-2"><label class="lbl">{{ $t('form.asset_type') }}</label><select v-model="editAsset.description" class="input-std uppercase font-bold bg-yellow-50 border-yellow-200 text-yellow-800" :disabled="!isNewAsset"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="(r,k) in dbRules" :value="k">{{ translateDynamic(k, 'types') }}</option></select></div>
+             <div class="md:col-span-2"><label class="lbl">{{ $t('form.asset_type') }}</label><select v-model="editAsset.description" class="input-std uppercase font-bold bg-[#e6f0f2] border-[#043e49]/25 text-[#043e49]" :disabled="!isNewAsset"><option value="" disabled>{{ $t('form.select') }}</option><option v-for="(r,k) in dbRules" :value="k">{{ translateDynamic(k, 'types') }}</option></select></div>
           </div>
       </div>
 
-      <div v-if="editAsset.description" id="measurements-card" class="card p-8 shadow-md transition-all duration-500" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-50/60 opacity-90' : (isAuditMode ? 'ring-4 ring-[#005565]/10 border-[#005565] shadow-2xl scale-[1.01]' : 'border-slate-200')">
+      <div v-if="editAsset.description || isNewAsset" id="measurements-card" class="card p-8 shadow-md transition-all duration-500" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-50/60 opacity-90' : (isAuditMode ? 'ring-4 ring-[#043e49]/10 border-[#043e49] shadow-2xl scale-[1.01]' : 'border-slate-200')">
          <div class="flex justify-between items-center mb-8 pb-4 border-b border-slate-100">
-           <h3 class="font-black text-xl text-slate-800 flex items-center gap-3"><i class="fas fa-microscope text-[#005565]"></i> {{ $t('form.tech_readings') }}</h3>
+           <h3 class="font-black text-xl text-slate-800 flex items-center gap-3"><i class="fas fa-microscope text-[#043e49]"></i> {{ $t('form.tech_readings') }}</h3>
            <div class="flex items-center gap-2">
              <span v-if="!doesCurrentStatusRequireMeasurements" class="text-[10px] font-black px-3 py-1.5 rounded-full bg-slate-200 text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                <i class="fas fa-lock text-[9px]"></i> {{ $t('admin.status_sec.no_meas_badge') || 'Omite Mediciones (N/A)' }}
              </span>
              <label v-else class="flex items-center gap-3 cursor-pointer bg-slate-50 px-4 py-2 rounded-full border border-slate-200 hover:bg-white hover:shadow-sm transition select-none">
-               <input type="checkbox" v-model="isAuditMode" @change="onAuditModeToggle" class="accent-[#005565] w-4 h-4">
+               <input type="checkbox" v-model="isAuditMode" @change="onAuditModeToggle" class="accent-[#043e49] w-4 h-4">
                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{{ $t('form.enable_edit') }}</span>
              </label>
            </div>
          </div>
 
          <div class="space-y-8">
-            <div class="flex flex-col md:flex-row gap-6 items-center p-6 rounded-2xl border border-[#004455] bg-[#005565] shadow-md">
-               <div class="flex-1 w-full"><label class="text-[10px] uppercase font-bold text-white/70 tracking-wider mb-2 block">{{ $t('form.verif_date') }}</label><input type="date" v-model="form.validationDate" :disabled="!isAuditMode && !isCurrentStatusAdmin" class="input-std cursor-pointer bg-white/10 text-white border-white/20 focus:ring-white/30"></div>
+            <!-- Campo de Fecha Estrictamente Obligatorio con Confirmación Explícita -->
+            <div id="validation-date-block" class="flex flex-col md:flex-row gap-4 items-center justify-between p-6 rounded-2xl border transition-all shadow-md"
+                 :class="isDateConfirmed ? 'border-[#032c34] bg-[#043e49]' : 'border-[#bd1a31] bg-[#043e49] ring-4 ring-[#bd1a31]/25'">
+               <div class="flex-1 w-full">
+                  <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <label class="text-[10px] uppercase font-black text-white/90 tracking-wider flex items-center gap-1.5">
+                      <i class="fas fa-calendar-alt"></i> {{ $t('form.verif_date') }} <span class="text-[#ff8a9a]">{{ $t('form.required_tag') }}</span>
+                    </label>
+                    <span v-if="!isDateConfirmed" class="text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#bd1a31] text-white border border-white/20 animate-pulse">
+                      <i class="fas fa-exclamation-circle mr-1"></i> {{ $t('form.confirm_required') }}
+                    </span>
+                    <span v-else class="badge-success-role text-[9px]">
+                      <i class="fas fa-check-circle"></i> {{ $t('form.date_confirmed') }}
+                    </span>
+                  </div>
+                  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <input type="date" 
+                           v-model="form.validationDate" 
+                           :disabled="!isAuditMode && !isCurrentStatusAdmin && !isNewAsset" 
+                           @input="isDateConfirmed = true"
+                           @change="isDateConfirmed = true"
+                           required
+                           class="input-std cursor-pointer bg-white/10 text-white border-white/25 focus:ring-white/40 font-mono font-bold tabular-nums flex-1">
+                    <button type="button"
+                            v-if="isAuditMode || isCurrentStatusAdmin || isNewAsset"
+                            @click="confirmValidationDate"
+                            class="px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-sm"
+                            :class="isDateConfirmed ? 'bg-[#d1f0d5] text-[#0d4722] border border-[#a3dfb0]' : 'bg-[#bd1a31] hover:bg-[#a01528] text-white'">
+                      <i class="fas" :class="isDateConfirmed ? 'fa-check-double' : 'fa-calendar-check'"></i>
+                      {{ isDateConfirmed ? $t('form.date_validated') : $t('form.btn_confirm_date') }}
+                    </button>
+                  </div>
+                  <p v-if="!isDateConfirmed && (isAuditMode || isCurrentStatusAdmin || isNewAsset)" class="text-[10px] text-amber-200 font-semibold mt-2">
+                    <i class="fas fa-hand-point-up mr-1"></i> {{ $t('form.date_confirm_hint') }}
+                  </p>
+               </div>
+            </div>
+
+            <div v-if="!editAsset.description" class="p-6 rounded-2xl bg-slate-50 border border-dashed border-slate-300 text-center">
+               <i class="fas fa-sliders-h text-slate-400 text-xl mb-2"></i>
+               <p class="text-xs font-bold text-slate-500">{{ $t('form.select_type_hint') }}</p>
             </div>
 
             <div v-for="field in activeFields" :key="field.key" class="transition-all duration-300" :class="{'opacity-60 select-none': !doesCurrentStatusRequireMeasurements}">
                <div class="mb-2 px-1">
                   <div class="flex justify-between items-center">
                       <span class="font-bold text-sm text-slate-700">{{ translateDynamic(field.label, 'measurements') }}</span>
-                      <span v-if="doesCurrentStatusRequireMeasurements && getAlert(field).message" class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse" :class="getAlert(field).class">{{ getAlert(field).message }}</span>
+                      <span v-if="doesCurrentStatusRequireMeasurements && getAlert(field).message" class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider shadow-sm animate-pulse" :class="getAlert(field).class">{{ translateDynamic(getAlert(field).message, 'verdicts') }}</span>
                   </div>
-                  <p class="text-xs font-black text-[#005565] mt-1 tracking-wide">{{ $t('form.limit') }}: {{ formatLimit(field) }}</p>
+                  <p class="text-xs font-black text-[#043e49] mt-1 tracking-wide">{{ $t('form.limit') }}: {{ formatLimit(field) }}</p>
                </div>
 
-               <div class="sci-group" @click="doesCurrentStatusRequireMeasurements && (activeInput = field.key)" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-100' : (getAlert(field).borderClass || (activeInput === field.key ? 'border-[#005565] ring-4 ring-[#005565]/5 shadow-lg' : 'border-slate-200'))">
+               <div class="sci-group" @click="doesCurrentStatusRequireMeasurements && (activeInput = field.key)" :class="(!doesCurrentStatusRequireMeasurements) ? 'border-slate-200 bg-slate-100' : (getAlert(field).borderClass || (activeInput === field.key ? 'border-[#043e49] ring-4 ring-[#043e49]/5 shadow-lg' : 'border-slate-200'))">
                    <div v-if="!doesCurrentStatusRequireMeasurements || isNA(field.key)" class="flex-1 flex items-center justify-center bg-slate-100">
                        <span class="text-xs font-bold text-slate-400 tracking-widest">{{ $t('form.na') }}</span>
                    </div>
@@ -128,24 +193,24 @@
                </transition>
             </div>
             
-            <div class="border-t pt-6"><label class="lbl">{{ $t('form.obs') }}</label><textarea v-model="form.comments" :disabled="!isAuditMode && !isCurrentStatusAdmin" class="input-std h-24 resize-none w-full" :placeholder="$t('form.obs_ph')"></textarea></div>
+            <div class="border-t pt-6"><label class="lbl">{{ $t('form.obs') }}</label><textarea v-model="form.comments" :disabled="!isAuditMode && !isCurrentStatusAdmin && !isNewAsset" class="input-std h-24 resize-none w-full" :placeholder="$t('form.obs_ph')"></textarea></div>
          </div>
       </div>
       
       <div v-if="!isNewAsset" class="text-center pb-24">
-          <button @click="openAssetHistoryModal(editAsset)" type="button" class="px-6 py-3 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-sm hover:shadow-md hover:text-[#005565] hover:border-[#005565] transition-all flex items-center justify-center gap-2 mx-auto cursor-pointer">
+          <button @click="openAssetHistoryModal(editAsset)" type="button" class="px-6 py-3 rounded-full bg-white border border-slate-200 text-slate-500 text-xs font-bold shadow-sm hover:shadow-md hover:text-[#043e49] hover:border-[#043e49] transition-all flex items-center justify-center gap-2 mx-auto cursor-pointer">
               <i class="fas fa-history"></i> {{ $t('form.btn_history') }}
-              <span v-if="auditHistory.length > 0" class="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">{{ auditHistory.length }}</span>
+              <span v-if="auditHistory.length > 0" class="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-mono font-bold tabular-nums">{{ auditHistory.length }}</span>
           </button>
       </div>
      </div>
   </div>
 
-  <div v-if="isAuditMode || isNewAsset || isCurrentStatusAdmin" class="p-6 bg-white/90 backdrop-blur-md border-t border-slate-200 flex justify-between gap-4 z-30 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)]">
+  <div v-if="isAuditMode || isNewAsset || isCurrentStatusAdmin" class="p-6 bg-white/95 backdrop-blur-md border-t border-slate-200 flex justify-between gap-4 z-30 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)]">
      <button @click="view='dashboard'" :disabled="submitting" class="px-6 py-4 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('form.btn_cancel') }}</button>
      
      <template v-if="isNewAsset">
-         <button @click="submit('REGISTRO')" :disabled="submitting" class="flex-1 px-8 py-4 rounded-xl font-black text-xs text-white shadow-lg shadow-cyan-200 bg-[#005565] hover:bg-[#004455] active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+         <button @click="submit('REGISTRO')" :disabled="submitting" class="flex-1 px-8 py-4 rounded-xl font-black text-xs text-white btn-brand-accent active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
              <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('form.btn_processing') : $t('form.btn_register_new') }}
          </button>
      </template>
@@ -155,16 +220,16 @@
              <template v-if="isCurrentStatusAdmin">
                    <button @click="submit('ADMIN')" :disabled="submitting" 
                            class="flex-1 px-8 py-4 rounded-xl font-black text-xs text-white shadow-lg active:scale-95 transition flex items-center justify-center gap-2 w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                           :class="isStatusBaja ? 'bg-slate-800 hover:bg-slate-900 shadow-slate-300' : 'bg-slate-700 hover:bg-slate-800 shadow-slate-200'">
+                           :class="isStatusBaja ? 'bg-slate-800 hover:bg-slate-900 shadow-slate-300' : 'bg-[#043e49] hover:bg-[#032c34] shadow-slate-200'">
                        <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : (isStatusBaja ? 'fa-ban' : 'fa-exchange-alt')"></i> 
                        {{ submitting ? $t('form.btn_processing') : (isStatusBaja ? ($t('form.btn_baja') || 'DAR DE BAJA ACTIVO') : $t('form.btn_admin_move')) }}
                    </button>
               </template>
              <template v-else>
-                 <button @click="submit('FAIL')" :disabled="submitting" class="px-8 py-4 rounded-xl font-black text-xs text-white shadow-lg shadow-rose-200 bg-rose-500 hover:bg-rose-600 active:scale-95 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full justify-center">
+                 <button @click="submit('FAIL')" :disabled="submitting" class="px-8 py-4 rounded-xl font-black text-xs text-white btn-brand-accent active:scale-95 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full justify-center">
                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-times-circle'"></i> {{ submitting ? $t('form.btn_processing') : $t('form.btn_reject') }}
                  </button>
-                 <button @click="submit('CUMPLE')" :disabled="submitting" class="px-8 py-4 rounded-xl font-black text-xs text-white shadow-lg shadow-emerald-200 bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full justify-center">
+                 <button @click="submit('CUMPLE')" :disabled="submitting" class="px-8 py-4 rounded-xl font-black text-xs text-white shadow-lg shadow-emerald-200 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed w-full justify-center">
                      <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-check-circle'"></i> {{ submitting ? $t('form.btn_processing') : $t('form.btn_approve') }}
                  </button>
              </template>

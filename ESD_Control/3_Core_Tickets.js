@@ -171,7 +171,7 @@ function saveTicketRecord(payload) {
     
     const data = sh.getDataRange().getValues();
     const dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-    const userEmail = Session.getActiveUser().getEmail(); 
+    const userEmail = Session.getActiveUser().getEmail() || (typeof Utils !== 'undefined' && Utils.getActiveUserEmail ? Utils.getActiveUserEmail() : ''); 
     
     let emailsStr = "";
     if (payload.emails && Array.isArray(payload.emails)) {
@@ -179,44 +179,22 @@ function saveTicketRecord(payload) {
     }
 
     let ticketId = "";
+    let existingOpenTicket = null;
+    let existingRowIndex = -1;
+
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][1]).trim().toUpperCase() === String(payload.assetId).trim().toUpperCase() && 
+          String(data[i][3]).trim().toUpperCase() === "ABIERTO") {
+        existingOpenTicket = String(data[i][0]);
+        existingRowIndex = i + 1;
+        break;
+      }
+    }
+
     if (payload.mode === 'OPEN') {
-        // Prevención de duplicados: si ya existe un ticket abierto, registrarlo como nuevo intento de falla en el mismo ticket
-        let existingOpenTicket = null;
-        let existingRowIndex = -1;
-        for (let i = data.length - 1; i >= 1; i--) {
-          if (String(data[i][1]).trim().toUpperCase() === String(payload.assetId).trim().toUpperCase() && 
-              String(data[i][3]).trim().toUpperCase() === "ABIERTO") {
-            existingOpenTicket = String(data[i][0]);
-            existingRowIndex = i + 1;
-            break;
-          }
-        }
-
-        if (existingOpenTicket) {
-          ticketId = existingOpenTicket;
-          let oldData = { apertura: {}, intentos_medicion: [] };
-          try { oldData = JSON.parse(data[existingRowIndex - 1][4]); } catch(e) {}
-          if (!oldData.intentos_medicion) oldData.intentos_medicion = [];
-          oldData.intentos_medicion.push({
-            fecha: dateStr, ticketData: payload.formData, mediciones: payload.measurements,
-            dictamen: "RE-NOTIFICACIÓN DE FALLA (SIGUE ABIERTO)"
-          });
-          sh.getRange(existingRowIndex, 4, 1, 2).setValues([["ABIERTO", JSON.stringify(oldData)]]);
-          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
-          sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
-          if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
-          if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
-          return Utils.buildResponse(true, { ticketId: ticketId, reused: true });
-        }
-
-        ticketId = "TKT-" + getNextFolio('TICKETS');
+      ticketId = existingOpenTicket || ("TKT-" + getNextTicketFolio(ss));
     } else {
-        for (let i = data.length - 1; i >= 1; i--) {
-            if (String(data[i][1]) === String(payload.assetId) && String(data[i][3]) === "ABIERTO") {
-                ticketId = data[i][0]; break;
-            }
-        }
-        if(!ticketId) ticketId = "TKT-" + getNextFolio('TICKETS');
+      ticketId = existingOpenTicket || ("TKT-" + getNextTicketFolio(ss));
     }
 
     let photoUrls = [];
@@ -228,14 +206,35 @@ function saveTicketRecord(payload) {
     if (!payload.formData) payload.formData = {};
     payload.formData.systemUser = userEmail;
     payload.formData.emails_notificados = emailsStr;
-    if(photoUrls.length > 0) payload.formData.evidencia_fotos = photoUrls;
+    if (payload.auditComments) payload.formData.auditComments = payload.auditComments;
+    if (photoUrls.length > 0) payload.formData.evidencia_fotos = photoUrls;
+
+    const resolvedComments = payload.formData?.Comentarios || payload.formData?.comentarios || payload.formData?.Observaciones || payload.formData?.observaciones || payload.formData?.comments || payload.auditComments || "";
 
     if (payload.mode === 'OPEN') {
+        if (existingOpenTicket) {
+          let oldData = { apertura: {}, intentos_medicion: [] };
+          try { oldData = JSON.parse(data[existingRowIndex - 1][4]); } catch(e) {}
+          if (!oldData.intentos_medicion) oldData.intentos_medicion = [];
+          oldData.intentos_medicion.push({
+            fecha: dateStr, ticketData: payload.formData, mediciones: payload.measurements,
+            dictamen: "RE-NOTIFICACIÓN DE FALLA (SIGUE ABIERTO)"
+          });
+          sh.getRange(existingRowIndex, 4, 1, 2).setValues([["ABIERTO", JSON.stringify(oldData)]]);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", resolvedComments, payload.measurements, payload.assetInfo);
+          SpreadsheetApp.flush();
+          sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
+          if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
+          if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
+          return Utils.buildResponse(true, { ticketId: ticketId, reused: true });
+        }
+
         const initialData = { apertura: payload.formData, intentos_medicion: [] };
         sh.appendRow([ticketId, payload.assetId, dateStr, "ABIERTO", JSON.stringify(initialData)]);
         
         // Sincronizar inmediatamente el resultado a FALLA en Col P y los campos de Información General
-        updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
+        updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", resolvedComments, payload.measurements, payload.assetInfo);
+        SpreadsheetApp.flush();
         
         sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "OPEN");
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
@@ -244,7 +243,7 @@ function saveTicketRecord(payload) {
     } else {
         let isUpdated = false;
         for (let i = data.length - 1; i >= 1; i--) {
-          if (String(data[i][1]) === String(payload.assetId) && String(data[i][3]) === "ABIERTO") {
+          if (String(data[i][1]).trim().toUpperCase() === String(payload.assetId).trim().toUpperCase() && String(data[i][3]).trim().toUpperCase() === "ABIERTO") {
             let oldData = { apertura: {}, intentos_medicion: [] };
             try { oldData = JSON.parse(data[i][4]); } catch(e) {}
             if (!oldData.intentos_medicion) oldData.intentos_medicion = [];
@@ -254,7 +253,7 @@ function saveTicketRecord(payload) {
             });
             sh.getRange(i + 1, 4, 1, 2).setValues([[payload.passed ? "CERRADO" : "ABIERTO", JSON.stringify(oldData)]]);
             isUpdated = true;
-            if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
+            sendTicketEmail(ticketId, payload.formData, payload.assetInfo, payload.passed ? "CLOSE" : "OPEN");
             break;
           }
         }
@@ -262,15 +261,16 @@ function saveTicketRecord(payload) {
         if (!isUpdated) {
           const newData = { apertura: {}, intentos_medicion: [{ fecha: dateStr, ticketData: payload.formData, mediciones: payload.measurements, dictamen: payload.passed ? "CUMPLE" : "NO CUMPLE" }] };
           sh.appendRow([ticketId, payload.assetId, dateStr, payload.passed ? "CERRADO" : "ABIERTO", JSON.stringify(newData)]);
-          if (payload.passed) sendTicketEmail(ticketId, payload.formData, payload.assetInfo, "CLOSE");
+          sendTicketEmail(ticketId, payload.formData, payload.assetInfo, payload.passed ? "CLOSE" : "OPEN");
         }
         
         // Sincronizar el estatus en Col P de DB_Assets y los campos de Información General según dictamen de cierre
         if (payload.passed) {
-          updateAssetStatusInSheet(ss, payload.assetId, null, "CUMPLE", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "CUMPLE", resolvedComments, payload.measurements, payload.assetInfo);
         } else {
-          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", payload.formData?.Comentarios || payload.formData?.comments || payload.formData?.Observaciones, payload.measurements, payload.assetInfo);
+          updateAssetStatusInSheet(ss, payload.assetId, null, "FALLA", resolvedComments, payload.measurements, payload.assetInfo);
         }
+        SpreadsheetApp.flush();
 
         if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
         if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');

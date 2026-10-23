@@ -155,7 +155,7 @@
       const rolesDB = ref({});
       const usersDB = ref({});
 
-      const currentThemeColor = ref('#005565');
+      const currentThemeColor = ref('#043e49');
       const lastSyncTime = ref(null);
 
       // Clave de almacenamiento local para carga instantánea
@@ -239,11 +239,15 @@
           });
       });
 
-      // Estado y acción de sincronización manual rápida
+      // Estado y acción de sincronización manual rápida y del Banner Dinámico
       const syncing = ref(false);
+      const isBannerSyncing = ref(false);
+      const serverBannerSummary = ref(null);
+
       const triggerManualSync = async () => {
         if (syncing.value) return;
         syncing.value = true;
+        isBannerSyncing.value = true;
         try {
           const res = await runGAS('forceSyncData');
           if (res?.success) {
@@ -257,15 +261,19 @@
             if (res.email) emailConfig.value = res.email;
             if (res.aiConfig) aiSettings.value = res.aiConfig;
             if (res.serverVersion) clientVersion.value = res.serverVersion;
+            if (res.bannerSummary) serverBannerSummary.value = res.bannerSummary;
             persistLocalStore();
             Toast.fire({ icon: 'success', title: i18n.global.t('header.synced_success') || 'Sincronizado' });
           } else {
-            loadData(false);
+            await loadData(false);
           }
         } catch (e) {
-          loadData(false);
+          await loadData(false);
         } finally {
-          setTimeout(() => { syncing.value = false; }, 800);
+          setTimeout(() => {
+            syncing.value = false;
+            isBannerSyncing.value = false;
+          }, 800);
         }
       };
 
@@ -282,7 +290,7 @@
 
       // 3. INYECCIÓN DE COMPOSABLES MODULARES
       const headerLogic = useHeader();
-      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal, ESDMath }, alertsDB);
+      const dashLogic   = useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP, { runGAS, Toast, Swal, ESDMath, serverBannerSummary, isBannerSyncing }, alertsDB);
       const formLogic   = useAssetForm(globalConfig);
       const adminLogic  = useAdmin(globalConfig);
       const modalsLogic = useModals({ ...globalConfig, ...formLogic });
@@ -310,6 +318,10 @@
                   rolesDB.value = r.rolesDB; usersDB.value = r.usersDB;
                   if(r.user) currentUser.value = r.user;
                   if(r.serverVersion) clientVersion.value = r.serverVersion;
+                  if(r.bannerSummary) serverBannerSummary.value = r.bannerSummary;
+                  if(r.cachedTranslations && headerLogic.hydrateTranslationCache) {
+                      headerLogic.hydrateTranslationCache(r.cachedTranslations);
+                  }
                   lastSyncTime.value = r.serverTime; 
                   loading.value = false;
                   persistLocalStore();
@@ -329,21 +341,34 @@
         });
       };
 
-      // Sincronización ligera en segundo plano (Polling de versiones)
+      // Sincronización ligera en segundo plano (Polling optimizado con Page Visibility + CacheService)
       let syncPollInterval = null;
       let isCheckingSync = false;
 
       const pollSyncStatus = async () => {
-        if (isCheckingSync || submitting.value || !clientVersion.value?.version) return;
+        if (typeof document !== 'undefined' && document.hidden) return;
+        const currentVer = (typeof clientVersion.value === 'object' && clientVersion.value !== null)
+          ? clientVersion.value.version
+          : clientVersion.value;
+        if (isCheckingSync || submitting.value || !currentVer) return;
+
         isCheckingSync = true;
         try {
-          const syncRes = await runGAS('checkSyncStatus', clientVersion.value.version);
-          if (syncRes && syncRes.success && syncRes.needsRefresh) {
-            console.log('🔄 Cambios detectados en servidor (v' + syncRes.serverVersion.version + '). Sincronizando...');
-            loadData(true);
+          const syncRes = await runGAS('checkSyncStatus', currentVer);
+          if (syncRes && syncRes.success) {
+            if (syncRes.bannerSummary) {
+              serverBannerSummary.value = syncRes.bannerSummary;
+            }
+            if (syncRes.hasChanges || syncRes.needsRefresh) {
+              isBannerSyncing.value = true;
+              console.log('🔄 Cambios detectados en servidor (v' + syncRes.serverVersion + '). Actualizando...');
+              await loadData(true);
+              setTimeout(() => { isBannerSyncing.value = false; }, 750);
+            }
           }
         } catch (e) {
           // Captura silenciosa para evitar alertas en pantalla
+          isBannerSyncing.value = false;
         } finally {
           isCheckingSync = false;
         }
@@ -352,12 +377,17 @@
       onMounted(() => {
         hydrateFromCache();
         loadData(isHydratedFromCache);
-        syncPollInterval = setInterval(pollSyncStatus, 20000);
+        syncPollInterval = setInterval(pollSyncStatus, 25000);
+        if (typeof document !== 'undefined') {
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) pollSyncStatus();
+          });
+        }
       });
 
       // 5. EXPORTACIÓN A LA VISTA HTML
       return {
-         loading, submitting, syncing, triggerManualSync, view, assets, dbRules, quadrantDB, statusDB, matrixDB, alertsDB, catalogs,
+         loading, submitting, syncing, isBannerSyncing, triggerManualSync, view, assets, dbRules, quadrantDB, statusDB, matrixDB, alertsDB, catalogs,
          userRoleName, userPermissions, rolesDB, usersDB, aiSettings, emailConfig, generalSettings,
          currentUser, clientVersion,
          

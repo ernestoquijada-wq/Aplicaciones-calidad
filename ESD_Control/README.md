@@ -214,11 +214,34 @@ La aplicación cuenta con un esquema de seguridad granular sincronizado entre `P
    };
    ```
 3. Ejecutar desde el editor de Google Apps Script la función `setupDatabase()` de [`7_Utils_Logs.js`](file:///c:/Users/TEMP.NA.004/Documents/Visual%20Studio%202017/Aplicaciones%20calidad/ESD_Control/7_Utils_Logs.js) para inicializar automáticamente todas las pestañas requeridas.
-4. Enviar los cambios al proyecto de Apps Script:
-   ```bash
-   clasp push
+4. Enviar los cambios al proyecto de Apps Script (o desplegar a QA, Azteca y Maya mediante `deploy.ps1`):
+   ```powershell
+   .\deploy.ps1 -Phase All
    ```
 5. Publicar como **Aplicación Web**:
-   - **Ejecutar como:** Usuario que accede a la aplicación web (o cuenta de servicio dedicada).
+   - **Ejecutar como:** Usuario que implementa la aplicación (`USER_DEPLOYING`) con identidad dinámica de sesión.
    - **Quién tiene acceso:** Usuarios dentro de la organización (dominio Plexus).
+
+---
+
+## 7. Historial de Releases (Release Notes)
+
+### Release 1.6 (`v1.6.0`) - Rebranding Corporativo, i18n en Caché, Analíticas de Tráfico y Notificaciones Inteligentes
+- **Identidad Corporativa PLEXUS (Impeccable UI/UX):**
+  - Rebranding integral con paleta corporativa Dark Teal (`#043e49`) y Rojo Acento (`#bd1a31`), tipografía técnica y contraste optimizado.
+  - Integración del logotipo oficial **PLEXUS** en el encabezado del sistema y firma corporativa *"Desarrollado por Quality Solutions"* en el pie de página global.
+- **Experiencia de Auditor / Operador en Registro de Activos:**
+  - **Indicador en Tiempo Real de Consecutivos:** Visualización destacada del **Último ID Registrado** y **Próximo ID Disponible** tanto en el Dashboard como en la vista de Nuevo Activo, con sincronización reactiva automática.
+  - **Confirmación Estricta de Fecha:** Validación obligatoria de la *Fecha de Verificación / Movimiento* mediante interacción explícita o botón de confirmación antes de permitir el guardado o evaluación de reparación.
+  - **Modal Post-Registro y Navegación Rápida:** Alerta interactiva tras el alta exitosa de un activo con opciones para abrir inmediatamente el detalle del ID generado, ir a la última página del inventario o volver al inicio (con fix de traducción en los 4 idiomas: `ES`, `EN`, `ZH`, `TH`).
+- **Sistema de Internacionalización (`i18n`) Estático y Dinámico:**
+  - Almacenamiento en `CacheService` (`I18N_DICTIONARY_CACHE`) para textos estáticos de la UI y motor de mapeo dinámico (`tDB` / `translateDB`) para traducir valores provenientes directamente de la base de datos.
+- **Módulo de Tráfico y Analíticas de Uso (Panel Admin):**
+  - Nuevo apartado administrativo (`TrafficAnalytics`) con buffer en `CacheService` y persistencia en `DB_Traffic_Logs` para monitorear sesiones, usuarios activos, frecuencia de conexión y volumen de operaciones sin impactar las cuotas de Google.
+- **Notificaciones de Correo con Identidad Dinámica y Copia a Administradores:**
+  - En todas las notificaciones del sistema (`OPEN`, `CLOSE`, seguimiento de reparación y `FORCED`), el correo se envía mostrando el nombre y correo del usuario activo que ejecutó la acción (`name: "Usuario (correo@plexus.com) | ESD Control"`) y configurando `replyTo` hacia dicho usuario.
+  - Inclusión automática y deduplicada de todos los **Administradores del Sistema** (`SUPER_ADMIN`, `ADMIN`, `ADMINISTRADOR` y roles con permisos administrativos en `USERS_DB` / `Seguridad_Usuarios`) en la lista de destinatarios.
+- **Despliegue Multi-Entorno Automatizado (`deploy.ps1` / `ConfigEnv.js`):**
+  - Pipeline de despliegue automatizado en dos fases hacia **Entorno de Pruebas (QA)**, **Producción - Azteca** y **Producción - Maya** con restauración automática de seguridad hacia QA.
+
 

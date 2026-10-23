@@ -7,7 +7,7 @@
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 relative">
       
       <!-- 1. CABECERA CON MÉTRICAS Y KPIS -->
-      <div class="bg-gradient-to-r from-[#003B46] via-[#005565] to-[#075985] p-5 sm:p-6 text-white relative">
+      <div class="bg-gradient-to-r from-[#032c34] via-[#043e49] to-[#065260] p-5 sm:p-6 text-white relative">
           <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
               <div class="flex items-center gap-3.5">
                   <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner flex-none">
@@ -57,13 +57,13 @@
           <!-- Buscador -->
           <div class="relative flex-1 min-w-[180px]">
               <i class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-              <input v-model="historySearchQuery" type="text" placeholder="Buscar por observaciones, auditor, fecha o valor..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white rounded-lg border border-slate-200 focus:outline-none focus:border-[#005565] transition shadow-xs">
+              <input v-model="historySearchQuery" type="text" placeholder="Buscar por observaciones, auditor, fecha o valor..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white rounded-lg border border-slate-200 focus:outline-none focus:border-[#043e49] transition shadow-xs">
           </div>
 
           <!-- Filtros de Estado y Rango -->
           <div class="flex items-center gap-2 flex-wrap">
               <div class="flex items-center bg-white p-0.5 rounded-lg border border-slate-200 text-[10px] font-bold shadow-xs">
-                  <button @click="historyFilterStatus = 'ALL'" :class="historyFilterStatus==='ALL'?'bg-[#005565] text-white shadow-sm':'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded transition">Todos ({{ historyKPIs.total }})</button>
+                  <button @click="historyFilterStatus = 'ALL'" :class="historyFilterStatus==='ALL'?'bg-[#043e49] text-white shadow-sm':'text-slate-600 hover:text-slate-900'" class="px-2.5 py-1 rounded transition">Todos ({{ historyKPIs.total }})</button>
                   <button @click="historyFilterStatus = 'CUMPLE'" :class="historyFilterStatus==='CUMPLE'?'bg-emerald-600 text-white shadow-sm':'text-slate-600 hover:text-emerald-700'" class="px-2.5 py-1 rounded transition">Cumple ({{ historyKPIs.cumple }})</button>
                   <button @click="historyFilterStatus = 'FALLA'" :class="historyFilterStatus==='FALLA'?'bg-rose-600 text-white shadow-sm':'text-slate-600 hover:text-rose-700'" class="px-2.5 py-1 rounded transition">Fallas ({{ historyKPIs.falla }})</button>
               </div>
@@ -75,8 +75,8 @@
                   <option value="YEAR">Este año</option>
               </select>
 
-              <button @click="expandAllHistory" title="Expandir todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#005565] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-down"></i></button>
-              <button @click="collapseAllHistory" title="Colapsar todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#005565] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-up"></i></button>
+              <button @click="expandAllHistory" title="Expandir todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#043e49] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-down"></i></button>
+              <button @click="collapseAllHistory" title="Colapsar todo" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-[#043e49] flex items-center justify-center text-xs shadow-xs transition"><i class="fas fa-angles-up"></i></button>
           </div>
       </div>
 
@@ -85,7 +85,7 @@
           
           <!-- Estado de Carga -->
           <div v-if="historyLoading" class="flex flex-col items-center justify-center py-16 text-slate-400">
-              <i class="fas fa-circle-notch fa-spin text-3xl text-[#005565] mb-3"></i>
+              <i class="fas fa-circle-notch fa-spin text-3xl text-[#043e49] mb-3"></i>
               <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cargando registros históricos...</p>
           </div>
 
@@ -129,14 +129,14 @@
                   <!-- Badges y Chevron de Despliegue -->
                   <div class="flex items-center gap-2.5 flex-none">
                       <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1.5"
-                            :class="h.result === 'CUMPLE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-rose-100 text-rose-700 border border-rose-300'">
-                          <span class="w-1.5 h-1.5 rounded-full" :class="h.result === 'CUMPLE' ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                            :class="h.result === 'CUMPLE' ? 'badge-success-role' : 'bg-rose-100 text-rose-700 border border-rose-300'">
+                          <span class="w-1.5 h-1.5 rounded-full" :class="h.result === 'CUMPLE' ? 'bg-emerald-600' : 'bg-rose-500'"></span>
                           {{ translateStatus(h.result) }}
                       </span>
 
-                      <div class="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-[#005565] transition">
+                      <div class="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-[#043e49] transition">
                           <i class="fas fa-chevron-down text-xs transition-transform duration-200"
-                             :class="{ 'rotate-180 text-[#005565]': expandedHistoryIds.has(h.id || idx) }"></i>
+                             :class="{ 'rotate-180 text-[#043e49]': expandedHistoryIds.has(h.id || idx) }"></i>
                       </div>
                   </div>
               </div>
@@ -170,7 +170,7 @@
                   <div v-if="getHistoryPhotos(h.technicalData).length > 0" class="mt-3">
                       <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2"><i class="fas fa-camera mr-1"></i> Evidencias Adjuntas</span>
                       <div class="flex gap-2 overflow-x-auto pb-1">
-                          <div v-for="(url, photoIdx) in getHistoryPhotos(h.technicalData)" :key="photoIdx" @click="openGallery(photoIdx)" class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex-none cursor-pointer hover:border-[#005565] transition shadow-xs group/img relative">
+                          <div v-for="(url, photoIdx) in getHistoryPhotos(h.technicalData)" :key="photoIdx" @click="openGallery(photoIdx)" class="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex-none cursor-pointer hover:border-[#043e49] transition shadow-xs group/img relative">
                               <img :src="url" class="w-full h-full object-cover group-hover/img:scale-110 transition duration-300">
                               <div class="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center">
                                   <i class="fas fa-search-plus text-white text-xs"></i>
@@ -212,7 +212,7 @@
 <div v-if="helpModal" class="fixed inset-0 z-[90] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
         <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 class="font-black text-slate-700 flex items-center gap-2"><i class="fas fa-question-circle text-[#005565]"></i> {{ $t('modals.help.title') }}</h3>
+            <h3 class="font-black text-slate-700 flex items-center gap-2"><i class="fas fa-question-circle text-[#043e49]"></i> {{ $t('modals.help.title') }}</h3>
             <button @click="helpModal=false" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
         </div>
         <div class="overflow-y-auto flex-1 p-0">
@@ -233,7 +233,7 @@
                 <h4 class="help-title"><i class="fas fa-ban"></i> {{ $t('modals.help.na_title') }}</h4>
                 <p class="help-text">{{ $t('modals.help.na_desc') }}</p>
             </div>
-            <div class="help-section bg-[#005565] text-white">
+            <div class="help-section bg-[#043e49] text-white">
                 <h4 class="help-title text-white"><i class="fas fa-headset"></i> {{ $t('modals.help.support_title') }}</h4>
                 <p class="text-xs opacity-80">{{ $t('modals.help.support_desc') }}</p>
             </div>
@@ -252,7 +252,7 @@
                     <label class="lbl">{{ $t('modals.rule.icon') }}</label>
                     <button @click="iconSelectorOpen=!iconSelectorOpen" class="w-full input-std text-left flex justify-between"><i class="fas" :class="ruleModal.data.defaultIcon"></i><i class="fas fa-chevron-down"></i></button>
                     <div v-if="iconSelectorOpen" class="absolute z-20 bg-white border border-slate-200 p-2 grid grid-cols-6 gap-2 shadow-xl rounded-xl mt-1 max-h-56 overflow-y-auto w-64 ring-1 ring-black/5">
-                        <button v-for="icon in iconsList" :key="icon" @click="ruleModal.data.defaultIcon=icon;iconSelectorOpen=false" class="w-8 h-8 hover:bg-slate-100 rounded flex items-center justify-center text-slate-600 hover:text-[#005565] transition" :title="icon"><i class="fas" :class="icon"></i></button>
+                        <button v-for="icon in iconsList" :key="icon" @click="ruleModal.data.defaultIcon=icon;iconSelectorOpen=false" class="w-8 h-8 hover:bg-slate-100 rounded flex items-center justify-center text-slate-600 hover:text-[#043e49] transition" :title="icon"><i class="fas" :class="icon"></i></button>
                     </div>
                 </div>
                 <div class="col-span-1"><label class="lbl">{{ $t('modals.rule.general_rec') }}</label><input v-model="ruleModal.data.recommendation" class="input-std"></div>
@@ -261,9 +261,9 @@
             <div class="border-t pt-4">
                 <h4 class="lbl mb-3">{{ $t('modals.rule.limits_title') }}</h4>
                 <div class="grid grid-cols-2 gap-4">
-                    <div v-for="(conf, key) in fieldsConfig" :key="key" class="bg-slate-50 p-3 rounded border" :class="ruleModal.tempActive[key]?'border-[#005565]':'opacity-60'">
+                    <div v-for="(conf, key) in fieldsConfig" :key="key" class="bg-slate-50 p-3 rounded border" :class="ruleModal.tempActive[key]?'border-[#043e49]':'opacity-60'">
                         <div class="flex items-center gap-2 mb-2 cursor-pointer" @click="ruleModal.tempActive[key]=!ruleModal.tempActive[key]">
-                            <div class="w-4 h-4 border rounded flex items-center justify-center" :class="ruleModal.tempActive[key]?'bg-[#005565] border-[#005565]':'bg-white'"><i v-if="ruleModal.tempActive[key]" class="fas fa-check text-white text-[8px]"></i></div>
+                            <div class="w-4 h-4 border rounded flex items-center justify-center" :class="ruleModal.tempActive[key]?'bg-[#043e49] border-[#043e49]':'bg-white'"><i v-if="ruleModal.tempActive[key]" class="fas fa-check text-white text-[8px]"></i></div>
                             <span class="text-xs font-bold">{{ translateDynamic(conf.label, 'measurements') }}</span>
                         </div>
                         <div v-if="ruleModal.tempActive[key]" class="pl-6 space-y-2">
@@ -282,7 +282,7 @@
         </div>
         <div class="p-5 bg-slate-50 border-t flex justify-end gap-3">
             <button @click="ruleModal.open=false" :disabled="submitting" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded disabled:opacity-50">{{ $t('common.cancel') }}</button>
-            <button @click="saveRule" :disabled="submitting" class="px-6 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-lg hover:bg-[#004455] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button @click="saveRule" :disabled="submitting" class="px-6 py-2 bg-[#043e49] text-white text-xs font-bold rounded shadow-lg hover:bg-[#032c34] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.loading') : $t('common.save') }}
             </button>
         </div>
@@ -295,14 +295,14 @@
         <h3 class="font-black text-slate-700 mb-4">{{ $t('modals.edit_status.title') }}</h3>
         <label class="lbl">{{ $t('modals.edit_status.name') }}</label><input v-model="editModal.newValue.name" class="input-std uppercase mb-4">
         <div class="flex flex-col gap-2 mb-4">
-            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.showCard" id="chkEditCard" class="w-4 h-4 accent-[#005565] cursor-pointer"><label for="chkEditCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('modals.edit_status.show_card') }}</label></div>
+            <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.showCard" id="chkEditCard" class="w-4 h-4 accent-[#043e49] cursor-pointer"><label for="chkEditCard" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('modals.edit_status.show_card') }}</label></div>
             <div class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition"><input type="checkbox" v-model="editModal.newValue.isAdmin" id="chkEditAdmin" class="w-4 h-4 accent-amber-500 cursor-pointer"><label for="chkEditAdmin" class="text-xs font-bold text-slate-600 cursor-pointer select-none">{{ $t('modals.edit_status.admin_move') }}</label></div>
-            <div class="flex items-center gap-2 bg-teal-50/60 px-4 py-2 rounded-lg border border-teal-200 cursor-pointer hover:bg-teal-50 transition"><input type="checkbox" v-model="editModal.newValue.requiresMeasurements" id="chkEditReqMeas" class="w-4 h-4 accent-[#005565] cursor-pointer"><label for="chkEditReqMeas" class="text-xs font-bold text-[#005565] cursor-pointer select-none">{{ $t('modals.edit_status.req_meas') || '¿Requiere Mediciones?' }}</label></div>
+            <div class="flex items-center gap-2 bg-teal-50/60 px-4 py-2 rounded-lg border border-teal-200 cursor-pointer hover:bg-teal-50 transition"><input type="checkbox" v-model="editModal.newValue.requiresMeasurements" id="chkEditReqMeas" class="w-4 h-4 accent-[#043e49] cursor-pointer"><label for="chkEditReqMeas" class="text-xs font-bold text-[#043e49] cursor-pointer select-none">{{ $t('modals.edit_status.req_meas') || '¿Requiere Mediciones?' }}</label></div>
         </div>
         <div v-if="editModal.newValue.showCard" class="mb-6"><label class="lbl">{{ $t('modals.edit_status.card_color') }}</label><div class="h-10 w-full rounded border border-slate-300 overflow-hidden relative"><input type="color" v-model="editModal.newValue.color" class="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer"></div></div>
         <div class="flex justify-end gap-2">
             <button @click="editModal.open=false" :disabled="submitting" class="px-4 py-2 text-xs font-bold text-slate-400 disabled:opacity-50">{{ $t('common.cancel') }}</button>
-            <button @click="confirmStateUpdate" :disabled="submitting" class="px-4 py-2 bg-[#005565] text-white text-xs font-bold rounded shadow-md hover:bg-[#004455] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button @click="confirmStateUpdate" :disabled="submitting" class="px-4 py-2 bg-[#043e49] text-white text-xs font-bold rounded shadow-md hover:bg-[#032c34] transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="fas" :class="submitting ? 'fa-spinner fa-spin' : 'fa-save'"></i> {{ submitting ? $t('common.processing') : $t('common.save') }}
             </button>
         </div>
@@ -431,7 +431,7 @@
 
                 <div v-else-if="field.label === 'EMAIL_LIST'" class="space-y-4">
                     <div class="flex flex-wrap gap-2">
-                        <button v-for="group in catalogs.emailGroups" :key="group.id" @click="toggleEmailGroup(group)" :class="isGroupSelected(group) ? 'bg-[#005565] text-white border-[#004455] shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'" class="px-4 py-2 rounded-xl border text-[10px] font-black transition-all flex items-center gap-2 uppercase tracking-tighter">
+                        <button v-for="group in catalogs.emailGroups" :key="group.id" @click="toggleEmailGroup(group)" :class="isGroupSelected(group) ? 'bg-[#043e49] text-white border-[#032c34] shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'" class="px-4 py-2 rounded-xl border text-[10px] font-black transition-all flex items-center gap-2 uppercase tracking-tighter">
                             <i class="fas" :class="isGroupSelected(group) ? 'fa-check-circle' : 'fa-users'"></i>
                             {{ group.id }}
                         </button>
@@ -440,12 +440,12 @@
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">{{ $t('modals.ticket.extra_emails') }}</p>
                         <div v-for="(email, idx) in ticketEmails" :key="idx" class="flex items-center gap-2 animate-fade">
                             <div class="relative flex-1">
-                                <input v-model="ticketEmails[idx]" @keyup.enter="addEmailField" class="email-input-field input-std pr-24 focus:!border-[#005565]" placeholder="nombre.apellido">
+                                <input v-model="ticketEmails[idx]" @keyup.enter="addEmailField" class="email-input-field input-std pr-24 focus:!border-[#043e49]" placeholder="nombre.apellido">
                                 <span class="absolute right-3 top-2 text-slate-300 text-[10px] font-bold mt-0.5 pointer-events-none">@plexus.com</span>
                             </div>
                             <button v-if="ticketEmails.length > 1" @click="removeEmailField(idx)" class="text-rose-300 hover:text-rose-500 transition"><i class="fas fa-times-circle"></i></button>
                         </div>
-                        <button @click="addEmailField" class="text-[10px] text-[#005565] font-black hover:underline px-1">{{ $t('modals.ticket.add_recipient') }}</button>
+                        <button @click="addEmailField" class="text-[10px] text-[#043e49] font-black hover:underline px-1">{{ $t('modals.ticket.add_recipient') }}</button>
                     </div>
                 </div>
 
@@ -554,7 +554,7 @@
         <i class="fas fa-file-csv text-6xl text-slate-300 mb-4"></i>
         <h3 class="text-lg font-black text-slate-700">{{ $t('modals.datahub.upload_hint') }}</h3>
         <p class="text-xs text-slate-500 mb-6 font-medium">{{ $t('modals.datahub.upload_desc') }}</p>
-        <label class="cursor-pointer bg-[#005565] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#004455] transition inline-flex items-center gap-2">
+        <label class="cursor-pointer bg-[#043e49] text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-[#032c34] transition inline-flex items-center gap-2">
           <i class="fas fa-upload"></i> {{ $t('modals.datahub.btn_select_csv') }}
           <input type="file" accept=".csv" class="hidden" @change="handleCSVUpload">
         </label>

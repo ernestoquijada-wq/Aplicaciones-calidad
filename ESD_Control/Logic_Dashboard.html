@@ -139,7 +139,43 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         return filteredAssets.value.slice(start, start + itemsPerPage.value); 
     });
     
-    const totalPages = computed(() => Math.ceil(filteredAssets.value.length / itemsPerPage.value));
+    const totalPages = computed(() => Math.max(1, Math.ceil(filteredAssets.value.length / itemsPerPage.value)));
+
+    // Banner Dinámico: Próximo ID Consecutivo y Último Activo Registrado (O(N) reactivo + respaldo en caché del servidor)
+    const serverBannerSummary = utils.serverBannerSummary || ref(null);
+    const bannerInfo = computed(() => {
+        let maxId = 0;
+        let lastAsset = null;
+        const allList = assets.value || [];
+
+        for (let i = 0; i < allList.length; i++) {
+            const item = allList[i];
+            const num = parseInt(String(item.controlNo || '').replace(/\D/g, ''), 10);
+            if (!isNaN(num) && num > maxId && num < 999999) {
+                maxId = num;
+            }
+            const estReg = String(item.estadoRegistro || 'ACTIVO').toUpperCase();
+            const stCol = String(item.status || '').toUpperCase();
+            const resCol = String(item.lastResult || '').toUpperCase();
+            if (estReg !== 'INACTIVO' && stCol !== 'BAJA' && resCol !== 'BAJA') {
+                lastAsset = item;
+            }
+        }
+
+        const localNextId = maxId + 1;
+        const srv = serverBannerSummary && serverBannerSummary.value;
+        if (srv && srv.nextAssetId && srv.nextAssetId > localNextId) {
+            return {
+                nextId: srv.nextAssetId,
+                lastAsset: srv.lastAsset || lastAsset
+            };
+        }
+
+        return {
+            nextId: localNextId,
+            lastAsset: lastAsset || (srv && srv.lastAsset) || null
+        };
+    });
     
     const metrics = computed(() => {
         let m = {total:0, compliance:0, expired:0, warning:0, noncompliant:0, dynamic: {}};
@@ -187,9 +223,11 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
         return catalogs.value.templates.filter(t => (t.hex || t.color) === currentFilter.value);
     });
 
-    // 3. MÉTODOS Y HELPERS
-    const nextPage = () => { if(page.value < totalPages.value) page.value++; };
-    const prevPage = () => { if(page.value > 1) page.value--; };
+    // 3. MÉTODOS Y HELPERS DE PAGINACIÓN O(1)
+    const firstPage = () => { if (page.value > 1) page.value = 1; };
+    const prevPage  = () => { if (page.value > 1) page.value--; };
+    const nextPage  = () => { if (page.value < totalPages.value) page.value++; };
+    const lastPage  = () => { if (page.value < totalPages.value) page.value = totalPages.value; };
     
     const activateFilter = (f) => { 
         if(currentFilter.value === f && showList.value) { showList.value = false; } 
@@ -277,16 +315,21 @@ function useDashboard(assets, statusDB, dbRules, catalogs, quadrantDB, FIELD_MAP
     };
 
     // 4. WATCHERS
-    watch(searchQuery, (v) => { if(v) showList.value = true; });
+    watch(searchQuery, (v) => { if(v) { showList.value = true; page.value = 1; } });
     watch(filters, (v) => { 
-        if(v.type || v.quadrant || v.status || v.factory || v.project || v.responsible || v.month) showList.value = true; 
+        if(v.type || v.quadrant || v.status || v.factory || v.project || v.responsible || v.month) {
+            showList.value = true;
+            page.value = 1;
+        }
     }, {deep:true});
+    watch(itemsPerPage, () => { page.value = 1; });
+    watch(totalPages, (newMax) => { if (page.value > newMax) page.value = newMax; });
 
     // 5. EXPORTAR TODO LO NECESARIO
     return {
         currentFilter, filters, searchQuery, itemsPerPage, page, showList,
-        dynamicCards, filteredAssets, paginatedAssets, totalPages, metrics, uniqueTypes, availableTemplates,
-        nextPage, prevPage, activateFilter, clearFilters, exportToDrive,
+        dynamicCards, filteredAssets, paginatedAssets, totalPages, bannerInfo, metrics, uniqueTypes, availableTemplates,
+        firstPage, nextPage, prevPage, lastPage, activateFilter, clearFilters, exportToDrive,
         isExpired, formatDate, getQuadrantColor, getStatusColor, getIcon, highlightMatch, getAssetFailures, isAlertResult,
         getAssetAlerts
     };

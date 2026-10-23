@@ -1,60 +1,103 @@
 <#
 .SYNOPSIS
-    Pipeline de Despliegue Multi-Entorno basado en JSON + PropertiesService para ESD Control (Clasp).
-
+    Script de Despliegue Automatizado Multi-Entorno para Google Apps Script (Clasp).
 .DESCRIPTION
-    Lee la configuracion de entornos desde environments.json y gestiona el despliegue hacia:
-    - PRUEBAS (QA)
-    - PRODUCCION - AZTECA
-    - PRODUCCION - MAYA
-    Actualiza dinamicamente SOLO el archivo .clasp.json con el scriptId correspondiente (sin modificar Config.js).
+    - Fase 1: Despliega exclusivamente al ENTORNO DE PRUEBAS (QA) modificando .clasp.json e inyectando ConfigEnv.js.
+    - Fase 2: Solicita confirmacion (Y/N) y despliega secuencialmente a PRODUCCION - AZTECA y PRODUCCION - MAYA.
+    - Seguridad: Restaura siempre .clasp.json y ConfigEnv.js al entorno de PRUEBAS al finalizar.
+.EXAMPLE
+    .\deploy.ps1
+    Ejecuta Fase 1 (Pruebas) y pregunta confirmacion (Y/N) para Fase 2 (Azteca y Maya).
+.EXAMPLE
+    .\deploy.ps1 -SoloPruebas
+    Ejecuta unicamente la Fase 1 (Pruebas).
+.EXAMPLE
+    .\deploy.ps1 -SoloProduccion
+    Salta directamente a la confirmacion de Fase 2 (Azteca y Maya).
 #>
 
-param (
-    [Parameter(Position = 0)]
-    [ValidateSet('All', '1', '2', 'QA', 'PROD', 'AZTECA', 'MAYA', IgnoreCase = $true)]
-    [string]$Phase = 'All'
+[CmdletBinding()]
+param(
+    [switch]$SoloPruebas,
+    [switch]$SoloProduccion,
+    [switch]$DryRun
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
+$ProjectRoot = $PSScriptRoot
+if (-not $ProjectRoot) {
+    $ProjectRoot = (Get-Location).Path
+}
 
-# ==============================================================================
-# 1. RESOLUCION DE RUTAS Y LECTURA DE environments.json
-# ==============================================================================
-$ProjectDir = $PSScriptRoot
-if (-not (Test-Path (Join-Path $ProjectDir 'appsscript.json'))) {
-    $Candidate = Join-Path $PSScriptRoot 'ESD_Control'
-    if (Test-Path (Join-Path $Candidate 'appsscript.json')) {
-        $ProjectDir = $Candidate
-    } else {
-        Write-Host "[ERROR] No se encontro appsscript.json en '$ProjectDir'." -ForegroundColor Red
-        exit 1
+# ============================================================================
+# 1. DEFINICION DE ENTORNOS (MATRIZ DE DESPLIEGUE)
+# ============================================================================
+$Environments = [ordered]@{
+    "QA" = @{
+        Key           = "QA"
+        Name          = "ENTORNO DE PRUEBAS"
+        ScriptId      = "1GwS99kQDAiUxSTfECzSSQEXNMF67mpbv6BLurPFZ2bZ0V0j5l0dO2EWk"
+        SpreadsheetId = "1y_6x3bp-CR-kSieVv6TPSIOjD4-S9jvhIZOxDXlV_yk"
+        Color         = "Cyan"
+    }
+    "AZTECA" = @{
+        Key           = "AZTECA"
+        Name          = "PRODUCCION - AZTECA"
+        ScriptId      = "13OCo9k9qF-oI4Z-J2nif3Lyp6E-iWEPVDB5v2MyD6Nu2lGNYokTJKN4W"
+        SpreadsheetId = "1CiZnIPUbtw3eCpC2-Hsre6tKh647BSxOkZEk-8r85WA"
+        Color         = "Yellow"
+    }
+    "MAYA" = @{
+        Key           = "MAYA"
+        Name          = "PRODUCCION - MAYA"
+        ScriptId      = "1PSzubxj_GWEFF1_oEvn1PFzXODtZZmm8gPk8yLM4mrvJstjbPwQaQk8h"
+        SpreadsheetId = "1vpqnf0Psk2AJrU_LYe6Tag3z-k98wcIlwaa4DlAmEqI"
+        Color         = "Magenta"
     }
 }
 
-$EnvJsonPath = Join-Path (Split-Path $ProjectDir -Parent) 'environments.json'
-if (-not (Test-Path $EnvJsonPath)) {
-    $EnvJsonPath = Join-Path $ProjectDir 'environments.json'
+$ClaspJsonPath = Join-Path $ProjectRoot ".clasp.json"
+$ConfigEnvPath = Join-Path $ProjectRoot "ConfigEnv.js"
+
+# ============================================================================
+# 2. FUNCIONES AUXILIARES DE ARCHIVOS Y CLASP
+# ============================================================================
+
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($FilePath, $Content, $Utf8NoBom)
 }
-if (-not (Test-Path $EnvJsonPath)) {
-    Write-Host "[ERROR] No se encontro el archivo environments.json." -ForegroundColor Red
-    exit 1
+
+function Resolve-ClaspExecutable {
+    $npmGlobalBin = Join-Path $env:APPDATA "npm"
+    if ((Test-Path $npmGlobalBin) -and ($env:PATH -notlike "*$npmGlobalBin*")) {
+        $env:PATH = "$npmGlobalBin;$env:PATH"
+    }
+
+    # Preferir clasp.cmd en Windows para evitar bloqueos de ExecutionPolicy sobre clasp.ps1
+    $claspCmd = Get-Command "clasp.cmd" -ErrorAction SilentlyContinue
+    if ($claspCmd) { return $claspCmd.Source }
+
+    $claspGeneric = Get-Command "clasp" -ErrorAction SilentlyContinue
+    if ($claspGeneric) { return $claspGeneric.Source }
+
+    throw "No se encontro 'clasp' instalado. Ejecuta: npm install -g @google/clasp"
 }
 
-$Utf8NoBom     = New-Object System.Text.UTF8Encoding($false)
-$RawJson       = [System.IO.File]::ReadAllText($EnvJsonPath, $Utf8NoBom)
-$Environments  = $RawJson | ConvertFrom-Json
-$ClaspJsonPath = Join-Path $ProjectDir '.clasp.json'
+function Set-EnvironmentFiles {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$EnvData,
+        [switch]$Silent
+    )
 
-# ==============================================================================
-# 2. FUNCIONES DE CONFIGURACION (.clasp.json) Y DESPLIEGUE
-# ==============================================================================
-function Update-ClaspConfig {
-    param ([string]$ScriptId)
-
+    # 1. Actualizar .clasp.json (preservando estructura limpia sin BOM)
     $claspContent = @"
 {
-  "scriptId": "$ScriptId",
+  "scriptId": "$($EnvData.ScriptId)",
   "rootDir": "",
   "scriptExtensions": [
     ".js",
@@ -67,94 +110,136 @@ function Update-ClaspConfig {
     ".json"
   ],
   "filePushOrder": [],
-  "skipSubdirectories": false
+  "skipSubdirectories": true
 }
 "@
-    [System.IO.File]::WriteAllText($ClaspJsonPath, $claspContent, $Utf8NoBom)
+    Write-Utf8NoBom -FilePath $ClaspJsonPath -Content $claspContent
+
+    # 2. Inyectar ConfigEnv.js con el Spreadsheet ID del entorno
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    $configEnvContent = @"
+// ============================================================================
+// ARCHIVO GENERADO AUTOMATICAMENTE POR deploy.ps1 - NO EDITAR MANUALMENTE
+// ============================================================================
+// Entorno activo : $($EnvData.Name)
+// Generado el    : $timestamp
+// ============================================================================
+
+const ENV_CONFIG = Object.freeze({
+  ENV_KEY: '$($EnvData.Key)',
+  ENV_NAME: '$($EnvData.Name)',
+  SCRIPT_ID: '$($EnvData.ScriptId)',
+  SS_ID: '$($EnvData.SpreadsheetId)'
+});
+"@
+    Write-Utf8NoBom -FilePath $ConfigEnvPath -Content $configEnvContent
+
+    if (-not $Silent) {
+        Write-Host "  [OK] .clasp.json  -> Script ID      : $($EnvData.ScriptId)" -ForegroundColor Gray
+        Write-Host "  [OK] ConfigEnv.js -> Spreadsheet ID : $($EnvData.SpreadsheetId)" -ForegroundColor Gray
+    }
 }
 
-function Deploy-ToEnvironment {
-    param ([PSCustomObject]$EnvConfig)
+function Invoke-EnvironmentDeploy {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$EnvData,
+        [Parameter(Mandatory = $true)][string]$ClaspBin
+    )
 
-    Write-Host ""
-    Write-Host "======================================================================" -ForegroundColor Cyan
-    Write-Host " [DEPLOY] DESPLEGANDO A: $($EnvConfig.name)" -ForegroundColor Cyan
-    Write-Host "======================================================================" -ForegroundColor Cyan
-    Write-Host " * Script ID (Clasp)       : $($EnvConfig.scriptId)" -ForegroundColor Gray
-    Write-Host " * Spreadsheet ID (Props)  : $($EnvConfig.spreadsheetId)" -ForegroundColor Gray
-    Write-Host " * HEAD Deployment ID      : $($EnvConfig.headDeploymentId)" -ForegroundColor Gray
-    Write-Host "----------------------------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "`n==================================================================" -ForegroundColor $EnvData.Color
+    Write-Host " [DEPLOY] DESPLEGANDO A: $($EnvData.Name)" -ForegroundColor $EnvData.Color
+    Write-Host "==================================================================" -ForegroundColor $EnvData.Color
 
-    # 1. Actualizar .clasp.json con el scriptId leido de environments.json
-    Write-Host " [1/2] Actualizando .clasp.json desde environments.json..." -ForegroundColor Yellow
-    Update-ClaspConfig -ScriptId $EnvConfig.scriptId
+    Set-EnvironmentFiles -EnvData $EnvData
 
-    # 2. Ejecutar clasp push (Config.js NO se modifica; usa PropertiesService en la nube)
-    Write-Host " [2/2] Ejecutando 'npx clasp push -f'..." -ForegroundColor Yellow
-    Push-Location $ProjectDir
+    if ($DryRun) {
+        Write-Host "  [DRY-RUN] Simulando comando: clasp push -f" -ForegroundColor DarkGray
+        return $true
+    }
+
+    Write-Host "  [>] Ejecutando: clasp push -f ..." -ForegroundColor White
+    Push-Location $ProjectRoot
     try {
-        & npx.cmd clasp push -f
+        & $ClaspBin push -f
         if ($LASTEXITCODE -ne 0) {
-            throw "El comando 'clasp push' fallo con codigo de salida $LASTEXITCODE en $($EnvConfig.name)."
+            throw "clasp push devolvio codigo de error $LASTEXITCODE en $($EnvData.Name)."
         }
-    } finally {
+        Write-Host "  [EXITO] Codigo desplegado correctamente en $($EnvData.Name)." -ForegroundColor Green
+        return $true
+    }
+    finally {
         Pop-Location
     }
-
-    $headUrl = "https://script.google.com/macros/s/$($EnvConfig.headDeploymentId)/exec"
-    Write-Host ""
-    Write-Host " [OK] DESPLIEGUE EXITOSO EN $($EnvConfig.name)" -ForegroundColor Green
-    Write-Host " [URL] Web App (HEAD): $headUrl" -ForegroundColor Green
-    Write-Host "======================================================================" -ForegroundColor Cyan
 }
 
-function Start-ProductionPipeline {
-    Write-Host ""
-    $promptMsg = "$([char]0x00BF)Las pruebas en QA fueron exitosas y deseas pasar a Produccion? (Y/N)"
-    $confirmation = Read-Host $promptMsg
-    if ($confirmation -match '^[YySs]$') {
-        Write-Host ""
-        Write-Host "=== INICIANDO FASE 2: DESPLIEGUE SECUENCIAL A PRODUCCION (AZTECA -> MAYA) ===" -ForegroundColor Magenta
+# ============================================================================
+# 3. FLUJO PRINCIPAL DE DESPLIEGUE (FASE 1 Y FASE 2)
+# ============================================================================
 
-        $prodTargets = @($Environments.AZTECA, $Environments.MAYA)
-        foreach ($plant in $prodTargets) {
-            Deploy-ToEnvironment -EnvConfig $plant
+try {
+    $ClaspExecutable = Resolve-ClaspExecutable
+    Write-Host "==================================================================" -ForegroundColor DarkCyan
+    Write-Host " PIPELINE DE DESPLIEGUE CLASP - ESD CONTROL" -ForegroundColor White
+    Write-Host "==================================================================" -ForegroundColor DarkCyan
+    Write-Host " Binario Clasp : $ClaspExecutable" -ForegroundColor DarkGray
+    Write-Host " Directorio    : $ProjectRoot" -ForegroundColor DarkGray
+
+    # ------------------------------------------------------------------------
+    # FASE 1: DESPLIEGUE EXCLUSIVO A ENTORNO DE PRUEBAS (QA)
+    # ------------------------------------------------------------------------
+    if (-not $SoloProduccion) {
+        Write-Host "`n>>> INICIANDO FASE 1: Entorno de Pruebas (QA)" -ForegroundColor Cyan
+        $qaSuccess = Invoke-EnvironmentDeploy -EnvData $Environments["QA"] -ClaspBin $ClaspExecutable
+        if (-not $qaSuccess) {
+            throw "Fallo en Fase 1 (Entorno de Pruebas). Se aborta el pipeline."
         }
+    }
 
-        Write-Host ""
-        Write-Host "[COMPLETADO] PIPELINE DE PRODUCCION FINALIZADO CON EXITO EN AZTECA Y MAYA." -ForegroundColor Green
-    } else {
-        Write-Host ""
-        Write-Host "[CANCELADO] Despliegue a Produccion cancelado por el usuario." -ForegroundColor Yellow
+    if ($SoloPruebas) {
+        Write-Host "`n[INFO] Flag -SoloPruebas activo. Pipeline finalizado tras Fase 1." -ForegroundColor Cyan
+        return
+    }
+
+    # ------------------------------------------------------------------------
+    # FASE 2: CONFIRMACION Y DESPLIEGUE A PRODUCCION (AZTECA Y MAYA)
+    # ------------------------------------------------------------------------
+    Write-Host "`n------------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host " [ATENCION] FASE 2: DESPLIEGUE A PRODUCCION (AZTECA + MAYA)" -ForegroundColor Yellow
+    Write-Host "------------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host " Se actualizaran los siguientes entornos productivos:" -ForegroundColor White
+    Write-Host "   1. PRODUCCION - AZTECA (SS_ID: $($Environments['AZTECA'].SpreadsheetId))" -ForegroundColor Gray
+    Write-Host "   2. PRODUCCION - MAYA   (SS_ID: $($Environments['MAYA'].SpreadsheetId))" -ForegroundColor Gray
+    Write-Host ""
+
+    $confirmation = Read-Host "Confirmas el despliegue a PRODUCCION (AZTECA y MAYA)? (Y/N)"
+
+    if ($confirmation -match "^[YySs]$") {
+        Write-Host "`n>>> INICIANDO FASE 2: Despliegue secuencial a Produccion..." -ForegroundColor Yellow
+
+        # 2.1 Produccion - Azteca
+        Invoke-EnvironmentDeploy -EnvData $Environments["AZTECA"] -ClaspBin $ClaspExecutable | Out-Null
+
+        # 2.2 Produccion - Maya
+        Invoke-EnvironmentDeploy -EnvData $Environments["MAYA"] -ClaspBin $ClaspExecutable | Out-Null
+
+        Write-Host "`n==================================================================" -ForegroundColor Green
+        Write-Host " [COMPLETADO] PRUEBAS, AZTECA Y MAYA ACTUALIZADOS EXITOSAMENTE" -ForegroundColor Green
+        Write-Host "==================================================================" -ForegroundColor Green
+    }
+    else {
+        Write-Host "`n[CANCELADO] Fase 2 omitida por el usuario. Produccion NO fue modificada." -ForegroundColor Cyan
     }
 }
-
-# ==============================================================================
-# 3. ORQUESTADOR DE COMANDOS (INDIVIDUALES O PIPELINE DE 2 FASES)
-# ==============================================================================
-$NormalizedPhase = $Phase.ToUpper()
-
-switch ($NormalizedPhase) {
-    { $_ -in @('1', 'QA') } {
-        Write-Host "=== FASE 1 / DESPLIEGUE EXCLUSIVO: ENTORNO DE PRUEBAS (QA) ===" -ForegroundColor Cyan
-        Deploy-ToEnvironment -EnvConfig $Environments.QA
-    }
-    { $_ -in @('2', 'PROD') } {
-        Write-Host "=== FASE 2: PASO A PRODUCCION (AZTECA Y MAYA) ===" -ForegroundColor Magenta
-        Start-ProductionPipeline
-    }
-    'AZTECA' {
-        Write-Host "=== DESPLIEGUE INDIVIDUAL: PRODUCCION - AZTECA ===" -ForegroundColor Cyan
-        Deploy-ToEnvironment -EnvConfig $Environments.AZTECA
-    }
-    'MAYA' {
-        Write-Host "=== DESPLIEGUE INDIVIDUAL: PRODUCCION - MAYA ===" -ForegroundColor Cyan
-        Deploy-ToEnvironment -EnvConfig $Environments.MAYA
-    }
-    Default {
-        Write-Host "=== PIPELINE COMPLETO (FASE 1: QA -> FASE 2: PRODUCCION) ===" -ForegroundColor Cyan
-        Deploy-ToEnvironment -EnvConfig $Environments.QA
-        Start-ProductionPipeline
-    }
+catch {
+    Write-Host "`n[ERROR CRITICO EN DESPLIEGUE]: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+finally {
+    # ------------------------------------------------------------------------
+    # SALVAGUARDA DEVOPS: Restaurar siempre archivos locales a PRUEBAS (QA)
+    # ------------------------------------------------------------------------
+    Write-Host "`n[SEGURIDAD] Restaurando archivos locales (.clasp.json y ConfigEnv.js) a PRUEBAS (QA)..." -ForegroundColor DarkGray
+    Set-EnvironmentFiles -EnvData $Environments["QA"] -Silent
+    Write-Host "[SEGURIDAD] Entorno local asegurado en PRUEBAS (QA)." -ForegroundColor DarkGray
 }
 

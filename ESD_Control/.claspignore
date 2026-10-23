@@ -1,10 +1,8 @@
-# Ignorar scripts de automatizacion local, JSON de entornos y documentacion
-**/*.ps1
-**/*.md
-environments.json
+# Ignorar scripts de despliegue local y archivos de configuración de desarrollo
+deploy.ps1
+*.ps1
+*.md
 .git/**
 node_modules/**
-
-# Evitar conflicto de nombres duplicados entre Test_Suite.js y Test_Suite.gs
-Test_Suite.gs
+ESD_Control/**
 

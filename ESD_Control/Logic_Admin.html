@@ -991,6 +991,44 @@ function useAdmin(globalConfig) {
         }
     };
 
+    // 7. MÓDULO DE TRÁFICO Y ANALÍTICAS DE USO
+    const trafficPeriod = ref(30);
+    const isLoadingTraffic = ref(false);
+    const trafficAnalytics = ref({
+        periodDays: 30,
+        kpis: { uniqueUsers: 0, onlineNow: 0, totalSessions: 0, totalInteractions: 0, avgDailySessions: 0 },
+        modules: { auditsPass: 0, auditsFail: 0, assetsCreated: 0, ticketsCreated: 0, ticketsResolved: 0, aiQueries: 0, exports: 0, adminChanges: 0 },
+        users: [],
+        timeline: [],
+        recentLogs: []
+    });
+
+    const loadTrafficAnalytics = async (forceRefresh = false, periodDays = null) => {
+        if (periodDays) trafficPeriod.value = periodDays;
+        isLoadingTraffic.value = true;
+        try {
+            const r = await runGAS('getTrafficAnalytics', trafficPeriod.value, forceRefresh);
+            if (r && r.success) {
+                trafficAnalytics.value = r;
+            }
+        } catch (e) {
+            console.warn('No se pudieron cargar las analíticas de tráfico:', e);
+        } finally {
+            isLoadingTraffic.value = false;
+        }
+    };
+
+    const formatLastSeen = (isoStr) => {
+        if (!isoStr) return '---';
+        try {
+            const d = new Date(isoStr);
+            if (isNaN(d.getTime())) return String(isoStr);
+            return d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return String(isoStr);
+        }
+    };
+
     // EXPORTAMOS TODO AL MAIN
     return {
         adminTab, activeCatalogCategory, activeCatalogLabel, activeList, editingCatalog, newCatalog, adminEmailGroupList, newStatus,
@@ -1000,6 +1038,7 @@ function useAdmin(globalConfig) {
         activeEmailType, newUserEmail, newUserRole,
         lastFocusedEmailField, insertEmailTag, addFactoryEmailRule, removeFactoryEmailRule,
         previewEmailSubject, previewEmailBody,
+        trafficPeriod, isLoadingTraffic, trafficAnalytics, loadTrafficAnalytics, formatLastSeen,
         
         saveCatalogItem, editCatalog, cancelCatalogEdit, deleteCatalogItem, moveColUp, moveColDown, previewTemplate,
         addStatus, deleteStatus, openEditStateModal, confirmStateUpdate,

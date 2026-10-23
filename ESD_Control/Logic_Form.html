@@ -15,12 +15,21 @@ function useAssetForm(globalConfig) {
 
     // 1. ESTADO LOCAL DEL FORMULARIO
     const editAsset = ref({});
-    const form = ref({ measurements:{}, result: '', validationDate: '' });
+    const form = ref({ measurements:{}, result: '', validationDate: new Date().toISOString().split('T')[0] });
     const isNewAsset = ref(false);
     const isAuditMode = ref(false);
+    const isDateConfirmed = ref(false);
     const activeInput = ref(null);
     const auditHistory = ref([]);
     const activeTicketEvidence = ref(null);
+
+    const confirmValidationDate = () => {
+        if (!form.value.validationDate) {
+            form.value.validationDate = new Date().toISOString().split('T')[0];
+        }
+        isDateConfirmed.value = true;
+        Toast.fire({ icon: 'success', title: i18n.global.t('form.toast_date_confirmed') });
+    };
 
     // 2. COMPUTADOS
     const sectorColor = computed(() => currentThemeColor.value);
@@ -217,10 +226,16 @@ function useAssetForm(globalConfig) {
         releasePresence();
         isNewAsset.value = true; 
         editAsset.value = { status: 'ACTIVO' };
-        currentThemeColor.value = '#005565'; 
+        currentThemeColor.value = '#043e49'; 
         view.value = 'form'; 
         isAuditMode.value = true; 
-        form.value = { measurements: {}, result: '' };
+        isDateConfirmed.value = false;
+        form.value = { 
+            measurements: {}, 
+            result: '', 
+            comments: '', 
+            validationDate: new Date().toISOString().split('T')[0] 
+        };
         auditHistory.value = []; 
         activeTicketEvidence.value = null;
     };
@@ -258,7 +273,7 @@ function useAssetForm(globalConfig) {
                    icon: 'warning',
                    showCancelButton: true,
                    showDenyButton: true,
-                   confirmButtonColor: '#005565',
+                   confirmButtonColor: '#043e49',
                    denyButtonColor: '#f59e0b',
                    cancelButtonColor: '#64748b',
                    confirmButtonText: '<i class="fas fa-hand-paper mr-1"></i> Tomar el Control',
@@ -293,13 +308,14 @@ function useAssetForm(globalConfig) {
        isNewAsset.value = false;
        editAsset.value = JSON.parse(JSON.stringify(a));
        const q = catalogs.value.sectors.find(x => x.id.toUpperCase() === (a.quadrant||'').toUpperCase());
-       currentThemeColor.value = q ? q.hex : '#005565';
+       currentThemeColor.value = q ? q.hex : '#043e49';
        form.value = {
            measurements: {},
            result: '',
            comments: a.comments || '',
            validationDate: a.lastDate || new Date().toISOString().split('T')[0]
        };
+       isDateConfirmed.value = false;
        
        // Por defecto al abrir la modal, HABILITAR EDICIÓN inicia desmarcado (false) y las lecturas bloqueadas
        isAuditMode.value = false;
@@ -359,9 +375,23 @@ function useAssetForm(globalConfig) {
                 icon: 'info',
                 title: 'Captura de Mediciones Requerida',
                 html: `<p class="text-sm text-slate-600">Para dar seguimiento o cerrar el ticket de este equipo, <b>primero debes capturar las nuevas lecturas técnicas</b> de verificación.</p>
-                       <p class="text-xs text-[#005565] font-bold mt-2"><i class="fas fa-arrow-down mr-1"></i> Hemos habilitado los campos de medición a continuación.</p>`,
-                confirmButtonColor: '#005565',
+                       <p class="text-xs text-[#043e49] font-bold mt-2"><i class="fas fa-arrow-down mr-1"></i> Hemos habilitado los campos de medición a continuación.</p>`,
+                confirmButtonColor: '#043e49',
                 confirmButtonText: 'Entendido, capturar lecturas'
+            });
+            return;
+        }
+
+        if (FrontendValidator.isBlank(form.value.validationDate) || !isDateConfirmed.value) {
+            const dateEl = document.getElementById('validation-date-block');
+            if (dateEl) dateEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            Swal.fire({
+                icon: 'warning',
+                title: 'Confirmación de Fecha Obligatoria',
+                html: `<p class="text-sm text-slate-600">La <b>Fecha de Verificación / Movimiento</b> (<span class="font-mono font-bold text-[#043e49]">${form.value.validationDate || 'Sin fecha'}</span>) es estrictamente obligatoria.</p>
+                       <p class="text-xs text-[#bd1a31] font-bold mt-2"><i class="fas fa-calendar-check mr-1"></i> Por favor selecciona la fecha o presiona el botón "Confirmar Fecha" antes de continuar.</p>`,
+                confirmButtonColor: '#043e49',
+                confirmButtonText: 'Entendido'
             });
             return;
         }
@@ -388,7 +418,7 @@ function useAssetForm(globalConfig) {
                     icon: 'warning', 
                     title: 'Faltan Mediciones', 
                     text: `Debes registrar una medición real para "${field.label}" o marcar 'N/A'.`, 
-                    confirmButtonColor: '#005565' 
+                    confirmButtonColor: '#043e49' 
                 });
                 return;
             } else { 
@@ -401,7 +431,7 @@ function useAssetForm(globalConfig) {
                 icon: 'error', 
                 title: 'Medición Obligatoria', 
                 text: 'Para evaluar la reparación, debes capturar al menos un valor numérico real (no todo puede ser N/A).', 
-                confirmButtonColor: '#e11d48' 
+                confirmButtonColor: '#bd1a31' 
             });
             return;
         }
@@ -419,7 +449,7 @@ function useAssetForm(globalConfig) {
                          <p class="font-bold flex items-center gap-1"><i class="fas fa-check-circle text-emerald-600"></i> Todas las lecturas técnicas cumplen con las tolerancias ESD.</p>
                        </div>
                        <p class="text-sm text-slate-600">A continuación, completa el formulario de Cierre de Ticket (CAPA) para documentar la acción correctiva y reactivar el equipo.</p>`,
-                confirmButtonColor: '#005565',
+                confirmButtonColor: '#043e49',
                 confirmButtonText: '<i class="fas fa-clipboard-check mr-1"></i> Proceder al Cierre CAPA'
             }).then((r) => { 
                 if (r.isConfirmed) {
@@ -453,6 +483,7 @@ function useAssetForm(globalConfig) {
        if (submitting.value && !forced) return;
        submitting.value = true;
        try {
+           const wasNewAsset = isNewAsset.value;
            editAsset.value.colorCode = currentThemeColor.value;
            
            // Sanitización de strings en el activo
@@ -543,17 +574,55 @@ function useAssetForm(globalConfig) {
            };
 
            const payload = { asset: assetPayload, formData: JSON.parse(JSON.stringify({...form.value, isAudit: isAuditMode.value})) };
-           const r = isNewAsset.value ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
+           const r = wasNewAsset ? await runGAS('saveNewAsset', payload) : await runGAS('processAudit', payload);
            if(r.success) { 
                releasePresence(editAsset.value?.controlNo);
-               Toast.fire({ icon: 'success', title: isNewAsset.value ? 'Activo Registrado' : 'Verificación Guardada' });
+               const assignedId = r.id || r.data?.id || editAsset.value?.controlNo;
                await loadData(true); 
-               view.value = 'dashboard'; 
+
+               if (wasNewAsset && assignedId) {
+                   submitting.value = false;
+                   const modalRes = await Swal.fire({
+                       icon: 'success',
+                       title: i18n.global.t('form.modal_reg_success_title'),
+                       html: `
+                         <div class="p-4 rounded-xl bg-[#f8f9fa] border border-slate-200 my-2">
+                           <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">${i18n.global.t('form.modal_reg_id_label')}</p>
+                           <p class="text-3xl font-black font-mono text-[#043e49] tabular-nums">#${assignedId}</p>
+                         </div>
+                         <p class="text-sm font-bold text-slate-700 mt-3">${i18n.global.t('form.modal_reg_question')}</p>
+                       `,
+                       showCancelButton: true,
+                       confirmButtonColor: '#bd1a31',
+                       cancelButtonColor: '#043e49',
+                       confirmButtonText: `<i class="fas fa-eye mr-1.5"></i> ${i18n.global.t('form.modal_reg_confirm')}`,
+                       cancelButtonText: i18n.global.t('form.modal_reg_cancel'),
+                       reverseButtons: true,
+                       allowOutsideClick: false
+                   });
+
+                   if (modalRes.isConfirmed) {
+                       const targetAsset = (assets.value || []).find(
+                           a => String(a.controlNo).trim().toUpperCase() === String(assignedId).trim().toUpperCase()
+                       );
+                       if (targetAsset) {
+                           await selectAsset(targetAsset);
+                           return;
+                       }
+                   }
+                   view.value = 'dashboard';
+               } else {
+                   Toast.fire({ 
+                       icon: 'success', 
+                       title: 'Verificación Guardada' 
+                   });
+                   view.value = 'dashboard'; 
+               }
            } else { 
                throw new Error(r.error || 'Error al guardar'); 
            }
        } catch(e) { 
-           Swal.fire({ icon: 'error', title: 'Error al Guardar', text: e.message || 'Error desconocido del servidor.' }); 
+           Swal.fire({ icon: 'error', title: 'Error al Guardar', text: e.message || 'Error desconocido del servidor.', confirmButtonColor: '#043e49' }); 
        } finally {
            submitting.value = false;
        }
@@ -573,7 +642,22 @@ function useAssetForm(globalConfig) {
                icon: 'warning', 
                title: 'Datos Incompletos', 
                text: 'Por favor completa todos los campos requeridos: Estado, Responsable, Fábrica, Proyecto, Cuadrante y Tipo.', 
-               confirmButtonColor: '#005565' 
+               confirmButtonColor: '#043e49' 
+           });
+           return;
+       }
+
+       // Validación Estricta de Fecha Obligatoria y Confirmación Explícita
+       if (FrontendValidator.isBlank(form.value.validationDate) || !isDateConfirmed.value) {
+           const dateEl = document.getElementById('validation-date-block');
+           if (dateEl) dateEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+           Swal.fire({ 
+               icon: 'warning', 
+               title: 'Confirmación de Fecha Obligatoria', 
+               html: `<p class="text-sm text-slate-600">La <b>Fecha de Verificación / Movimiento</b> (<span class="font-mono font-bold text-[#043e49]">${form.value.validationDate || 'Sin fecha'}</span>) es estrictamente obligatoria.</p>
+                      <p class="text-xs text-[#bd1a31] font-bold mt-2"><i class="fas fa-calendar-check mr-1"></i> Por favor selecciona la fecha o presiona el botón "Confirmar Fecha" antes de guardar.</p>`, 
+               confirmButtonColor: '#043e49',
+               confirmButtonText: 'Entendido'
            });
            return;
        }
@@ -595,7 +679,7 @@ function useAssetForm(globalConfig) {
                     : `<p>Se registrará como <b>${editAsset.value.status}</b> sin requerir lecturas técnicas.</p>`, 
                 icon: isBaja ? 'warning' : 'info', 
                 showCancelButton: true, 
-                confirmButtonColor: isBaja ? '#334155' : '#005565', 
+                confirmButtonColor: isBaja ? '#334155' : '#043e49', 
                 cancelButtonColor: '#94a3b8',
                 confirmButtonText: isBaja ? '<i class="fas fa-ban mr-1"></i> Sí, Dar de Baja' : 'Sí, Registrar',
                 cancelButtonText: 'Cancelar'
@@ -618,7 +702,7 @@ function useAssetForm(globalConfig) {
                
                if(isEmpty) { 
                    activeInput.value = field.key;
-                   Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#005565' });
+                   Swal.fire({ icon: 'warning', title: 'Faltan Mediciones', text: `Debes registrar una medición para ${field.label} o marcar 'N/A'.`, confirmButtonColor: '#043e49' });
                    return; 
                } else { 
                    validMeasurementsCount++; 
@@ -627,7 +711,7 @@ function useAssetForm(globalConfig) {
        }
        
        if (validMeasurementsCount === 0 && activeFields.value.length > 0) { 
-           Swal.fire({ icon: 'error', title: 'Auditoría Inválida', text: 'No puedes registrar una auditoría con todas las mediciones en "N/A". Debes capturar al menos un número real.', confirmButtonColor: '#e11d48' });
+           Swal.fire({ icon: 'error', title: 'Auditoría Inválida', text: 'No puedes registrar una auditoría con todas las mediciones en "N/A". Debes capturar al menos un número real.', confirmButtonColor: '#bd1a31' });
            return; 
        }
        
@@ -637,7 +721,7 @@ function useAssetForm(globalConfig) {
        if(isNewAsset.value) {
            const calculatedResult = failures.length > 0 ? 'NO CUMPLE' : 'CUMPLE';
            if (failures.length > 0) { 
-               Swal.fire({ title: '¡Alerta!', text: 'Un equipo nuevo no puede fallar en su primera verificación.', icon: 'error' });
+               Swal.fire({ title: '¡Alerta!', text: 'Un equipo nuevo no puede fallar en su primera verificación.', icon: 'error', confirmButtonColor: '#bd1a31' });
                return; 
            }
            form.value.result = calculatedResult; 
@@ -656,7 +740,7 @@ function useAssetForm(globalConfig) {
             Swal.fire({
                 title: '¡ALERTA DE CALIDAD!',
                 html: `<div class="mb-4"><p class="text-sm text-slate-600 mb-2">Las mediciones indican FALLA, pero intentas APROBAR el equipo.</p>${recsHtml}</div><p class="font-bold text-rose-600 text-center mt-4">Si fuerzas la aprobación, se notificará a Gerencia.</p>`,
-                icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'SÍ, APROBAR', cancelButtonText: 'CORREGIR'
+                icon: 'warning', showCancelButton: true, confirmButtonColor: '#bd1a31', confirmButtonText: 'SÍ, APROBAR', cancelButtonText: 'CORREGIR'
             }).then((r) => { 
                 if (r.isConfirmed) {
                     form.value.requiresSecondRevision = true; 
@@ -671,7 +755,7 @@ function useAssetForm(globalConfig) {
             Swal.fire({
                title: '¡VERIFICACIÓN DE CRITERIO!',
                html: `<div class="text-left"><p class="mb-3 text-sm text-slate-600">Las mediciones están <b>OK</b>, pero intentas RECHAZARLO.</p><p class="font-bold text-slate-800 text-center">¿Confirmas la falla (Ej. Daño visual)?</p></div>`,
-               icon: 'question', showCancelButton: true, confirmButtonColor: '#005565', confirmButtonText: 'SÍ, REGISTRAR FALLA', cancelButtonText: 'REVISAR'
+               icon: 'question', showCancelButton: true, confirmButtonColor: '#043e49', confirmButtonText: 'SÍ, REGISTRAR FALLA', cancelButtonText: 'REVISAR'
            }).then((r) => { 
                if (r.isConfirmed) {
                    form.value.requiresSecondRevision = true; 
@@ -709,6 +793,7 @@ function useAssetForm(globalConfig) {
             form.value.result = ''; 
             form.value.comments = ''; 
             form.value.validationDate = new Date().toISOString().split('T')[0];
+            isDateConfirmed.value = false;
         } else {
             if (editAsset.value.measurements) {
                 form.value.measurements = JSON.parse(JSON.stringify(editAsset.value.measurements));
@@ -717,11 +802,14 @@ function useAssetForm(globalConfig) {
             if (editAsset.value.lastDate) {
                 form.value.validationDate = editAsset.value.lastDate;
             }
+            isDateConfirmed.value = false;
         }
     };
 
     const onStatusChange = () => {
         if (!editAsset.value) return;
+        form.value.validationDate = new Date().toISOString().split('T')[0];
+        isDateConfirmed.value = false;
         if (!doesCurrentStatusRequireMeasurements.value) {
             isAuditMode.value = false;
             for (const key in FIELD_MAP) {
@@ -754,10 +842,10 @@ function useAssetForm(globalConfig) {
     };
 
     watch(() => editAsset.value.quadrant, (val) => {
-        if(!val) { currentThemeColor.value = '#005565'; return; }
+        if(!val) { currentThemeColor.value = '#043e49'; return; }
         const search = String(val).toUpperCase().trim();
         const sector = catalogs.value.sectors.find(s => s.id.toUpperCase() === search);
-        currentThemeColor.value = sector ? sector.hex : '#005565';
+        currentThemeColor.value = sector ? sector.hex : '#043e49';
     });
 
     watch(view, (newVal, oldVal) => {
@@ -774,7 +862,7 @@ function useAssetForm(globalConfig) {
 
     // 5. EXPORTAR TODO AL MAIN
     return {
-        editAsset, form, isNewAsset, isAuditMode, activeInput, auditHistory, activeTicketEvidence,
+        editAsset, form, isNewAsset, isAuditMode, isDateConfirmed, confirmValidationDate, activeInput, auditHistory, activeTicketEvidence,
         sectorColor, sectorLabel, doesCurrentStatusRequireMeasurements, isCurrentStatusAdmin, isStatusBaja, activeFields, isAssetFailed, formatLimit,
         isNA, toggleNA, getAlert, startNewAsset, selectAsset, evaluateRepair, prepareForMeasurementCapture, onAuditModeToggle, onStatusChange, submit, performSave,
         releasePresence

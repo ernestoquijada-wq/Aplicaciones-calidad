@@ -536,3 +536,309 @@ function adminToggleAlertRule(id, isActive) {
   }
   return runner();
 }
+
+
+/**
+ * 9. MÓDULO DE TRÁFICO Y ANALÍTICAS DE USO (PANEL ADMIN)
+ * Agrega telemetría en tiempo real (CacheService) + sesiones (DB_Traffic_Logs) +
+ * volumen transaccional real (Registros, DB_Assets, DB_Tickets) sin saturar cuotas.
+ */
+function getTrafficAnalytics(periodDays = 30, forceRefresh = false) {
+  try {
+    const days = Math.max(1, parseInt(periodDays, 10) || 30);
+    const cache = CacheService.getScriptCache();
+    const cacheKey = ((CONF.CACHE_KEYS && CONF.CACHE_KEYS.ADMIN_ANALYTICS) ? CONF.CACHE_KEYS.ADMIN_ANALYTICS : 'ESD_ADMIN_ANALYTICS_V1') + '_' + days;
+
+    // Actualizar heartbeat del propio usuario que consulta el panel
+    const currentEmail = (typeof Utils !== 'undefined' && Utils.getActiveUserEmail) ? Utils.getActiveUserEmail() : '';
+    if (typeof TrafficMonitor !== 'undefined' && TrafficMonitor.updateOnlineHeartbeat && currentEmail) {
+      TrafficMonitor.updateOnlineHeartbeat(currentEmail);
+    }
+
+    if (!forceRefresh) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          // Refrescar estado online en vivo incluso si el agregado viene de caché
+          if (typeof TrafficMonitor !== 'undefined' && TrafficMonitor.getOnlineUsersMap) {
+            const onlineMap = TrafficMonitor.getOnlineUsersMap();
+            const onlineEmails = Object.keys(onlineMap);
+            parsed.kpis.onlineCount = onlineEmails.length;
+            if (Array.isArray(parsed.usersList)) {
+              parsed.usersList.forEach(u => {
+                u.isOnline = Boolean(onlineMap[u.email]);
+                if (onlineMap[u.email] && onlineMap[u.email] > (u.lastSeenTs || 0)) {
+                  u.lastSeenTs = onlineMap[u.email];
+                }
+              });
+            }
+          }
+          return Utils.buildResponse(true, parsed);
+        } catch (e) {}
+      }
+    }
+
+    const nowMs = Date.now();
+    const cutoffMs = nowMs - (days * 24 * 60 * 60 * 1000);
+    const ss = (typeof Utils !== 'undefined' && Utils.getSpreadsheet) ? Utils.getSpreadsheet() : SpreadsheetApp.openById(CONF.SS_ID);
+
+    // 1. Mapa de usuarios registrados y roles
+    const props = PropertiesService.getScriptProperties();
+    let usersDb = [];
+    try { usersDb = JSON.parse(props.getProperty('USERS_DB') || '[]'); } catch (e) { usersDb = []; }
+
+    const roleByEmail = {};
+    if (CONF.SUPER_ADMINS) {
+      CONF.SUPER_ADMINS.forEach(em => { roleByEmail[String(em).toLowerCase().trim()] = 'SUPER ADMIN'; });
+    }
+    usersDb.forEach(u => {
+      if (u && u.email) roleByEmail[String(u.email).toLowerCase().trim()] = String(u.role || 'TECNICO').toUpperCase();
+    });
+
+    // 2. Usuarios conectados en vivo (CacheService heartbeat <= 90s)
+    const onlineMap = (typeof TrafficMonitor !== 'undefined' && TrafficMonitor.getOnlineUsersMap)
+      ? TrafficMonitor.getOnlineUsersMap()
+      : {};
+
+    // Estructura acumuladora por usuario
+    const userMap = {};
+    const ensureUser = (rawEmail, explicitRole) => {
+      const email = String(rawEmail || '').toLowerCase().trim();
+      if (!email || email === 'anónimo' || email === 'anonimo') return null;
+      if (!userMap[email]) {
+        userMap[email] = {
+          email: email,
+          role: explicitRole || roleByEmail[email] || 'OPERADOR / AUDITOR',
+          isOnline: Boolean(onlineMap[email]),
+          lastSeenTs: onlineMap[email] || 0,
+          sessionsCount: 0,
+          activeDaysSet: {},
+          auditsPass: 0,
+          auditsFail: 0,
+          assetsCreated: 0,
+          ticketsHandled: 0,
+          exports: 0,
+          aiQueries: 0,
+          totalInteractions: 0
+        };
+      } else if (explicitRole && userMap[email].role === 'OPERADOR / AUDITOR') {
+        userMap[email].role = explicitRole;
+      }
+      return userMap[email];
+    };
+
+    // Pre-cargar usuarios registrados y usuarios online
+    Object.keys(roleByEmail).forEach(em => ensureUser(em, roleByEmail[em]));
+    Object.keys(onlineMap).forEach(em => ensureUser(em));
+
+    const parseDateMs = (val) => {
+      if (!val) return 0;
+      if (val instanceof Date) return val.getTime();
+      const str = String(val).trim();
+      const parsed = Date.parse(str);
+      if (!isNaN(parsed)) return parsed;
+      // Soportar dd/MM/yyyy HH:mm
+      const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{1,2}))?/);
+      if (m) {
+        return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0)).getTime();
+      }
+      return 0;
+    };
+
+    const toDayKey = (ms) => {
+      if (!ms) return '';
+      const d = new Date(ms);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    // 3. Leer bitácora de tráfico (DB_Traffic_Logs)
+    const shTraffic = ss.getSheetByName(CONF.SHEET_TRAFFIC || 'DB_Traffic_Logs');
+    if (shTraffic && shTraffic.getLastRow() > 1) {
+      const tVals = shTraffic.getDataRange().getValues();
+      for (let i = 1; i < tVals.length; i++) {
+        const row = tVals[i];
+        const tsMs = parseDateMs(row[0]);
+        if (tsMs < cutoffMs) continue;
+        const email = String(row[1] || '').toLowerCase().trim();
+        const role = String(row[2] || '').trim();
+        const eventType = String(row[3] || '').toUpperCase().trim();
+        const u = ensureUser(email, role);
+        if (!u) continue;
+
+        if (tsMs > u.lastSeenTs) u.lastSeenTs = tsMs;
+        const dKey = toDayKey(tsMs);
+        if (dKey) u.activeDaysSet[dKey] = true;
+
+        if (eventType === 'SESSION_START') {
+          u.sessionsCount++;
+        } else if (eventType === 'REPORT_EXPORT') {
+          u.exports++;
+          u.totalInteractions++;
+        } else if (eventType === 'AI_QUERY') {
+          u.aiQueries++;
+          u.totalInteractions++;
+        } else if (eventType === 'ADMIN_CONFIG') {
+          u.totalInteractions++;
+        }
+      }
+    }
+
+    // 4. Leer bitácora de auditorías (Registros)
+    const shLogs = ss.getSheetByName(CONF.SHEET_LOGS);
+    if (shLogs && shLogs.getLastRow() > 1) {
+      const lVals = shLogs.getDataRange().getValues();
+      for (let i = 1; i < lVals.length; i++) {
+        const row = lVals[i];
+        const tsMs = parseDateMs(row[1]);
+        if (tsMs < cutoffMs) continue;
+        const email = String(row[4] || '').toLowerCase().trim();
+        const status = String(row[5] || '').toUpperCase().trim();
+        const u = ensureUser(email);
+        if (!u) continue;
+
+        if (tsMs > u.lastSeenTs) u.lastSeenTs = tsMs;
+        const dKey = toDayKey(tsMs);
+        if (dKey) u.activeDaysSet[dKey] = true;
+
+        if (status === 'FALLA' || status === 'FAIL') {
+          u.auditsFail++;
+        } else {
+          u.auditsPass++;
+        }
+        u.totalInteractions++;
+      }
+    }
+
+    // 5. Leer altas de activos (DB_Assets)
+    const shAssets = ss.getSheetByName(CONF.SHEET_ASSETS);
+    if (shAssets && shAssets.getLastRow() > 1) {
+      const aVals = shAssets.getDataRange().getValues();
+      for (let i = 1; i < aVals.length; i++) {
+        const row = aVals[i];
+        const tsMs = parseDateMs(row[9] || row[5]);
+        if (tsMs && tsMs < cutoffMs) continue;
+        const email = String(row[8] || '').toLowerCase().trim();
+        const u = ensureUser(email);
+        if (!u) continue;
+
+        if (tsMs > u.lastSeenTs) u.lastSeenTs = tsMs;
+        const dKey = toDayKey(tsMs);
+        if (dKey) u.activeDaysSet[dKey] = true;
+
+        u.assetsCreated++;
+        u.totalInteractions++;
+      }
+    }
+
+    // 6. Leer tickets CAPA atendidos/cerrados (DB_Tickets)
+    const shTickets = ss.getSheetByName(CONF.SHEET_TICKETS);
+    if (shTickets && shTickets.getLastRow() > 1) {
+      const tkVals = shTickets.getDataRange().getValues();
+      for (let i = 1; i < tkVals.length; i++) {
+        const row = tkVals[i];
+        const tsMs = parseDateMs(row[8] || row[2]);
+        if (tsMs && tsMs < cutoffMs) continue;
+        const email = String(row[7] || '').toLowerCase().trim();
+        if (!email) continue;
+        const u = ensureUser(email);
+        if (!u) continue;
+
+        if (tsMs > u.lastSeenTs) u.lastSeenTs = tsMs;
+        const dKey = toDayKey(tsMs);
+        if (dKey) u.activeDaysSet[dKey] = true;
+
+        u.ticketsHandled++;
+        u.totalInteractions++;
+      }
+    }
+
+    // 7. Consolidar métricas por usuario y totales globales
+    let totalSessions = 0;
+    let totalInteractions = 0;
+    let activeUsersCount = 0;
+    let modAudits = 0;
+    let modAssets = 0;
+    let modTickets = 0;
+    let modExportsAi = 0;
+
+    const usersList = Object.values(userMap).map(u => {
+      const activeDaysCount = Object.keys(u.activeDaysSet).length;
+      const effectiveSessions = Math.max(u.sessionsCount, activeDaysCount);
+      u.sessionsCount = effectiveSessions;
+
+      if (effectiveSessions > 0 || u.totalInteractions > 0 || u.isOnline) {
+        activeUsersCount++;
+      }
+
+      totalSessions += effectiveSessions;
+      totalInteractions += u.totalInteractions;
+      modAudits += (u.auditsPass + u.auditsFail);
+      modAssets += u.assetsCreated;
+      modTickets += u.ticketsHandled;
+      modExportsAi += (u.exports + u.aiQueries);
+
+      let frequencyTier = 'OCCASIONAL';
+      if (activeDaysCount >= Math.max(3, Math.round(days * 0.35)) || effectiveSessions >= 10) {
+        frequencyTier = 'DAILY';
+      } else if (activeDaysCount >= 2 || effectiveSessions >= 3 || u.totalInteractions >= 5) {
+        frequencyTier = 'WEEKLY';
+      }
+
+      return {
+        email: u.email,
+        role: u.role,
+        isOnline: u.isOnline,
+        lastSeenTs: u.lastSeenTs,
+        activeDaysCount: activeDaysCount,
+        sessionsCount: effectiveSessions,
+        frequencyTier: frequencyTier,
+        auditsPass: u.auditsPass,
+        auditsFail: u.auditsFail,
+        assetsCreated: u.assetsCreated,
+        ticketsHandled: u.ticketsHandled,
+        exports: u.exports,
+        aiQueries: u.aiQueries,
+        totalInteractions: u.totalInteractions
+      };
+    });
+
+    // Ordenar: primero usuarios online, luego por volumen de interacciones, luego por sesiones
+    usersList.sort((a, b) => {
+      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+      if (b.totalInteractions !== a.totalInteractions) return b.totalInteractions - a.totalInteractions;
+      if (b.sessionsCount !== a.sessionsCount) return b.sessionsCount - a.sessionsCount;
+      return (b.lastSeenTs || 0) - (a.lastSeenTs || 0);
+    });
+
+    const totalMod = Math.max(1, modAudits + modAssets + modTickets + modExportsAi);
+    const payload = {
+      periodDays: days,
+      generatedAt: nowMs,
+      kpis: {
+        onlineCount: Object.keys(onlineMap).length,
+        activeUsersCount: activeUsersCount,
+        totalRegisteredUsers: Math.max(Object.keys(roleByEmail).length, usersList.length),
+        totalSessions: totalSessions,
+        avgDailySessions: Number((totalSessions / Math.max(1, days)).toFixed(1)),
+        totalInteractions: totalInteractions,
+        avgActionsPerSession: totalSessions > 0 ? Number((totalInteractions / totalSessions).toFixed(1)) : 0
+      },
+      moduleBreakdown: {
+        audits: { count: modAudits, pct: Math.round((modAudits / totalMod) * 100) },
+        assets: { count: modAssets, pct: Math.round((modAssets / totalMod) * 100) },
+        tickets: { count: modTickets, pct: Math.round((modTickets / totalMod) * 100) },
+        exportsAndAi: { count: modExportsAi, pct: Math.round((modExportsAi / totalMod) * 100) }
+      },
+      usersList: usersList
+    };
+
+    try {
+      cache.put(cacheKey, JSON.stringify(payload), (CONF.CACHE_TTL && CONF.CACHE_TTL.ADMIN_ANALYTICS) ? CONF.CACHE_TTL.ADMIN_ANALYTICS : 120);
+    } catch (e) {}
+
+    return Utils.buildResponse(true, payload);
+  } catch (e) {
+    return Utils.buildResponse(false, "Error al calcular analíticas de tráfico: " + e.toString());
+  }
+}

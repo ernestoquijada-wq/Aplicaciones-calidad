@@ -28,56 +28,94 @@ const ENV_PROPERTIES_MAP = {
 
 const CONF = {
   _cachedSsId: null,
+  _cachedEnvName: null,
 
   /**
-   * Obtiene el ID del Spreadsheet desde PropertiesService.getScriptProperties().
-   * Si aún no está guardado en las Propiedades del Script, lo detecta por el
-   * Script ID del proyecto y lo registra automáticamente en PropertiesService.
+   * Resuelve la configuración del entorno actual combinando:
+   * 1. Auto-detección del Script ID en tiempo de ejecución (ScriptApp.getScriptId() -> ENV_PROPERTIES_MAP)
+   * 2. Inyección en tiempo de despliegue desde deploy.ps1 (ENV_CONFIG en ConfigEnv.js)
+   * 3. Propiedades persistidas en el contenedor (PropertiesService.getScriptProperties())
    */
-  get SS_ID() {
-    if (this._cachedSsId) return this._cachedSsId;
+  _resolveEnvironment() {
+    let targetConfig = null;
 
-    // 1. Leer directamente desde PropertiesService (Fuente principal)
+    // Capa 1: Identificación exacta por Script ID del proyecto en ejecución (a prueba de errores de push)
+    try {
+      if (typeof ScriptApp !== 'undefined' && typeof ScriptApp.getScriptId === 'function') {
+        const currentScriptId = ScriptApp.getScriptId();
+        if (currentScriptId && ENV_PROPERTIES_MAP[currentScriptId]) {
+          targetConfig = ENV_PROPERTIES_MAP[currentScriptId];
+        }
+      }
+    } catch (e) {
+      // Continuar a la Capa 2 si ScriptApp no está disponible en el contexto actual
+    }
+
+    // Capa 2: Archivo ConfigEnv.js inyectado dinámicamente por deploy.ps1 durante el push
+    if (!targetConfig && typeof ENV_CONFIG !== 'undefined' && ENV_CONFIG && ENV_CONFIG.SS_ID) {
+      targetConfig = {
+        ENV_NAME: ENV_CONFIG.ENV_NAME || 'ENTORNO INYECTADO',
+        SS_ID: String(ENV_CONFIG.SS_ID).trim()
+      };
+    }
+
+    // Capa 3: Sincronización y lectura desde PropertiesService.getScriptProperties()
     try {
       if (typeof PropertiesService !== 'undefined') {
         const scriptProps = PropertiesService.getScriptProperties();
         const storedSsId = scriptProps.getProperty('SS_ID');
-        if (storedSsId && String(storedSsId).trim().length > 10) {
-          this._cachedSsId = String(storedSsId).trim();
-          return this._cachedSsId;
+        const storedEnvName = scriptProps.getProperty('ENV_NAME');
+
+        if (targetConfig && targetConfig.SS_ID) {
+          // Auto-reparación: si PropertiesService está vacío o desactualizado respecto al entorno real, lo sincroniza
+          if (storedSsId !== targetConfig.SS_ID || storedEnvName !== targetConfig.ENV_NAME) {
+            scriptProps.setProperties({
+              'SS_ID': targetConfig.SS_ID,
+              'ENV_NAME': targetConfig.ENV_NAME
+            }, false);
+          }
+          this._cachedSsId = targetConfig.SS_ID;
+          this._cachedEnvName = targetConfig.ENV_NAME;
+          return targetConfig;
         }
 
-        // 2. Si la propiedad 'SS_ID' aún no existe en este proyecto GAS, auto-registrarla según su Script ID
-        if (typeof ScriptApp !== 'undefined' && typeof ScriptApp.getScriptId === 'function') {
-          const currentScriptId = ScriptApp.getScriptId();
-          const envConfig = ENV_PROPERTIES_MAP[currentScriptId];
-          if (envConfig) {
-            scriptProps.setProperties({
-              'SS_ID': envConfig.SS_ID,
-              'ENV_NAME': envConfig.ENV_NAME
-            }, false);
-            this._cachedSsId = envConfig.SS_ID;
-            return this._cachedSsId;
-          }
+        // Si es un proyecto nuevo no listado en el mapa pero configurado en PropertiesService
+        if (storedSsId && String(storedSsId).trim().length > 10) {
+          this._cachedSsId = String(storedSsId).trim();
+          this._cachedEnvName = storedEnvName || 'CUSTOM_ENV';
+          return { SS_ID: this._cachedSsId, ENV_NAME: this._cachedEnvName };
         }
       }
     } catch (e) {
-      // Continuar al respaldo en caso de ejecución sin contexto de propiedades
+      // Continuar al respaldo en memoria si el contexto de ejecución restringe PropertiesService
     }
 
-    // 3. Respaldo por ScriptApp.getScriptId() si PropertiesService no estuvo disponible
-    try {
-      if (typeof ScriptApp !== 'undefined' && typeof ScriptApp.getScriptId === 'function') {
-        const currentScriptId = ScriptApp.getScriptId();
-        if (ENV_PROPERTIES_MAP[currentScriptId]) {
-          this._cachedSsId = ENV_PROPERTIES_MAP[currentScriptId].SS_ID;
-          return this._cachedSsId;
-        }
-      }
-    } catch (e) {}
+    if (targetConfig && targetConfig.SS_ID) {
+      this._cachedSsId = targetConfig.SS_ID;
+      this._cachedEnvName = targetConfig.ENV_NAME;
+      return targetConfig;
+    }
 
-    // 4. Respaldo para pruebas unitarias locales (Test_Suite.js)
-    return '1y_6x3bp-CR-kSieVv6TPSIOjD4-S9jvhIZOxDXlV_yk';
+    // Capa 4: Respaldo para pruebas unitarias locales (Test_Suite.js)
+    this._cachedSsId = '1y_6x3bp-CR-kSieVv6TPSIOjD4-S9jvhIZOxDXlV_yk';
+    this._cachedEnvName = 'PRUEBAS (QA)';
+    return { SS_ID: this._cachedSsId, ENV_NAME: this._cachedEnvName };
+  },
+
+  /**
+   * Obtiene el ID del Spreadsheet correspondiente al entorno activo (Pruebas, Azteca o Maya).
+   */
+  get SS_ID() {
+    if (this._cachedSsId) return this._cachedSsId;
+    return this._resolveEnvironment().SS_ID;
+  },
+
+  /**
+   * Obtiene el nombre descriptivo del entorno activo.
+   */
+  get ENV_NAME() {
+    if (this._cachedEnvName) return this._cachedEnvName;
+    return this._resolveEnvironment().ENV_NAME;
   },
 
   SHEET_ASSETS: 'DB_Assets',
@@ -90,7 +128,21 @@ const CONF = {
   SHEET_ROLES: 'Seguridad_Roles',
   SHEET_USERS: 'Seguridad_Usuarios',
   SHEET_ALERTS: 'DB_Alerts',
-  DEFAULT_COLOR: '#005565',
+  SHEET_TRAFFIC: 'DB_Traffic_Logs',
+  DEFAULT_COLOR: '#043e49',
+  CACHE_KEYS: {
+    I18N_STATIC_PREFIX: 'ESD_CACHE_I18N_STATIC_',
+    I18N_DYNAMIC_MAP: 'ESD_CACHE_I18N_DYNAMIC_MAP',
+    ONLINE_USERS_MAP: 'ESD_ONLINE_USERS_MAP',
+    SESSION_ACTIVE_PREFIX: 'ESD_SESSION_ACTIVE_',
+    ADMIN_ANALYTICS_PREFIX: 'ESD_ADMIN_ANALYTICS_'
+  },
+  CACHE_TTL: {
+    I18N_SECONDS: 21600,       // 6 horas (máximo permitido por CacheService)
+    ONLINE_SECONDS: 300,       // 5 minutos para presencia activa
+    SESSION_DEDUP_SECONDS: 1800, // 30 minutos para deduplicar inicios de sesión
+    ANALYTICS_SECONDS: 120     // 2 minutos para el resumen de analíticas del Admin
+  },
   TIMEOUTS: {
     LOCK: 15000,
     LOCK_SHORT: 10000

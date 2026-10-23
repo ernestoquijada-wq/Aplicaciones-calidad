@@ -267,14 +267,66 @@ function getData() {
       apiKeys: (userPermissions && userPermissions.canConfig) ? (aiSettings.apiKeys || ['']) : ['']
     };
 
-    const serverVersion = (typeof VersionManager !== 'undefined') ? VersionManager.getVersion() : { version: 1, lastUpdated: new Date().toISOString() };
+    const serverVersion = (typeof VersionManager !== 'undefined') ? VersionManager.getVersion() : String(Date.now());
+
+    // Calcular y cachear el resumen del Banner Dinámico (Próximo Consecutivo y Último Registro) en O(N) en memoria
+    let maxNumericAssetId = 0;
+    let latestActiveAsset = null;
+    for (let idx = 0; idx < assets.length; idx++) {
+      const item = assets[idx];
+      const num = parseInt(String(item.controlNo || '').replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num > maxNumericAssetId && num < 999999) {
+        maxNumericAssetId = num;
+      }
+      const estReg = String(item.estadoRegistro || 'ACTIVO').toUpperCase();
+      const stCol = String(item.status || '').toUpperCase();
+      const resCol = String(item.lastResult || '').toUpperCase();
+      if (estReg !== 'INACTIVO' && stCol !== 'BAJA' && resCol !== 'BAJA') {
+        latestActiveAsset = {
+          controlNo: item.controlNo,
+          quadrant: item.quadrant,
+          colorCode: item.colorCode,
+          description: item.description,
+          project: item.project,
+          factory: item.factory,
+          status: item.status,
+          lastResult: item.lastResult
+        };
+      }
+    }
+    const bannerSummary = {
+      nextAssetId: maxNumericAssetId + 1,
+      lastAsset: latestActiveAsset
+    };
+    if (typeof CacheManager !== 'undefined') {
+      CacheManager.put(CacheManager.KEYS.ASSET_BANNER, bannerSummary, CacheManager.DEFAULT_TTL);
+    }
+
+    // Registrar sesión deduplicada (ventana 30m) y presencia activa en CacheService
+    try {
+      if (typeof TrafficMonitor !== 'undefined') {
+        TrafficMonitor.recordUserSessionIfNeeded(userEmail, userRoleName);
+      }
+    } catch (trafficErr) {}
+
+    // Hidratar mapa de traducciones dinámicas desde CacheService en 0ms
+    let cachedTranslations = {};
+    try {
+      if (typeof CacheService !== 'undefined') {
+        const dynMapKey = (CONF.CACHE_KEYS && CONF.CACHE_KEYS.I18N_DYNAMIC_MAP) || 'ESD_CACHE_I18N_DYNAMIC_MAP';
+        const rawDyn = CacheService.getScriptCache().get(dynMapKey);
+        if (rawDyn) cachedTranslations = JSON.parse(rawDyn);
+      }
+    } catch (trErr) {}
 
     return { 
       success: true, assets, rules: rulesDB, catalogs, matrix: matrixDB, alerts: alertsDB || [],
       email: emailSettings, aiConfig: clientAiSettings, rolesDB: rolesDB, usersDB: usersDB,
       userRoleName: userRoleName, userPermissions: userPermissions, showPrevEvidence: showPrevEv,
       user: userEmail, serverTime: new Date().toISOString(),
-      serverVersion: serverVersion
+      serverVersion: serverVersion,
+      bannerSummary: bannerSummary,
+      cachedTranslations: cachedTranslations
     };
   } catch (e) { return { success: false, error: e.toString() }; }
 }
@@ -297,20 +349,22 @@ function saveNewAsset(payload) {
     const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
     if (!sh) return Utils.buildResponse(false, "Hoja de activos no encontrada.");
 
-    // Validación atómica de duplicados
-    if (a.controlNo && typeof Validator !== 'undefined') {
-      if (Validator.isDuplicateId(sh, 1, a.controlNo)) {
-        return Utils.buildResponse(false, `El ID de activo '${a.controlNo}' ya existe en la base de datos.`);
-      }
-    }
-    
     const data = sh.getDataRange().getValues();
     let maxId = 0;
-    for(let i=1; i<data.length; i++) {
-      let v = parseInt(String(data[i][0]).replace(/\D/g,''), 10);
-      if(!isNaN(v) && v > maxId && v < 999999) maxId = v;
+    const existingIds = new Set();
+    for (let i = 1; i < data.length; i++) {
+      const rawCellId = String(data[i][0] || '').trim().toUpperCase();
+      if (rawCellId) existingIds.add(rawCellId);
+      const v = parseInt(rawCellId.replace(/\D/g, ''), 10);
+      if (!isNaN(v) && v > maxId && v < 999999) maxId = v;
     }
-    const newId = a.controlNo || (maxId + 1);
+
+    // Asignación atómica libre de colisiones bajo LockService:
+    // Si no se envió ID o si el ID sugerido ya fue tomado por otro usuario concurrente, se asigna maxId + 1
+    let newId = a.controlNo ? String(a.controlNo).trim() : String(maxId + 1);
+    if (existingIds.has(newId.toUpperCase())) {
+      newId = String(maxId + 1);
+    }
 
     const f = payload.formData || {};
     const m = f.measurements || {};
@@ -351,13 +405,15 @@ function saveNewAsset(payload) {
     if (modColIndex === -1) stampLastModified(sh, sh.getLastRow());
     logAudit(ss, newId, f.result, { ...m, comments: f.comments, nextDate: nDateStr, validationDate: vDateStr });
     
+    // Forzar volcado físico a Google Sheets antes de liberar el bloqueo atómico
+    SpreadsheetApp.flush();
     if (typeof CacheManager !== 'undefined') CacheManager.invalidateAll();
     if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
     return Utils.buildResponse(true, { id: newId });
   };
 
   if (typeof withScriptLock !== 'undefined') {
-    return withScriptLock(runner, CONF.TIMEOUTS.LOCK_SHORT, "Registro de Activo");
+    return withScriptLock(runner, CONF.TIMEOUTS.LOCK, "Registro de Activo");
   }
   return runner();
 }
@@ -514,7 +570,14 @@ function processAudit(payload) {
       logAudit(ss, asset.controlNo, formData.result, { ...m, comments: formData.comments, nextDate: nDateStr, validationDate: vDateStr });
       
       if (formData.requiresSecondRevision) {
-         const alertData = { result: formData.result, emails_notificados: "", evidencia_fotos: [], systemUser: Session.getActiveUser().getEmail() };
+         const alertData = {
+           result: formData.result,
+           Comentarios: formData.comments || "",
+           auditComments: formData.comments || "",
+           emails_notificados: "",
+           evidencia_fotos: [],
+           systemUser: Session.getActiveUser().getEmail() || (typeof Utils !== 'undefined' && Utils.getActiveUserEmail ? Utils.getActiveUserEmail() : '') || (formData && formData.auditor) || ''
+         };
          sendTicketEmail("ALERTA-CALIDAD", alertData, asset, "FORCED");
       }
     }

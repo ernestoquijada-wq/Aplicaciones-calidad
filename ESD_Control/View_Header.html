@@ -1,14 +1,31 @@
 <!-- ========================================== -->
 <!-- 🟢 VISTA: HEADER / BARRA SUPERIOR          -->
 <!-- ========================================== -->
-<header class="bg-slate-900 text-white px-6 py-3 shadow-xl z-20 flex justify-between items-center bg-gradient-to-r from-[#005565] to-[#003d4d] relative">
-  <div class="flex items-center gap-3">
-    <div class="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/10 shadow-inner">
-        <i class="fas fa-bolt text-yellow-300 text-lg"></i>
+<header class="bg-[#043e49] text-white px-6 py-3 shadow-xl z-20 flex flex-wrap justify-between items-center gap-3 relative border-b border-white/10">
+  <div class="flex items-center gap-3.5">
+    <!-- Logo Corporativo PLEXUS Exacto -->
+    <div class="flex items-center shrink-0 select-none">
+      <img src="data:image/png;base64,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"
+           alt="PLEXUS"
+           class="h-9 w-auto rounded shadow-md border border-white/15 object-contain" />
     </div>
+
+    <!-- Divisor Vertical -->
+    <div class="hidden sm:block h-8 w-px bg-white/20"></div>
+
+    <!-- Identidad del Sistema ESD Control + Firma Quality Solutions -->
     <div>
-      <h1 class="font-black text-lg tracking-tight leading-none text-white">ESD Control <span class="text-[9px] bg-white/20 px-2 py-0.5 rounded-full ml-1 align-middle font-bold text-white/90 border border-white/10">V1.0</span></h1>
-      <p class="text-[8px] text-emerald-200 font-bold uppercase tracking-widest mt-0.5 pl-0.5">{{ $t('header.developedBy') }}</p>
+      <div class="flex items-center gap-2 flex-wrap">
+        <h1 class="font-black text-lg tracking-tight leading-none text-white">ESD Control</h1>
+        <span class="text-[9px] bg-white/15 px-2 py-0.5 rounded-md font-bold text-white/90 border border-white/15">V1.0</span>
+        <span v-if="userRoleName" class="text-[9px] bg-[#d1f0d5] text-[#043e49] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider border border-[#a3e2ac] shadow-sm">
+          {{ translateRole(userRoleName) }}
+        </span>
+      </div>
+      <p class="text-[9px] text-emerald-200 font-bold uppercase tracking-widest mt-1 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-[#4ade80]"></span>
+        <span>{{ $t('header.developedBy') }}</span>
+      </p>
     </div>
   </div>
 
@@ -17,17 +34,17 @@
     <button 
       @click="triggerManualSync" 
       :disabled="syncing"
-      class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/20 shadow-sm disabled:opacity-50"
+      class="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/15 shadow-sm disabled:opacity-50"
       :title="$t('header.sync_title')">
       <i class="fas fa-sync-alt text-xs" :class="{'fa-spin text-yellow-300': syncing}"></i>
       <span class="hidden sm:inline text-[11px] font-extrabold">{{ syncing ? $t('header.syncing') : $t('header.sync_btn') }}</span>
     </button>
 
     <!-- Selector de Idiomas (4 Idiomas: ES, EN, ZH, TH) -->
-    <div class="relative mr-2">
+    <div class="relative mr-1">
       <button 
         @click="showLangDropdown = !showLangDropdown" 
-        class="flex items-center gap-2 bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/20 shadow-sm"
+        class="flex items-center gap-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 border border-white/15 shadow-sm"
         :title="$t('header.lang_title')">
         <span class="text-sm leading-none">{{ currentLanguage.flag }}</span>
         <span class="font-extrabold text-[11px] tracking-wide">{{ currentLanguage.name }}</span>
@@ -39,28 +56,28 @@
         v-if="showLangDropdown" 
         class="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl py-2 z-50 border border-slate-200 animate-fade">
         <div class="px-3.5 py-1 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-1">
-          <i class="fas fa-globe mr-1 text-[#005565]"></i> {{ $t('header.lang_title') }}
+          <i class="fas fa-globe mr-1 text-[#043e49]"></i> {{ $t('header.lang_title') }}
         </div>
         <button 
           v-for="lang in availableLanguages" 
           :key="lang.code" 
           @click="setLanguage(lang.code)" 
           class="w-full text-left px-3.5 py-2 text-xs font-bold flex items-center justify-between hover:bg-slate-50 transition-colors"
-          :class="locale === lang.code ? 'text-[#005565] bg-cyan-50/70 font-black' : 'text-slate-700'">
+          :class="locale === lang.code ? 'text-[#043e49] bg-[#d1f0d5]/40 font-black' : 'text-slate-700'">
           <span class="flex items-center gap-2.5">
             <span class="text-base leading-none">{{ lang.flag }}</span>
             <span>{{ lang.name }}</span>
           </span>
-          <i v-if="locale === lang.code" class="fas fa-check text-[#005565] text-xs"></i>
+          <i v-if="locale === lang.code" class="fas fa-check text-[#bd1a31] text-xs"></i>
         </button>
       </div>
     </div>
 
     <!-- Navegación Dashboard / Configuración -->
-    <button @click="view='dashboard'" :class="view==='dashboard'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2">
+    <button @click="view='dashboard'" :class="view==='dashboard'?'bg-[#bd1a31] text-white shadow-lg border border-white/20':'text-white/80 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2">
       <i class="fas fa-chart-pie"></i> {{ $t('header.btn_dashboard') }}
     </button>
-    <button v-if="userPermissions.canConfig || userPermissions.canUsers" @click="view='admin'" :class="view==='admin'?'bg-white text-[#005565] shadow-lg transform scale-105':'text-white/70 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-2">
+    <button v-if="userPermissions.canConfig || userPermissions.canUsers" @click="view='admin'" :class="view==='admin'?'bg-[#bd1a31] text-white shadow-lg border border-white/20':'text-white/80 hover:bg-white/10 hover:text-white'" class="px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2">
       <i class="fas fa-cogs"></i> {{ $t('header.btn_config') }}
     </button>
   </div>

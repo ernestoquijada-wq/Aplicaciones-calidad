@@ -32,6 +32,18 @@ const Utils = {
     if (!text) return "";
     return String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
   },
+  getActiveUserEmail: function() {
+    try {
+      if (typeof Session !== 'undefined' && Session.getActiveUser) {
+        const em = Session.getActiveUser().getEmail();
+        if (em) return String(em).toLowerCase().trim();
+      }
+    } catch (e) {}
+    return "invitado@plexus.com";
+  },
+  getSpreadsheet: function() {
+    return SpreadsheetApp.openById(CONF.SS_ID);
+  },
   buildResponse: function(success, dataOrError = {}, error = null) {
     if (success) {
       const data = (typeof dataOrError === 'object' && dataOrError !== null) ? dataOrError : { data: dataOrError };
@@ -56,15 +68,25 @@ function withScriptLock(actionFn, timeoutMs = 10000, opName = "Operación") {
     return actionFn();
   }
   const lock = LockService.getScriptLock();
+  const maxAttempts = 3;
+  const perAttemptWait = Math.max(2500, Math.floor(timeoutMs / maxAttempts));
   let acquired = false;
-  try {
-    acquired = lock.tryLock(timeoutMs);
-  } catch (lockErr) {
-    acquired = false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      acquired = lock.tryLock(perAttemptWait);
+      if (acquired) break;
+    } catch (lockErr) {
+      acquired = false;
+    }
+    if (attempt < maxAttempts) {
+      const backoffMs = (attempt * 400) + Math.floor(Math.random() * 250);
+      Utilities.sleep(backoffMs);
+    }
   }
 
   if (!acquired) {
-    return Utils.buildResponse(false, `El servidor está ocupado procesando otra solicitud (${opName}). Por favor, intente nuevamente en unos segundos.`);
+    return Utils.buildResponse(false, `Alta demanda en el servidor procesando otra solicitud (${opName}). Se realizaron ${maxAttempts} intentos automáticos sin éxito. Por favor, intente nuevamente en unos segundos.`);
   }
 
   try {
@@ -125,7 +147,8 @@ const CacheManager = {
   KEYS: {
     CATALOGS_AND_RULES: 'ESD_CACHE_CATALOGS_AND_RULES',
     SETTINGS: 'ESD_CACHE_SETTINGS',
-    ALERTS: 'ESD_CACHE_ALERTS'
+    ALERTS: 'ESD_CACHE_ALERTS',
+    ASSET_BANNER: 'ESD_CACHE_ASSET_BANNER_V1'
   },
   DEFAULT_TTL: 21600, // 6 horas en segundos (máximo de Apps Script)
 
@@ -175,7 +198,7 @@ const CacheManager = {
 
   invalidateAll: function() {
     this.invalidateCatalogs();
-    this.remove([this.KEYS.AUDIT_COUNTS]);
+    this.remove([this.KEYS.AUDIT_COUNTS, this.KEYS.ASSET_BANNER].filter(Boolean));
     if (typeof VersionManager !== 'undefined') VersionManager.bumpVersion('ALL');
   }
 };
@@ -349,18 +372,84 @@ const VersionManager = {
     return newVer;
   },
 
+  getBannerSummary: function(ssInstance) {
+    try {
+      if (typeof CacheManager !== 'undefined') {
+        const cached = CacheManager.get(CacheManager.KEYS.ASSET_BANNER);
+        if (cached && cached.nextAssetId !== undefined) return cached;
+      }
+      const ss = ssInstance || SpreadsheetApp.openById(CONF.SS_ID);
+      const sh = ss.getSheetByName(CONF.SHEET_ASSETS);
+      if (!sh) return { nextAssetId: 1, lastAsset: null };
+
+      const data = sh.getDataRange().getValues();
+      const headers = data[0] || [];
+      const estadoColIndex = (typeof DataRepository !== 'undefined')
+        ? DataRepository.findHeaderIndex(headers, 'ESTADO_REGISTRO', -1)
+        : headers.indexOf("Estado_Registro");
+
+      let maxId = 0;
+      let lastAsset = null;
+
+      for (let i = 1; i < data.length; i++) {
+        const r = data[i];
+        if (!r[0]) continue;
+        const numId = parseInt(String(r[0]).replace(/\D/g, ''), 10);
+        if (!isNaN(numId) && numId > maxId && numId < 999999) {
+          maxId = numId;
+        }
+        const estadoReg = estadoColIndex > -1 ? Utils.clean(r[estadoColIndex]).toUpperCase() : "ACTIVO";
+        const statusCol = Utils.clean(r[6]).toUpperCase();
+        const resCol = Utils.clean(r[15]).toUpperCase();
+        if (estadoReg !== "INACTIVO" && statusCol !== "BAJA" && resCol !== "BAJA") {
+          lastAsset = {
+            controlNo: Utils.clean(r[0]),
+            quadrant: Utils.clean(r[1]).toUpperCase(),
+            colorCode: Utils.clean(r[2]) || CONF.DEFAULT_COLOR,
+            description: Utils.clean(r[3]),
+            project: Utils.clean(r[4]),
+            factory: Utils.clean(r[5]),
+            status: Utils.clean(r[6]),
+            lastResult: Utils.normalizeStatusResult(Utils.clean(r[15]))
+          };
+        }
+      }
+
+      const summary = {
+        nextAssetId: maxId + 1,
+        lastAsset: lastAsset
+      };
+
+      if (typeof CacheManager !== 'undefined') {
+        CacheManager.put(CacheManager.KEYS.ASSET_BANNER, summary, this.DEFAULT_TTL);
+      }
+      return summary;
+    } catch (e) {
+      console.warn("Error en VersionManager.getBannerSummary:", e);
+      return { nextAssetId: 1, lastAsset: null };
+    }
+  },
+
   checkSyncStatus: function(clientVersion) {
+    try {
+      if (typeof TrafficMonitor !== 'undefined') {
+        TrafficMonitor.updateOnlineHeartbeat(Utils.getActiveUserEmail(), '');
+      }
+    } catch (e) {}
     const serverVer = this.getVersion();
     let changeType = 'NONE';
-    const hasChanges = String(clientVersion) !== String(serverVer);
+    const normClient = (clientVersion && typeof clientVersion === 'object') ? clientVersion.version : clientVersion;
+    const hasChanges = String(normClient || '') !== String(serverVer);
     if (hasChanges && typeof CacheService !== 'undefined') {
       changeType = CacheService.getScriptCache().get(this.KEY_TYPE) || 'GENERAL';
     }
     return {
       success: true,
       hasChanges: hasChanges,
+      needsRefresh: hasChanges,
       serverVersion: serverVer,
-      changeType: changeType
+      changeType: changeType,
+      bannerSummary: this.getBannerSummary()
     };
   }
 };
@@ -391,7 +480,7 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
     const masterConfig = JSON.parse(props.getProperty('EMAIL_MASTER_CONFIG') || '{}');
     const cfg = masterConfig[type] || {};
 
-    // 1. Recolección de destinatarios: Fijos + Reglas por Fábrica + Dinámicos
+    // 1. Recolección de destinatarios: Fijos + Reglas por Fábrica + Dinámicos + Administradores del Sistema
     const fixedTo = cfg.to || "";
     
     // Reglas por Fábrica (Google Groups por planta)
@@ -414,10 +503,118 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
     }
 
     const dynamicTo = tData.emails_notificados || "";
-    const finalTo = [fixedTo, ...factoryRecipients, dynamicTo].filter(Boolean).join(", ");
-    if (!finalTo) return; 
 
-    // 2. Variables dinámicas para plantillas {{TAG}}
+    // Recolectar automáticamente todos los Administradores del Sistema (USERS_DB + Hoja Seguridad_Usuarios)
+    const adminEmails = [];
+    try {
+      const usersDb = JSON.parse(props.getProperty('USERS_DB') || '[]');
+      const rolesDb = JSON.parse(props.getProperty('ROLES_DB') || '[]');
+      const adminRoleNames = new Set(['SUPER_ADMIN', 'ADMIN', 'ADMINISTRADOR']);
+      if (Array.isArray(rolesDb)) {
+        rolesDb.forEach(r => {
+          if (r && r.name && (r.canConfig === true || r.canUsers === true || /ADMIN/i.test(String(r.name)))) {
+            adminRoleNames.add(String(r.name).trim().toUpperCase());
+          }
+        });
+      }
+      if (Array.isArray(usersDb)) {
+        usersDb.forEach(u => {
+          if (!u || !u.email) return;
+          const uRole = String(u.role || '').trim().toUpperCase();
+          if (adminRoleNames.has(uRole) || /ADMIN/i.test(uRole)) {
+            adminEmails.push(String(u.email).trim().toLowerCase());
+          }
+        });
+      }
+      try {
+        const ss = getDB();
+        const shUsers = ss.getSheetByName(CONF.SHEET_USERS);
+        if (shUsers && shUsers.getLastRow() >= 2) {
+          const uRows = shUsers.getDataRange().getValues();
+          for (let i = 1; i < uRows.length; i++) {
+            const rEmail = String(uRows[i][0] || '').trim().toLowerCase();
+            const rRole = String(uRows[i][1] || '').trim().toUpperCase();
+            if (rEmail && (adminRoleNames.has(rRole) || /ADMIN/i.test(rRole))) {
+              adminEmails.push(rEmail);
+            }
+          }
+        }
+      } catch (shErr) {}
+    } catch (admErr) {
+      console.warn("Aviso al recolectar correos de administradores:", admErr);
+    }
+
+    // Unificar, normalizar (@plexus.com si falta dominio) y eliminar duplicados
+    const rawRecipientsList = [fixedTo, ...factoryRecipients, dynamicTo, ...adminEmails]
+      .filter(Boolean)
+      .join(",")
+      .split(/[,;]+/)
+      .map(e => String(e || "").trim().toLowerCase())
+      .filter(Boolean)
+      .map(e => e.includes('@') ? e : `${e}@plexus.com`);
+
+    const uniqueRecipients = Array.from(new Set(rawRecipientsList));
+    const finalTo = uniqueRecipients.join(", ");
+    if (!finalTo) return;
+
+    // Identificar al usuario activo que detona la notificación (para mostrar su nombre y configurar Reply-To)
+    const rawActiveUser = String(
+      (tData && tData.systemUser) ||
+      Session.getActiveUser().getEmail() ||
+      (typeof Utils !== 'undefined' && Utils.getActiveUserEmail ? Utils.getActiveUserEmail() : '') ||
+      (aInfo && aInfo.responsible) ||
+      ''
+    ).trim();
+
+    const activeSenderEmail = rawActiveUser
+      ? (rawActiveUser.includes('@') ? rawActiveUser.toLowerCase() : `${rawActiveUser.toLowerCase()}@plexus.com`)
+      : '';
+
+    const formatSenderDisplayName = (emailOrName) => {
+      if (!emailOrName) return 'Sistema ESD Control - PLEXUS';
+      const localPart = String(emailOrName).split('@')[0];
+      const formattedName = localPart
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+      return `${formattedName} (${emailOrName}) | ESD Control`;
+    };
+    const senderDisplayName = formatSenderDisplayName(activeSenderEmail); 
+
+    // 2. Extracción inteligente de Comentarios, Observaciones y Campos Dinámicos del Ticket/Auditoría
+    const internalKeys = ['systemUser', 'emails_notificados', 'evidencia_fotos', 'result', 'auditComments'];
+    const dynamicFieldsList = [];
+    let primaryComment = "";
+
+    if (tData && typeof tData === 'object') {
+      Object.keys(tData).forEach(k => {
+        if (internalKeys.indexOf(k) !== -1) return;
+        const rawVal = tData[k];
+        if (rawVal === null || rawVal === undefined || typeof rawVal === 'object') return;
+        const cleanVal = String(rawVal).trim();
+        if (!cleanVal) return;
+        dynamicFieldsList.push({ label: k, value: cleanVal });
+        if (!primaryComment && /comentario|observaci|descripci|nota|causa|acci|motivo/i.test(k)) {
+          primaryComment = cleanVal;
+        }
+      });
+    }
+
+    const auditNote = Utils.clean((tData && tData.auditComments) || (aInfo && aInfo.comments) || "");
+    if (auditNote) {
+      const alreadyIncluded = dynamicFieldsList.some(f => f.value.toLowerCase() === auditNote.toLowerCase());
+      if (!alreadyIncluded) {
+        dynamicFieldsList.unshift({ label: "Observaciones de Auditoría", value: auditNote });
+      }
+      if (!primaryComment) primaryComment = auditNote;
+    }
+
+    if (!primaryComment && dynamicFieldsList.length > 0) {
+      primaryComment = dynamicFieldsList.map(f => `${f.label}: ${f.value}`).join(" | ");
+    }
+
+    // Variables dinámicas para plantillas {{TAG}}
     const placeholders = {
       ID_ACTIVO: aInfo.controlNo || "",
       DESCRIPCION: aInfo.description || "",
@@ -426,10 +623,10 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
       PROYECTO: aInfo.project || "",
       CUADRANTE: aInfo.quadrant || "",
       FOLIO_TICKET: tId || "",
-      RESPONSABLE: tData.systemUser || aInfo.responsible || "Auditor ESD",
+      RESPONSABLE: activeSenderEmail || tData.systemUser || aInfo.responsible || "Auditor ESD",
       FECHA: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm"),
       ESTADO: type === 'OPEN' ? 'FALLA' : (type === 'CLOSE' ? 'CUMPLE' : 'DICTAMEN FORZADO'),
-      COMENTARIOS: tData.comentarios || aInfo.comments || "Sin comentarios adicionales."
+      COMENTARIOS: primaryComment || "Sin comentarios adicionales."
     };
 
     const renderTemplate = (str, data) => {
@@ -446,7 +643,43 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
     const rawBody = cfg.body || 'Se ha registrado una novedad en el sistema de control ESD.';
     const renderedBody = renderTemplate(rawBody, placeholders).replace(/\n/g, '<br>');
 
-    // 4. Enlaces de evidencia fotográfica
+    // 4. Bloque HTML de Comentarios / Observaciones y Campos CAPA
+    let commentsSectionHtml = "";
+    if (dynamicFieldsList.length > 0) {
+      const rowsHtml = dynamicFieldsList.map(item => {
+        const isUrl = /^https?:\/\//i.test(item.value);
+        const valHtml = isUrl
+          ? `<a href="${item.value}" target="_blank" style="color: ${CONF.DEFAULT_COLOR}; font-weight: bold; text-decoration: underline;">Ver Archivo Adjunto</a>`
+          : String(item.value).replace(/\n/g, '<br>');
+        return `<tr>
+          <td style="padding: 6px 0; color: #64748b; width: 35%; vertical-align: top;"><b>${item.label}:</b></td>
+          <td style="padding: 6px 0; color: #0f172a; font-weight: 500; line-height: 1.5;">${valHtml}</td>
+        </tr>`;
+      }).join('');
+
+      commentsSectionHtml = `
+        <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid ${badgeColor_preview(type)}; border-radius: 8px; overflow: hidden; margin: 20px 0;">
+          <div style="background-color: #fef3c7; padding: 10px 16px; border-bottom: 1px solid #fde68a; font-size: 11px; font-weight: bold; color: #92400e; text-transform: uppercase; letter-spacing: 0.5px;">
+            Comentarios y Observaciones Registradas
+          </div>
+          <div style="padding: 14px 16px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13.5px;">
+              ${rowsHtml}
+            </table>
+          </div>
+        </div>`;
+    } else {
+      commentsSectionHtml = `
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 20px 0; font-size: 13px; color: #64748b;">
+          <b>Comentarios / Observaciones:</b> Sin comentarios adicionales registrados.
+        </div>`;
+    }
+
+    function badgeColor_preview(t) {
+      return t === 'OPEN' ? '#e11d48' : (t === 'CLOSE' ? '#10b981' : '#f59e0b');
+    }
+
+    // 5. Enlaces de evidencia fotográfica
     let photoLinks = "<p style='color: #64748b;'>Sin evidencia fotográfica adjunta.</p>";
     if (tData.evidencia_fotos && tData.evidencia_fotos.length > 0) {
         photoLinks = tData.evidencia_fotos.map((url, i) => 
@@ -478,11 +711,13 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
                         <tr><td style="padding: 5px 0; color: #64748b;"><b>Activo / ID:</b></td><td style="padding: 5px 0; font-weight: bold; color: #0f172a;">${aInfo.controlNo} (${aInfo.description || 'N/A'})</td></tr>
                         <tr><td style="padding: 5px 0; color: #64748b;"><b>Ubicación:</b></td><td style="padding: 5px 0; color: #0f172a;">Fábrica ${aInfo.factory} &bull; Proyecto: ${aInfo.project}</td></tr>
                         <tr><td style="padding: 5px 0; color: #64748b;"><b>Cuadrante:</b></td><td style="padding: 5px 0; color: #0f172a;">${aInfo.quadrant}</td></tr>
-                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Auditor / Emisor:</b></td><td style="padding: 5px 0; color: #0f172a;">${tData.systemUser || 'Sistema Automático'}</td></tr>
+                        <tr><td style="padding: 5px 0; color: #64748b;"><b>Auditor / Emisor:</b></td><td style="padding: 5px 0; color: #0f172a;"><b>${activeSenderEmail || tData.systemUser || 'Sistema Automático'}</b></td></tr>
                         <tr><td style="padding: 5px 0; color: #64748b;"><b>Fecha y Hora:</b></td><td style="padding: 5px 0; color: #0f172a;">${placeholders.FECHA}</td></tr>
                     </table>
                 </div>
             </div>
+
+            ${commentsSectionHtml}
 
             <h3 style="color: ${CONF.DEFAULT_COLOR}; font-size: 13px; font-weight: bold; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 24px; letter-spacing: 0.5px;">
                 Evidencia Adjunta
@@ -490,11 +725,20 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
             <div style="margin: 14px 0;">${photoLinks}</div>
             
             <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
-                Mensaje generado automáticamente por el Sistema Integral PLEXUS ESD. Por favor no responda a este buzón no monitoreado.
+                Notificación emitida por <b>${activeSenderEmail || 'Sistema Integral PLEXUS ESD'}</b> a través de ESD Control.${activeSenderEmail ? ' Si respondes a este correo, tu mensaje llegará directamente al usuario emisor.' : ''}
             </p>
         </div>
       </div>`;
-    MailApp.sendEmail({ to: finalTo, subject: subject, htmlBody: htmlBody });
+    const mailOptions = {
+      to: finalTo,
+      subject: subject,
+      htmlBody: htmlBody,
+      name: senderDisplayName
+    };
+    if (activeSenderEmail && activeSenderEmail.includes('@')) {
+      mailOptions.replyTo = activeSenderEmail;
+    }
+    MailApp.sendEmail(mailOptions);
   } catch (e) { console.error("Error al enviar correo:", e); }
 }
 
@@ -595,16 +839,62 @@ function getUpdates(lastSyncTime) {
   } catch (e) { return { success: false, error: e.toString() }; }
 }
 
+/**
+ * Generador de folios para Reportes de Exportación (DataHub).
+ * Desacoplado completamente de la numeración operativa de Tickets de Falla.
+ */
 function getNextFolio(reportName) {
-  const lock = LockService.getScriptLock(); lock.waitLock(CONF.TIMEOUTS.LOCK_SHORT);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(CONF.TIMEOUTS.LOCK_SHORT);
   try {
     const props = PropertiesService.getScriptProperties();
-    const key = 'FOLIO_' + String(reportName).toUpperCase().replace(/\s+/g, '_');
+    const key = 'FOLIO_REPORT_' + String(reportName).toUpperCase().replace(/\s+/g, '_');
     let current = parseInt(props.getProperty(key) || '0', 10);
     current++;
     props.setProperty(key, current.toString());
     return current.toString().padStart(4, '0');
-  } finally { lock.releaseLock(); }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Generador dedicado e independiente de folios para Tickets de Falla (DB_Tickets).
+ * Sincronizado con las filas reales de DB_Tickets:
+ * - Si DB_Tickets está vacía (sin registros), se reinicia automáticamente en 0001 (TKT-0001).
+ * - Si existen tickets en DB_Tickets, toma el mayor consecutivo real + 1.
+ * Nota: Se ejecuta dentro del bloqueo atómico de saveTicketRecord sin liberar el lock padre.
+ */
+function getNextTicketFolio(ssInstance) {
+  const ss = ssInstance || SpreadsheetApp.openById(CONF.SS_ID);
+  const sh = ss.getSheetByName(CONF.SHEET_TICKETS);
+  let maxDbNum = 0;
+
+  if (sh) {
+    const lastRow = sh.getLastRow();
+    if (lastRow > 1) {
+      const colValues = sh.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < colValues.length; i++) {
+        const rawId = String(colValues[i][0] || '').trim();
+        if (!rawId) continue;
+        const match = rawId.match(/TKT-(\d+)/i) || rawId.match(/(\d+)/);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxDbNum && num < 999999) {
+            maxDbNum = num;
+          }
+        }
+      }
+    }
+  }
+
+  const nextNum = (maxDbNum === 0) ? 1 : (maxDbNum + 1);
+  try {
+    PropertiesService.getScriptProperties().setProperty('FOLIO_DB_TICKETS_SEQ', String(nextNum));
+  } catch (e) {
+    console.warn("No se pudo actualizar propiedad FOLIO_DB_TICKETS_SEQ:", e);
+  }
+  return String(nextNum).padStart(4, '0');
 }
 
 function setupDatabase() {
@@ -765,6 +1055,200 @@ function translateBatch(texts, targetLang = 'en', sourceLang = '') {
   }
 
   return Utils.buildResponse(true, { results: results });
+}
+
+/**
+ * Obtiene o almacena el paquete de traducciones estáticas y dinámicas en CacheService (TTL 6 horas)
+ * para evitar recomputación y llamadas repetidas a LanguageApp.
+ */
+function getCachedTranslationBundle(lang = 'ES', clientStaticHash = '') {
+  try {
+    if (typeof CacheService === 'undefined') {
+      return Utils.buildResponse(true, { lang: lang, staticCached: false, dynamicMap: {} });
+    }
+    const cache = CacheService.getScriptCache();
+    const normLang = String(lang || 'ES').toUpperCase().trim();
+    const staticKey = ((CONF.CACHE_KEYS && CONF.CACHE_KEYS.I18N_STATIC_PREFIX) || 'ESD_CACHE_I18N_STATIC_') + normLang;
+    const dynMapKey = (CONF.CACHE_KEYS && CONF.CACHE_KEYS.I18N_DYNAMIC_MAP) || 'ESD_CACHE_I18N_DYNAMIC_MAP';
+
+    const rawStatic = cache.get(staticKey);
+    const rawDynamic = cache.get(dynMapKey);
+    let dynamicMap = {};
+    if (rawDynamic) {
+      try { dynamicMap = JSON.parse(rawDynamic); } catch (e) { dynamicMap = {}; }
+    }
+
+    let staticPayload = null;
+    if (rawStatic) {
+      try {
+        const parsed = JSON.parse(rawStatic);
+        if (!clientStaticHash || parsed.hash !== clientStaticHash) {
+          staticPayload = parsed.messages || null;
+        }
+      } catch (e) {}
+    }
+
+    return Utils.buildResponse(true, {
+      lang: normLang,
+      staticHit: Boolean(rawStatic),
+      staticMessages: staticPayload,
+      dynamicMap: dynamicMap[normLang] || {},
+      allDynamicMaps: dynamicMap
+    });
+  } catch (err) {
+    return Utils.buildResponse(false, err.message);
+  }
+}
+
+/**
+ * Sincroniza un diccionario estático de un idioma en CacheService (6 horas TTL).
+ */
+function syncStaticTranslationCache(lang, messagesObj, versionHash = 'v1') {
+  try {
+    if (typeof CacheService === 'undefined' || !messagesObj) {
+      return Utils.buildResponse(false, 'CacheService no disponible');
+    }
+    const cache = CacheService.getScriptCache();
+    const normLang = String(lang || 'ES').toUpperCase().trim();
+    const staticKey = ((CONF.CACHE_KEYS && CONF.CACHE_KEYS.I18N_STATIC_PREFIX) || 'ESD_CACHE_I18N_STATIC_') + normLang;
+    const serialized = JSON.stringify({ hash: versionHash, updatedAt: Date.now(), messages: messagesObj });
+    if (serialized.length < 95000) {
+      cache.put(staticKey, serialized, 21600);
+    }
+    return Utils.buildResponse(true, { lang: normLang, cachedBytes: serialized.length });
+  } catch (err) {
+    return Utils.buildResponse(false, err.message);
+  }
+}
+
+// ==========================================
+// 📊 TELEMETRÍA DE TRÁFICO Y ANALÍTICAS DE USO (ZERO-SPAM)
+// ==========================================
+const TrafficMonitor = {
+  /**
+   * Actualiza la presencia en vivo del usuario en CacheService (0 escrituras en Google Sheets).
+   */
+  updateOnlineHeartbeat(userEmail, userRole) {
+    if (typeof CacheService === 'undefined') return {};
+    try {
+      const email = String(userEmail || Utils.getActiveUserEmail() || 'anonimo@plexus.com').toLowerCase().trim();
+      const role = String(userRole || 'GUEST').toUpperCase().trim();
+      const cache = CacheService.getScriptCache();
+      const mapKey = (CONF.CACHE_KEYS && CONF.CACHE_KEYS.ONLINE_USERS_MAP) || 'ESD_ONLINE_USERS_MAP';
+      const now = Date.now();
+      const windowMs = ((CONF.CACHE_TTL && CONF.CACHE_TTL.ONLINE_SECONDS) || 300) * 1000;
+
+      let onlineMap = {};
+      const raw = cache.get(mapKey);
+      if (raw) {
+        try { onlineMap = JSON.parse(raw); } catch (e) { onlineMap = {}; }
+      }
+
+      // Purgar usuarios inactivos (> 5 min)
+      Object.keys(onlineMap).forEach(k => {
+        if (!onlineMap[k] || (now - (onlineMap[k].lastSeenMs || 0)) > windowMs) {
+          delete onlineMap[k];
+        }
+      });
+
+      onlineMap[email] = {
+        email: email,
+        role: role,
+        lastSeenMs: now,
+        lastSeenIso: new Date(now).toISOString()
+      };
+
+      cache.put(mapKey, JSON.stringify(onlineMap), (CONF.CACHE_TTL && CONF.CACHE_TTL.ONLINE_SECONDS) || 300);
+      return onlineMap;
+    } catch (e) {
+      console.warn('Error en updateOnlineHeartbeat:', e);
+      return {};
+    }
+  },
+
+  /**
+   * Registra un inicio de sesión en DB_Traffic_Logs únicamente si el usuario no ha tenido
+   * una sesión registrada en los últimos 30 minutos (Deduplicación en CacheService).
+   */
+  recordUserSessionIfNeeded(userEmail, userRole) {
+    const email = String(userEmail || Utils.getActiveUserEmail() || 'anonimo@plexus.com').toLowerCase().trim();
+    const role = String(userRole || 'GUEST').toUpperCase().trim();
+
+    this.updateOnlineHeartbeat(email, role);
+
+    if (typeof CacheService !== 'undefined') {
+      try {
+        const cache = CacheService.getScriptCache();
+        const safeEmailKey = email.replace(/[^a-z0-9]/gi, '_').slice(0, 80);
+        const sessionKey = ((CONF.CACHE_KEYS && CONF.CACHE_KEYS.SESSION_ACTIVE_PREFIX) || 'ESD_SESSION_ACTIVE_') + safeEmailKey;
+        if (cache.get(sessionKey)) {
+          return { recorded: false, deduplicated: true };
+        }
+        cache.put(sessionKey, String(Date.now()), (CONF.CACHE_TTL && CONF.CACHE_TTL.SESSION_DEDUP_SECONDS) || 1800);
+      } catch (e) {}
+    }
+
+    return this.appendTrafficEvent(email, role, 'SESSION_START', 'AUTH', 'Inicio de sesión deduplicado (ventana 30m)');
+  },
+
+  /**
+   * Inserta un evento ligero en la hoja DB_Traffic_Logs con auto-creación y auto-recorte (>5000 filas).
+   */
+  appendTrafficEvent(userEmail, userRole, eventType, moduleName, detail = '') {
+    try {
+      const ss = Utils.getSpreadsheet();
+      const sheetName = CONF.SHEET_TRAFFIC || 'DB_Traffic_Logs';
+      let sheet = ss.getSheetByName(sheetName);
+      if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+        sheet.appendRow(['TIMESTAMP', 'EMAIL', 'ROL', 'EVENTO', 'MODULO', 'DETALLE', 'FECHA_DIA']);
+        sheet.setFrozenRows(1);
+      }
+
+      const now = new Date();
+      const tz = Session.getScriptTimeZone() || 'America/Mexico_City';
+      const tsStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd HH:mm:ss');
+      const dayStr = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+
+      sheet.appendRow([
+        tsStr,
+        String(userEmail || 'anonimo@plexus.com').toLowerCase().trim(),
+        String(userRole || 'AUDITOR').toUpperCase().trim(),
+        String(eventType || 'INTERACTION').toUpperCase().trim(),
+        String(moduleName || 'SYSTEM').toUpperCase().trim(),
+        String(detail || '').slice(0, 180),
+        dayStr
+      ]);
+
+      // Auto-pruning si supera 5000 filas para preservar rendimiento O(1)
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 5200) {
+        sheet.deleteRows(2, 400);
+      }
+
+      return { recorded: true, timestamp: tsStr };
+    } catch (err) {
+      console.warn('No se pudo escribir en DB_Traffic_Logs:', err);
+      return { recorded: false, error: err.message };
+    }
+  }
+};
+
+/**
+ * Endpoint público para registrar interacciones no transaccionales desde el cliente (Reportes, Copiloto IA, etc.).
+ */
+function logClientInteraction(eventType, moduleName, detail = '') {
+  try {
+    const email = Utils.getActiveUserEmail();
+    const role = (typeof SecurityService !== 'undefined' && SecurityService.getUserPermissions)
+      ? (SecurityService.getUserPermissions(email).role || 'AUDITOR')
+      : 'AUDITOR';
+    TrafficMonitor.updateOnlineHeartbeat(email, role);
+    const res = TrafficMonitor.appendTrafficEvent(email, role, eventType, moduleName, detail);
+    return Utils.buildResponse(true, res);
+  } catch (err) {
+    return Utils.buildResponse(false, err.message);
+  }
 }
 // ==========================================
 // 🔄 DISPARADOR AUTOMÁTICO DE EDICIÓN EN SHEETS

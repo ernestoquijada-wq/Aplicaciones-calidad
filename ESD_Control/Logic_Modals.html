@@ -451,11 +451,22 @@ function useModals(globalConfig) {
             }
 
             const passed = (form.value.result === 'CUMPLE');
+            const ticketComment = String(
+                finalFormData.Comentarios || finalFormData.comentarios || 
+                finalFormData.Observaciones || finalFormData.observaciones || 
+                finalFormData.comments || ''
+            ).trim();
+
+            // Si el usuario escribió observaciones en el modal del ticket pero dejó el campo general vacío, sincronizarlo para no sobrescribir DB_Assets al hacer performSave(true)
+            if (!String(form.value.comments || '').trim() && ticketComment) {
+                form.value.comments = ticketComment;
+            }
 
             const payload = { 
                 assetId: editAsset.value.controlNo, assetInfo: JSON.parse(JSON.stringify(editAsset.value)),
                 formData: finalFormData, mode: currentTicketMode.value, measurements: form.value.measurements, 
-                passed: passed, emails: [...new Set(finalEmails)], photos: capturedPhotos.value 
+                passed: passed, emails: [...new Set(finalEmails)], photos: capturedPhotos.value,
+                auditComments: String(form.value.comments || '').trim()
             };
 
             const r = await runGAS('saveTicketRecord', payload);
@@ -463,7 +474,7 @@ function useModals(globalConfig) {
                 submitting.value = false;
                 if (currentTicketMode.value === 'OPEN') { 
                     editAsset.value.lastResult = 'FALLA';
-                    editAsset.value.openTicket = { folio: r.data?.ticketId || 'TKT', date: new Date().toISOString(), comments: finalFormData.Comentarios || '' };
+                    editAsset.value.openTicket = { folio: r.data?.ticketId || 'TKT', date: new Date().toISOString(), comments: ticketComment || form.value.comments || '' };
                     await performSave(true); 
                     showTicketModal.value = false; 
                 } else {
