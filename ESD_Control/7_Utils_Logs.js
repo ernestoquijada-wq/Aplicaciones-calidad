@@ -504,19 +504,30 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
 
     const dynamicTo = tData.emails_notificados || "";
 
-    // Recolectar automáticamente todos los Administradores del Sistema (USERS_DB + Hoja Seguridad_Usuarios)
+    // Recolectar automáticamente todos los Administradores y SuperAdministradores del Sistema (USERS_DB + ROLES_DB + Hojas Seguridad_Roles / Seguridad_Usuarios)
     const adminEmails = [];
     try {
-      const usersDb = JSON.parse(props.getProperty('USERS_DB') || '[]');
-      const rolesDb = JSON.parse(props.getProperty('ROLES_DB') || '[]');
-      const adminRoleNames = new Set(['SUPER_ADMIN', 'ADMIN', 'ADMINISTRADOR']);
+      const usersDb = JSON.parse(props.getProperty('USERS_DB') || '{}');
+      const rolesDb = JSON.parse(props.getProperty('ROLES_DB') || '{}');
+      const adminRoleNames = new Set(['SUPER_ADMIN', 'SUPERADMIN', 'SUPER ADMINISTRADOR', 'ADMIN', 'ADMINISTRADOR']);
+
+      // 1. Evaluar roles con permisos de configuración o usuarios en ROLES_DB (soporta Objeto diccionario o Arreglo)
       if (Array.isArray(rolesDb)) {
         rolesDb.forEach(r => {
           if (r && r.name && (r.canConfig === true || r.canUsers === true || /ADMIN/i.test(String(r.name)))) {
             adminRoleNames.add(String(r.name).trim().toUpperCase());
           }
         });
+      } else if (rolesDb && typeof rolesDb === 'object') {
+        Object.keys(rolesDb).forEach(rName => {
+          const perms = rolesDb[rName] || {};
+          if (perms.canConfig === true || perms.canUsers === true || /ADMIN/i.test(String(rName))) {
+            adminRoleNames.add(String(rName).trim().toUpperCase());
+          }
+        });
       }
+
+      // 2. Recolectar correos en USERS_DB (soporta Objeto diccionario { email: rol } o Arreglo [{ email, role }])
       if (Array.isArray(usersDb)) {
         usersDb.forEach(u => {
           if (!u || !u.email) return;
@@ -525,9 +536,34 @@ function sendTicketEmail(tId, tData, aInfo, type = "OPEN") {
             adminEmails.push(String(u.email).trim().toLowerCase());
           }
         });
+      } else if (usersDb && typeof usersDb === 'object') {
+        Object.keys(usersDb).forEach(uEmail => {
+          const rawVal = usersDb[uEmail];
+          const uRole = String((rawVal && typeof rawVal === 'object') ? (rawVal.role || '') : (rawVal || '')).trim().toUpperCase();
+          if (uEmail && (adminRoleNames.has(uRole) || /ADMIN/i.test(uRole))) {
+            adminEmails.push(String(uEmail).trim().toLowerCase());
+          }
+        });
       }
+
+      // 3. Respaldo directo en las hojas Seguridad_Roles y Seguridad_Usuarios de Google Sheets
       try {
         const ss = getDB();
+        const shRoles = ss.getSheetByName(CONF.SHEET_ROLES);
+        if (shRoles && shRoles.getLastRow() >= 2) {
+          const rRows = shRoles.getDataRange().getValues();
+          for (let i = 1; i < rRows.length; i++) {
+            const roleName = String(rRows[i][0] || '').trim().toUpperCase();
+            if (!roleName) continue;
+            if (/ADMIN/i.test(roleName)) adminRoleNames.add(roleName);
+            try {
+              const pObj = JSON.parse(String(rRows[i][1] || '{}'));
+              if (pObj && (pObj.canConfig === true || pObj.canUsers === true)) {
+                adminRoleNames.add(roleName);
+              }
+            } catch (pe) {}
+          }
+        }
         const shUsers = ss.getSheetByName(CONF.SHEET_USERS);
         if (shUsers && shUsers.getLastRow() >= 2) {
           const uRows = shUsers.getDataRange().getValues();
